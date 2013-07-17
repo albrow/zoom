@@ -5,13 +5,8 @@ package zoom
 // this is where the magic happens.
 
 import (
-	"code.google.com/p/tcgl/redis"
 	"fmt"
-	"github.com/dchest/uniuri"
-	"log"
 	"reflect"
-	"strconv"
-	"time"
 )
 
 // writes the interface to the redis database
