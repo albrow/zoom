@@ -30,7 +30,7 @@ func (s *MainSuite) SetUpSuite(c *C) {
 	}
 	zoom.InitDb(config)
 
-	err := zoom.Register(Person{}, "person")
+	err := zoom.Register(&Person{}, "person")
 	if err != nil {
 		c.Error(err)
 	}
@@ -46,11 +46,11 @@ func (s *MainSuite) TestSaveFindAndDelete(c *C) {
 		Age:   25,
 		Model: new(zoom.Model),
 	}
-	result, err := zoom.Save(*p)
+	result, err := zoom.Save(p)
 	if err != nil {
 		c.Error(err)
 	}
-	person, ok := result.(Person)
+	person, ok := result.(*Person)
 	if !ok {
 		c.Error("Could not convert result to person")
 	}

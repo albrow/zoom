@@ -1,6 +1,7 @@
 package zoom
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -87,5 +88,20 @@ func (e *MissingParamaterError) Error() string {
 
 func NewMissingParamaterError(msg string) *MissingParamaterError {
 	e := MissingParamaterError{msg}
+	return &e
+}
+
+// ---
+// InterfaceIsNotPointer
+type InterfaceIsNotPointerError struct {
+	in interface{}
+}
+
+func (e *InterfaceIsNotPointerError) Error() string {
+	return fmt.Sprintf("Interface of type %T is not a pointer. Try again with the 'address of' operator?", e.in)
+}
+
+func NewInterfaceIsNotPointerError(in interface{}) *InterfaceIsNotPointerError {
+	e := InterfaceIsNotPointerError{in}
 	return &e
 }
