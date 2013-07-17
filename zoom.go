@@ -109,8 +109,7 @@ func FindById(modelName, id string) (ModelInterface, error) {
 	// It's called a ModelInterface here but the underlying
 	// type is still typ
 	keyValues := result.KeyValues()
-	resultMap := convertKeyValuesToMap(keyValues)
-	model, err := convertMapToModelInterface(resultMap, typ)
+	model, err := convertKeyValuesToModelInterface(keyValues, typ)
 	if err != nil {
 		return nil, err
 	}
