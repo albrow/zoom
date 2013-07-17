@@ -35,13 +35,16 @@ var nameToType map[string]reflect.Type = make(map[string]reflect.Type)
 // adds a model to the map of registered models
 // Both name and typeOf(m) must be unique, i.e.
 // not already registered
-func Register(m interface{}, name string) error {
-	if alreadyRegisteredName(name) {
-		return NewNameAlreadyRegisteredError(name)
-	}
+func Register(m ModelInterface, name string) error {
 	typ := reflect.TypeOf(m)
 	if alreadyRegisteredType(typ) {
 		return NewTypeAlreadyRegisteredError(typ)
+	}
+	if typ.Kind() != reflect.Ptr {
+		return NewInterfaceIsNotPointerError(m)
+	}
+	if alreadyRegisteredName(name) {
+		return NewNameAlreadyRegisteredError(name)
 	}
 	typeToName[typ] = name
 	nameToType[name] = typ

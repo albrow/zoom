@@ -20,6 +20,11 @@ import (
 func Save(m ModelInterface) (ModelInterface, error) {
 	fmt.Println("models.Save() was called")
 
+	// make sure we're dealing with a pointer
+	if reflect.TypeOf(m).Kind() != reflect.Ptr {
+		return nil, NewInterfaceIsNotPointerError(m)
+	}
+
 	// get the registered name
 	name, err := getRegisteredNameFromInterface(m)
 	if err != nil {
@@ -45,6 +50,11 @@ func Save(m ModelInterface) (ModelInterface, error) {
 // TODO: remove the record from the database
 func Delete(m ModelInterface) (ModelInterface, error) {
 	fmt.Println("models.Delete() was called")
+
+	// make sure we're dealing with a pointer
+	if reflect.TypeOf(m).Kind() != reflect.Ptr {
+		return nil, NewInterfaceIsNotPointerError(m)
+	}
 
 	// get the registered name
 	name, err := getRegisteredNameFromInterface(m)
@@ -151,6 +161,7 @@ func convertKeyValuesToMap(slice []*redis.KeyValue) map[string]string {
 // the keys of the map are the names of the fields in a struct of type typ
 // the values of the map are the values of those corresponding fields
 func convertMapToModelInterface(m map[string]string, typ reflect.Type) (ModelInterface, error) {
+	typ = typ.Elem()
 	val := reflect.New(typ).Elem()
 	numFields := val.NumField()
 
@@ -165,6 +176,7 @@ func convertMapToModelInterface(m map[string]string, typ reflect.Type) (ModelInt
 			// convert each string into the appropriate type and then
 			// add it to the struct.
 			fieldKind := val.Field(i).Kind()
+			fmt.Println("fieldKind: ", fieldKind)
 
 			switch fieldKind {
 			case reflect.String:
@@ -187,7 +199,7 @@ func convertMapToModelInterface(m map[string]string, typ reflect.Type) (ModelInt
 	val.FieldByName("Model").Set(reflect.ValueOf(new(Model)))
 
 	// Typecast and return the result
-	model := val.Interface().(ModelInterface)
+	model := val.Addr().Interface().(ModelInterface)
 	return model, nil
 }
 
@@ -196,8 +208,9 @@ func convertMapToModelInterface(m map[string]string, typ reflect.Type) (ModelInt
 func convertInterfaceToArgSlice(key string, in ModelInterface) []interface{} {
 
 	// get the number of fields
-	val := reflect.ValueOf(in) // for getting the actual field value
-	typ := reflect.TypeOf(in)  // for name/type/kind information
+	elem := reflect.ValueOf(in).Elem().Interface() // Get the actual element from the pointer
+	val := reflect.ValueOf(elem)                   // for getting the actual field value
+	typ := reflect.TypeOf(elem)                    // for name/type/kind information
 	numFields := val.NumField()
 
 	// init/allocate a slice of arguments
