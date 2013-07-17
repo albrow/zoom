@@ -75,7 +75,6 @@ func DeleteById(modelName, id string) (ModelInterface, error) {
 // Find a model by modelName and id. modelName must be the
 // same name that was used for in the Register() call
 func FindById(modelName, id string) (ModelInterface, error) {
-
 	// get the registered type
 	typ, err := getRegisteredTypeFromName(modelName)
 	if err != nil {
@@ -84,6 +83,18 @@ func FindById(modelName, id string) (ModelInterface, error) {
 
 	// create the key based on the modelName and id
 	key := modelName + ":" + id
+
+	// make sure the key exists
+	exists, err := keyExists(key)
+	if err != nil {
+		return nil, err
+	}
+	if !exists {
+		msg := fmt.Sprintf("Couldn't find %s with id = %s", modelName, id)
+		return nil, NewKeyNotFoundError(msg)
+	}
+
+	// get the stuff from redis
 	result := db.Command("hgetall", key)
 	if result.Error() != nil {
 		return nil, result.Error()
@@ -214,6 +225,16 @@ func convertInterfaceToArgSlice(key string, in ModelInterface) []interface{} {
 	}
 
 	return args
+}
+
+// Returns true iff a given key exists in redis
+func keyExists(key string) (bool, error) {
+	result := db.Command("exists", key)
+	if result.Error() != nil {
+		return false, result.Error()
+	}
+
+	return result.ValueAsBool()
 }
 
 // generates a random string that is more or less
