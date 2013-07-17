@@ -20,12 +20,10 @@ import (
 func Save(m ModelInterface) (ModelInterface, error) {
 	fmt.Println("models.Save() was called")
 
-	// get the type of the model we're trying to save
-	// make sure it is registered
-	typ := reflect.TypeOf(m)
-	name, ok := typeToName[typ]
-	if !ok {
-		return nil, NewModelTypeNotRegisteredError(typ)
+	// get the registered name
+	name, err := getRegisteredNameFromInterface(m)
+	if err != nil {
+		return nil, err
 	}
 
 	// prepare the arguments for redis driver
@@ -45,18 +43,43 @@ func Save(m ModelInterface) (ModelInterface, error) {
 }
 
 // TODO: remove the record from the database
-func Delete(ModelInterface) {
+func Delete(m ModelInterface) (ModelInterface, error) {
 	fmt.Println("models.Delete() was called")
+
+	// get the registered name
+	name, err := getRegisteredNameFromInterface(m)
+	if err != nil {
+		return nil, err
+	}
+
+	// invoke redis driver to delete the key
+	key := name + ":" + m.GetId()
+	result := db.Command("del", key)
+	if result.Error() != nil {
+		return nil, result.Error()
+	}
+
+	return m, nil
+}
+
+// Find a model by it's id and then delete it
+func DeleteById(modelName, id string) (ModelInterface, error) {
+	model, err := FindById(modelName, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return Delete(model)
 }
 
 // Find a model by modelName and id. modelName must be the
 // same name that was used for in the Register() call
 func FindById(modelName, id string) (ModelInterface, error) {
 
-	// get the type corresponding to this name
-	typ, ok := nameToType[modelName]
-	if !ok {
-		return nil, NewModelNameNotRegisteredError(modelName)
+	// get the registered type
+	typ, err := getRegisteredTypeFromName(modelName)
+	if err != nil {
+		return nil, err
 	}
 
 	// create the key based on the modelName and id
@@ -79,6 +102,26 @@ func FindById(modelName, id string) (ModelInterface, error) {
 	// Return the ModelInterface with the id set appropriately
 	model.SetId(id)
 	return model, nil
+}
+
+// get the registered name of the model we're trying to save
+// based on the interfaces type. If the interface's type has
+// not been registered, returns a ModelTypeNotRegisteredError
+func getRegisteredNameFromInterface(m ModelInterface) (string, error) {
+	typ := reflect.TypeOf(m)
+	name, ok := typeToName[typ]
+	if !ok {
+		return "", NewModelTypeNotRegisteredError(typ)
+	}
+	return name, nil
+}
+
+func getRegisteredTypeFromName(name string) (reflect.Type, error) {
+	typ, ok := nameToType[name]
+	if !ok {
+		return nil, NewModelNameNotRegisteredError(name)
+	}
+	return typ, nil
 }
 
 // Converts a slice of redis.KeyValues into a map and returns it
