@@ -8,6 +8,9 @@ package zoom
 import (
 	"code.google.com/p/tcgl/redis"
 	"fmt"
+	"github.com/dchest/uniuri"
+	"strconv"
+	"time"
 )
 
 type DbConfig redis.Configuration
