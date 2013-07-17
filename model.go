@@ -13,10 +13,15 @@ type Model struct {
 
 type ModelInterface interface {
 	SetId(string)
+	GetId() string
 }
 
 func (m *Model) SetId(id string) {
 	m.Id = id
+}
+
+func (m *Model) GetId() string {
+	return m.Id
 }
 
 // maps a type to a string identifier. The string is used
