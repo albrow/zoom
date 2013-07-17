@@ -1,5 +1,8 @@
 package zoom
 
+// File declares all the different errors that might be thrown
+// by the package and provides constructors for each one.
+
 import (
 	"fmt"
 	"reflect"
