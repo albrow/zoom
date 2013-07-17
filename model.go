@@ -1,7 +1,7 @@
 package zoom
 
-// File contains code strictly related to Model
-// and ModelInterface. No database stuff goes here.
+// File contains code strictly related to Model and ModelInterface.
+// The Register() method and associated methods are also included here.
 
 import (
 	"reflect"
@@ -61,4 +61,27 @@ func alreadyRegisteredName(n string) bool {
 func alreadyRegisteredType(t reflect.Type) bool {
 	_, ok := typeToName[t]
 	return ok
+}
+
+// get the registered name of the model we're trying to save
+// based on the interfaces type. If the interface's name/type has
+// not been registered, returns a ModelTypeNotRegisteredError
+func getRegisteredNameFromInterface(m ModelInterface) (string, error) {
+	typ := reflect.TypeOf(m)
+	name, ok := typeToName[typ]
+	if !ok {
+		return "", NewModelTypeNotRegisteredError(typ)
+	}
+	return name, nil
+}
+
+// get the registered type of the model we're trying to save
+// based on the model name. If the interface's name/type has
+// not been registered, returns a ModelNameNotRegisteredError
+func getRegisteredTypeFromName(name string) (reflect.Type, error) {
+	typ, ok := nameToType[name]
+	if !ok {
+		return nil, NewModelNameNotRegisteredError(name)
+	}
+	return typ, nil
 }
