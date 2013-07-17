@@ -7,10 +7,8 @@ package zoom
 
 import (
 	"code.google.com/p/tcgl/redis"
-	"fmt"
 	"log"
 	"reflect"
-	"strconv"
 )
 
 // Converts a slice of redis.KeyValues into a map and returns it
@@ -28,35 +26,27 @@ func convertKeyValuesToMap(slice []*redis.KeyValue) map[string]string {
 // [string]string to a ModelInterface (a struct)
 // the keys of the map are the names of the fields in a struct of type typ
 // the values of the map are the values of those corresponding fields
-func convertMapToModelInterface(m map[string]string, typ reflect.Type) (ModelInterface, error) {
+func convertKeyValuesToModelInterface(keyValues []*redis.KeyValue, typ reflect.Type) (ModelInterface, error) {
 	typ = typ.Elem()
 	val := reflect.New(typ).Elem()
-	numFields := val.NumField()
 
-	// iterate through each of the fields in the struct of type typ
-	for i := 0; i < numFields; i++ {
-
-		field := typ.Field(i)        // for getting field name/type/kind
-		mutableField := val.Field(i) // for actually setting the field
-		mapVal, ok := m[field.Name]  // the value from the map (will become field value)
-
-		if ok {
-			// convert each string into the appropriate type and then
-			// add it to the struct.
-			fieldKind := val.Field(i).Kind()
-			fmt.Println("fieldKind: ", fieldKind)
-
-			switch fieldKind {
+	// iterate through each item in keyValues and add it to the struct
+	for _, keyValue := range keyValues {
+		key := keyValue.Key
+		field := val.FieldByName(key)
+		if field.CanSet() {
+			value := keyValue.Value
+			switch field.Type().Kind() {
 			case reflect.String:
-				mutableField.SetString(mapVal)
+				field.SetString(value.String())
 			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-				valInt, err := strconv.Atoi(mapVal)
+				valInt, err := value.Int64()
 				if err != nil {
 					return nil, err
 				}
-				mutableField.SetInt(int64(valInt))
+				field.SetInt(valInt)
 			default:
-				log.Panic("Don't know how to convert from string to " + fieldKind.String())
+				log.Panic("Don't know how to add %s to a struct!", field.Type().Kind().String())
 				// TODO: add more cases
 			}
 		}
@@ -101,8 +91,7 @@ func convertInterfaceToArgSlice(key string, in ModelInterface) []interface{} {
 
 		// the field value is the value of that member
 		fieldVal := val.Field(i)
-		valString := fmt.Sprint(fieldVal.Interface())
-		args = append(args, valString)
+		args = append(args, fieldVal.Interface())
 	}
 
 	return args
