@@ -8,8 +8,9 @@ import (
 )
 
 type Person struct {
-	Name string
-	Age  int
+	Name      string
+	Age       int
+	SiblingId string `refersTo:"person"`
 	*zoom.Model
 }
 
@@ -80,4 +81,60 @@ func (s *MainSuite) TestSaveFindAndDelete(c *C) {
 	c.Assert(fooey, IsNil)
 	c.Assert(err, NotNil)
 	c.Assert(err, FitsTypeOf, zoom.NewKeyNotFoundError(""))
+}
+
+func (s *MainSuite) TestInvalidRefersToCausesError(c *C) {
+	type InvalidPerson struct {
+		SiblingId string `refersTo:"foo"` // this name hasn't been registered
+		*zoom.Model
+	}
+	err := zoom.Register(&InvalidPerson{}, "invalid")
+	if err != nil {
+		c.Error(err)
+	}
+	p := &InvalidPerson{
+		Model: new(zoom.Model),
+	}
+	_, err = zoom.Save(p)
+
+	// We expect a ModelNameNotRegisteredError
+	c.Assert(err, NotNil)
+	c.Assert(err, FitsTypeOf, zoom.NewModelNameNotRegisteredError(""))
+	zoom.UnregisterName("invalid")
+}
+
+func (s *MainSuite) TestInvalidRelationalIdCausesError(c *C) {
+	p := &Person{
+		SiblingId: "invalidId", // this id doesn't exist
+		Model:     new(zoom.Model),
+	}
+	_, err := zoom.Save(p)
+
+	// We expect a KeyNotFoundError
+	c.Assert(err, NotNil)
+	c.Assert(err, FitsTypeOf, zoom.NewKeyNotFoundError(""))
+}
+
+func (s *MainSuite) TestSaveSibling(c *C) {
+	p1 := &Person{
+		Name:  "Alice",
+		Age:   27,
+		Model: new(zoom.Model),
+	}
+	result, _ := zoom.Save(p1)
+	person1 := result.(*Person)
+	p2 := &Person{
+		Name:      "Bob",
+		Age:       25,
+		SiblingId: person1.Id,
+		Model:     new(zoom.Model),
+	}
+	result, _ = zoom.Save(p2)
+	person2 := result.(*Person)
+	person1.SiblingId = person2.Id
+	result, _ = zoom.Save(person1)
+	person1 = result.(*Person)
+
+	c.Assert(person1.SiblingId, Equals, person2.Id)
+	c.Assert(person2.SiblingId, Equals, person1.Id)
 }
