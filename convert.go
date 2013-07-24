@@ -63,7 +63,7 @@ func convertKeyValuesToModelInterface(keyValues []*redis.KeyValue, typ reflect.T
 
 // converts an interface and a given name to a slice of interface{}
 // the slice can then be passed directly to the redis driver
-func convertInterfaceToArgSlice(key string, in ModelInterface) []interface{} {
+func convertInterfaceToArgSlice(key string, in ModelInterface) ([]interface{}, error) {
 
 	// get the number of fields
 	elem := reflect.ValueOf(in).Elem().Interface() // Get the actual element from the pointer
@@ -86,6 +86,17 @@ func convertInterfaceToArgSlice(key string, in ModelInterface) []interface{} {
 		if field.Name == "Model" {
 			continue
 		}
+		// there's a special case for relational attributes
+		// a.k.a. those which include Id in the name and are
+		// tagged with `refersTo:*`
+		if fieldIsRelational(field) {
+			//fmt.Println("Detected relational field: ", field.Name)
+			err := validateRelationalField(field, val, i)
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		// the field name will the name of the member in redis
 		args = append(args, field.Name)
 
@@ -94,5 +105,5 @@ func convertInterfaceToArgSlice(key string, in ModelInterface) []interface{} {
 		args = append(args, fieldVal.Interface())
 	}
 
-	return args
+	return args, nil
 }

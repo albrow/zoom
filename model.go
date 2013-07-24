@@ -51,6 +51,26 @@ func Register(m ModelInterface, name string) error {
 	return nil
 }
 
+func UnregisterName(name string) error {
+	typ, ok := nameToType[name]
+	if !ok {
+		return NewModelNameNotRegisteredError(name)
+	}
+	delete(nameToType, name)
+	delete(typeToName, typ)
+	return nil
+}
+
+func UnregisterType(typ reflect.Type) error {
+	name, ok := typeToName[typ]
+	if !ok {
+		return NewModelTypeNotRegisteredError(typ)
+	}
+	delete(nameToType, name)
+	delete(typeToName, typ)
+	return nil
+}
+
 // returns true iff the model name has already been registered
 func alreadyRegisteredName(n string) bool {
 	_, ok := nameToType[n]

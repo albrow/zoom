@@ -27,9 +27,17 @@ func Save(m ModelInterface) (ModelInterface, error) {
 	}
 
 	// prepare the arguments for redis driver
-	id := generateRandomId()
+	// if no id was provided, we should generate one
+	var id = m.GetId()
+	if id == "" {
+		id = generateRandomId()
+	}
+
 	key := name + ":" + id
-	args := convertInterfaceToArgSlice(key, m)
+	args, err := convertInterfaceToArgSlice(key, m)
+	if err != nil {
+		return nil, err
+	}
 
 	// invoke redis driver to commit to database
 	result := db.Command("hmset", args...)
