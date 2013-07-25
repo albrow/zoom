@@ -6,9 +6,9 @@ package zoom
 // for (e.g.) checking if a key exists in redis.
 
 import (
-	"code.google.com/p/tcgl/redis"
 	"fmt"
 	"github.com/dchest/uniuri"
+	"github.com/stephenalexbrowne/go-redis"
 	"strconv"
 	"time"
 )
