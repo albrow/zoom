@@ -8,20 +8,33 @@ import (
 )
 
 type Model struct {
-	Id string
+	Id     string
+	Parent interface{}
 }
 
 type ModelInterface interface {
-	SetId(string)
 	GetId() string
+	SetId(string)
+	GetParent() interface{}
+	SetParent(interface{})
+	Save() error
+	Delete() error
+}
+
+func (m *Model) GetId() string {
+	return m.Id
 }
 
 func (m *Model) SetId(id string) {
 	m.Id = id
 }
 
-func (m *Model) GetId() string {
-	return m.Id
+func (m *Model) GetParent() interface{} {
+	return m.Parent
+}
+
+func (m *Model) SetParent(parent interface{}) {
+	m.Parent = parent
 }
 
 // maps a type to a string identifier. The string is used
@@ -35,13 +48,13 @@ var nameToType map[string]reflect.Type = make(map[string]reflect.Type)
 // adds a model to the map of registered models
 // Both name and typeOf(m) must be unique, i.e.
 // not already registered
-func Register(m ModelInterface, name string) error {
-	typ := reflect.TypeOf(m)
+func Register(in interface{}, name string) error {
+	typ := reflect.TypeOf(in)
 	if alreadyRegisteredType(typ) {
 		return NewTypeAlreadyRegisteredError(typ)
 	}
 	if typ.Kind() != reflect.Ptr {
-		return NewInterfaceIsNotPointerError(m)
+		return NewInterfaceIsNotPointerError(in)
 	}
 	if alreadyRegisteredName(name) {
 		return NewNameAlreadyRegisteredError(name)
@@ -86,8 +99,8 @@ func alreadyRegisteredType(t reflect.Type) bool {
 // get the registered name of the model we're trying to save
 // based on the interfaces type. If the interface's name/type has
 // not been registered, returns a ModelTypeNotRegisteredError
-func getRegisteredNameFromInterface(m ModelInterface) (string, error) {
-	typ := reflect.TypeOf(m)
+func getRegisteredNameFromInterface(in interface{}) (string, error) {
+	typ := reflect.TypeOf(in)
 	name, ok := typeToName[typ]
 	if !ok {
 		return "", NewModelTypeNotRegisteredError(typ)
