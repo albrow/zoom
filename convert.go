@@ -6,7 +6,7 @@ package zoom
 // for opportunities for optimization.
 
 import (
-	"code.google.com/p/tcgl/redis"
+	"github.com/stephenalexbrowne/go-redis"
 	"log"
 	"reflect"
 )

@@ -4,7 +4,6 @@ import (
 	"github.com/stephenalexbrowne/zoom"
 	. "launchpad.net/gocheck"
 	"testing"
-	"time"
 )
 
 // We'll define a person struct as the basis of all our tests
@@ -38,9 +37,10 @@ var _ = Suite(&MainSuite{})
 
 func (s *MainSuite) SetUpSuite(c *C) {
 	config := zoom.DbConfig{
-		Timeout:  10 * time.Second,
-		Database: 15,
-		PoolSize: 99999,
+		Database:   15,
+		PoolSize:   99999,
+		UseSockets: true,
+		Address:    "/tmp/redis.sock",
 	}
 	zoom.InitDb(config)
 
