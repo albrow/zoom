@@ -20,11 +20,10 @@ type Person struct {
 // A convenient constructor for our Person struct
 func NewPerson(name string, age int) *Person {
 	p := &Person{
-		Name:  name,
-		Age:   age,
-		Model: new(zoom.Model),
+		Name: name,
+		Age:  age,
 	}
-	p.SetParent(p)
+	p.Model = zoom.NewModelFor(p)
 	return p
 }
 
@@ -116,10 +115,8 @@ func (s *MainSuite) TestInvalidRefersToCausesError(c *C) {
 	}
 
 	// Create a new InvalidPerson
-	p := &InvalidPerson{
-		Model: new(zoom.Model),
-	}
-	p.SetParent(p)
+	p := &InvalidPerson{}
+	p.Model = zoom.NewModelFor(p)
 
 	// Try to save it
 	err = p.Save()
