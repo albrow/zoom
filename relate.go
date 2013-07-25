@@ -70,8 +70,7 @@ func findRelationByName(in interface{}, relationName string) (*Relation, error) 
 		}
 	}
 
-	// TODO: return some type of error here?
-	return nil, nil
+	return nil, NewRelationNotFoundError(relationName)
 }
 
 // Verifies that the refersTo tag is a valid model name and has been registered,

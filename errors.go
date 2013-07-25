@@ -108,3 +108,17 @@ func NewInterfaceIsNotPointerError(in interface{}) *InterfaceIsNotPointerError {
 	e := InterfaceIsNotPointerError{in}
 	return &e
 }
+
+// ---
+// RelationNotFound
+type RelationNotFoundError struct {
+	name string
+}
+
+func (e *RelationNotFoundError) Error() string {
+	return "The relation by the name '" + e.name + "' does not exist."
+}
+
+func NewRelationNotFoundError(name string) *RelationNotFoundError {
+	return &RelationNotFoundError{name}
+}
