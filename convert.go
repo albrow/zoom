@@ -91,7 +91,7 @@ func convertInterfaceToArgSlice(key string, in interface{}) ([]interface{}, erro
 		// tagged with `refersTo:*`
 		if fieldIsRelational(field) {
 			//fmt.Println("Detected relational field: ", field.Name)
-			err := validateRelationalField(field, val, i)
+			err := validateRelationalField(field)
 			if err != nil {
 				return nil, err
 			}

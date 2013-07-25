@@ -43,7 +43,6 @@ func relationalModelName(field reflect.StructField) string {
 }
 
 func findRelationByName(in interface{}, relationName string) (*Relation, error) {
-	// get the number of fields
 	elem := reflect.ValueOf(in).Elem().Interface() // Get the actual element from the pointer
 	val := reflect.ValueOf(elem)                   // for getting the actual field value
 	typ := reflect.TypeOf(elem)                    // for name/type/kind information
@@ -52,8 +51,8 @@ func findRelationByName(in interface{}, relationName string) (*Relation, error) 
 	// we wish to iterate through the fields and find the one with the proper tags
 	for i := 0; i < numFields; i++ {
 		field := typ.Field(i)
-		// skip the embedded Model struct
-		// that's used internally and doesn't belong in redis
+		// skip the embedded Model struct since we know that's not
+		// what we're looking for
 		if field.Name == "Model" {
 			continue
 		}
@@ -71,35 +70,16 @@ func findRelationByName(in interface{}, relationName string) (*Relation, error) 
 		}
 	}
 
+	// TODO: return some type of error here?
 	return nil, nil
 }
 
-// Takes as arguments: a field, the reflect.Value of the struct which contains field,
-// and the index of that field.
-// Verifies that:
-// 		(1) the refersTo tag is a valid model name and has been registered
-// 		(2) the value of the field is a valid id (the key exists)
-// A return value of nil means that the relational field is valid
-// Any other return value will be the error that was caused
-func validateRelationalField(field reflect.StructField, val reflect.Value, i int) error {
-	fieldVal := val.Field(i)
+// Verifies that the refersTo tag is a valid model name and has been registered,
+// if that's not the case, returns an error
+func validateRelationalField(field reflect.StructField) error {
 	relateName := relationalModelName(field)
 	if !alreadyRegisteredName(relateName) {
 		return NewModelNameNotRegisteredError(relateName)
-	}
-	if fieldVal.String() != "" {
-		key := relateName + ":" + fieldVal.String()
-		exists, err := keyExists(key)
-		if err != nil {
-			return err
-		}
-		if !exists {
-			msg := fmt.Sprintf("Couldn't find %s with id = %s\n", relateName, fieldVal.String())
-			return NewKeyNotFoundError(msg)
-		}
-	} else {
-		// fmt.Println("relational field was empty")
-		return nil
 	}
 	return nil
 }

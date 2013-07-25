@@ -133,9 +133,11 @@ func (s *MainSuite) TestInvalidRelationalIdCausesError(c *C) {
 	// Create and save a new Person
 	p := NewPerson("foo", 99)
 	p.SiblingId = "invalid" // not a valid person id
-	err := p.Save()
+	p.Save()
 
-	// We expect a KeyNotFoundError because "invalid" is not a valid id
+	_, err := p.Fetch("sibling")
+
+	// We expect a KeyNotFoundError because there is no Person with id = "invalid"
 	c.Assert(err, NotNil)
 	c.Assert(err, FitsTypeOf, zoom.NewKeyNotFoundError(""))
 }
