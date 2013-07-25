@@ -21,6 +21,11 @@ type ModelInterface interface {
 	Delete() error
 }
 
+// A constructor that automatically sets the parent
+func NewModelFor(in ModelInterface) *Model {
+	return &Model{Parent: in}
+}
+
 func (m *Model) GetId() string {
 	return m.Id
 }
