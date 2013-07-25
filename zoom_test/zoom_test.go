@@ -101,7 +101,7 @@ func (s *MainSuite) TestDeleteById(c *C) {
 	c.Assert(err, FitsTypeOf, zoom.NewKeyNotFoundError(""))
 }
 
-func (s *MainSuite) TestInvalidRefersToCausesError(c *C) {
+func (s *MainSuite) TestInvalidRefersToTagCausesError(c *C) {
 	// Here we'll create a new struct InvalidPerson
 	// We don't really need a constructor since we're only
 	// doing this once
@@ -128,6 +128,20 @@ func (s *MainSuite) TestInvalidRefersToCausesError(c *C) {
 	zoom.UnregisterName("invalid")
 }
 
+func (s *MainSuite) TestInvalidRelationNameCausesError(c *C) {
+	// Create and save a new Person
+	p := NewPerson("Alice", 27)
+	p.Save()
+
+	// Attempt to fetch a relation that doesn't exist
+	result, err := p.Fetch("foo")
+
+	// We expect result to be nil and err to be a RelationNotFoundError
+	c.Assert(result, IsNil)
+	c.Assert(err, NotNil)
+	c.Assert(err, FitsTypeOf, zoom.NewRelationNotFoundError(""))
+}
+
 // TODO: change this so that the error occurs on Fetch() not Save()
 func (s *MainSuite) TestInvalidRelationalIdCausesError(c *C) {
 	// Create and save a new Person
@@ -142,7 +156,7 @@ func (s *MainSuite) TestInvalidRelationalIdCausesError(c *C) {
 	c.Assert(err, FitsTypeOf, zoom.NewKeyNotFoundError(""))
 }
 
-func (s *MainSuite) TestSaveSibling(c *C) {
+func (s *MainSuite) TestOneToOneRelation(c *C) {
 	// Create and save two new persons: p1 and p2
 	p1 := NewPerson("Alice", 27)
 	p1.Save()
