@@ -9,7 +9,7 @@ import (
 
 type Model struct {
 	Id     string
-	Parent interface{}
+	Parent interface{} `json:"-"`
 }
 
 type ModelInterface interface {
