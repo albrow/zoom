@@ -1,6 +1,6 @@
 Zoom
 ====
 
-A blazing-fast, lightweight ORM-esque library for the go programming language built on redis.
+A blazing-fast, lightweight ORM-ish library for go and redis.
 
 This isn't done yet! Dont use it.
