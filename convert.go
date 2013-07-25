@@ -23,10 +23,10 @@ func convertKeyValuesToMap(slice []*redis.KeyValue) map[string]string {
 }
 
 // Uses reflect to dynamically convert a map of
-// [string]string to a ModelInterface (a struct)
+// [string]string to an interface{} (a struct)
 // the keys of the map are the names of the fields in a struct of type typ
 // the values of the map are the values of those corresponding fields
-func convertKeyValuesToModelInterface(keyValues []*redis.KeyValue, typ reflect.Type) (ModelInterface, error) {
+func convertKeyValuesToModelInterface(keyValues []*redis.KeyValue, typ reflect.Type) (interface{}, error) {
 	typ = typ.Elem()
 	val := reflect.New(typ).Elem()
 
@@ -57,13 +57,13 @@ func convertKeyValuesToModelInterface(keyValues []*redis.KeyValue, typ reflect.T
 	val.FieldByName("Model").Set(reflect.ValueOf(new(Model)))
 
 	// Typecast and return the result
-	model := val.Addr().Interface().(ModelInterface)
+	model := val.Addr().Interface()
 	return model, nil
 }
 
 // converts an interface and a given name to a slice of interface{}
 // the slice can then be passed directly to the redis driver
-func convertInterfaceToArgSlice(key string, in ModelInterface) ([]interface{}, error) {
+func convertInterfaceToArgSlice(key string, in interface{}) ([]interface{}, error) {
 
 	// get the number of fields
 	elem := reflect.ValueOf(in).Elem().Interface() // Get the actual element from the pointer
