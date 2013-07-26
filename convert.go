@@ -81,6 +81,8 @@ func convertInterfaceToArgSlice(key string, in interface{}) ([]interface{}, erro
 	// iterate through fields and add each one to the slice
 	for i := 0; i < numFields; i++ {
 		field := typ.Field(i)
+		fieldVal := val.Field(i)
+
 		// skip the embedded Model struct
 		// that's used internally and doesn't belong in redis
 		if field.Name == "Model" {
@@ -95,13 +97,19 @@ func convertInterfaceToArgSlice(key string, in interface{}) ([]interface{}, erro
 			if err != nil {
 				return nil, err
 			}
+			// check if we're dealing with an array or slice
+			if fieldVal.Kind() == reflect.Slice || fieldVal.Kind() == reflect.Array {
+				addToIndex(key, field, fieldVal)
+				// for one-to-many relations, we store ids in a separate redis key,
+				// so we don't need to store the ids here
+				continue
+			}
 		}
 
 		// the field name will the name of the member in redis
 		args = append(args, field.Name)
 
-		// the field value is the value of that member
-		fieldVal := val.Field(i)
+		// fieldVal.Interface is the value of that member
 		args = append(args, fieldVal.Interface())
 	}
 

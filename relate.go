@@ -6,7 +6,8 @@ import (
 )
 
 type Relation struct {
-	Name, Id string
+	Name string
+	Ids  []string
 }
 
 // Return an interface{} as a result of an association lookup
@@ -18,13 +19,30 @@ func (m *Model) Fetch(relationName string) (interface{}, error) {
 	}
 
 	// find the result
-	return FindById(relation.Name, relation.Id)
+	return FindById(relation.Name, relation.Ids[0])
 }
 
 // TODO: return a slice of interface{} for has many relations
 func (m *Model) FetchAll(relationName string) ([]interface{}, error) {
 	fmt.Println("TODO: implement FetchAll")
-	return nil, nil
+
+	relation, err := findRelationByName(m.Parent, relationName)
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println("relation: ", relation)
+
+	results := make([]interface{}, 0, len(relation.Ids))
+
+	for _, id := range relation.Ids {
+		item, err := FindById(relation.Name, id)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, item)
+	}
+
+	return results, nil
 }
 
 func fieldIsRelational(field reflect.StructField) bool {
@@ -61,9 +79,26 @@ func findRelationByName(in interface{}, relationName string) (*Relation, error) 
 		// tagged with `refersTo:*`
 		if fieldIsRelational(field) {
 			if field.Tag.Get("as") == relationName {
+
+				fieldVal := val.Field(i)
+				ids := make([]string, 0, 1)
+
+				// Special case for one-to-many relations
+				if fieldVal.Kind() == reflect.Slice || fieldVal.Kind() == reflect.Array {
+					// iterate through each element in the slice and append it to ids
+					for i := 0; i < fieldVal.Len(); i++ {
+						elem := fieldVal.Index(i)
+						ids = append(ids, elem.String())
+					}
+
+				} else {
+					// otherwise we're dealing with a one-to-one relation
+					ids = append(ids, fieldVal.String())
+				}
+
 				relation := &Relation{
 					Name: field.Tag.Get("refersTo"),
-					Id:   val.Field(i).String(),
+					Ids:  ids,
 				}
 				return relation, nil
 			}
@@ -80,5 +115,37 @@ func validateRelationalField(field reflect.StructField) error {
 	if !alreadyRegisteredName(relateName) {
 		return NewModelNameNotRegisteredError(relateName)
 	}
+	return nil
+}
+
+// attempts to add to a relational index for one-to-many relations.
+// the index is stored in redis as a set with a key of the form modelName:id:relationName
+func addToIndex(prefix string, field reflect.StructField, arrayVal reflect.Value) error {
+
+	// if the array is empty, we don't have to do anything
+	if arrayVal.Len() == 0 {
+		return nil
+	}
+
+	// get the relation name which will be used as a key
+	relationName := field.Tag.Get("as")
+	key := prefix + ":" + relationName
+
+	// set up the argument slice which will be passed to the redis driver
+	args := make([]interface{}, 0, 3)
+	args = append(args, key)
+
+	// iterate through each element in the slice and append it to args
+	for i := 0; i < arrayVal.Len(); i++ {
+		elem := arrayVal.Index(i)
+		args = append(args, elem.Interface())
+	}
+
+	// invoke redis driver to write the ids to the database
+	result := db.Command("sadd", args...)
+	if result.Error() != nil {
+		return result.Error()
+	}
+
 	return nil
 }
