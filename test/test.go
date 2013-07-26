@@ -1,4 +1,4 @@
-package zoom_test
+package test
 
 import (
 	"github.com/stephenalexbrowne/zoom"
@@ -51,6 +51,7 @@ func (s *MainSuite) SetUpSuite(c *C) {
 }
 
 func (s *MainSuite) TearDownSuite(c *C) {
+	zoom.UnregisterName("person")
 	zoom.CloseDb()
 }
 
