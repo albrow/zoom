@@ -13,7 +13,7 @@ import (
 // throws an error if the type has not yet been
 // registered
 func (m *Model) Save() error {
-	fmt.Println("models.Save() was called")
+	//fmt.Println("models.Save() was called")
 
 	parent := m.Parent
 
@@ -53,7 +53,7 @@ func (m *Model) Save() error {
 
 // Removes the record from the database
 func (m *Model) Delete() error {
-	fmt.Println("models.Delete() was called")
+	//fmt.Println("models.Delete() was called")
 
 	parent := m.Parent
 
