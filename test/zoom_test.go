@@ -26,6 +26,23 @@ func NewPerson(name string, age int) *Person {
 	return p
 }
 
+// A Parent struct will also be used to test one-to-many relations
+type Parent struct {
+	Name        string
+	ChildrenIds []string `refersTo:"person" as:"children"`
+	*zoom.Model
+}
+
+// A convenient constructor for our Parent struct
+func NewParent(name string) *Parent {
+	p := &Parent{
+		Name:        name,
+		ChildrenIds: make([]string, 0, 0),
+	}
+	p.Model = zoom.NewModelFor(p)
+	return p
+}
+
 // Gocheck setup...
 func Test(t *testing.T) {
 	TestingT(t)
@@ -45,6 +62,11 @@ func (s *MainSuite) SetUpSuite(c *C) {
 	zoom.InitDb(config)
 
 	err := zoom.Register(&Person{}, "person")
+	if err != nil {
+		c.Error(err)
+	}
+
+	err = zoom.Register(&Parent{}, "parent")
 	if err != nil {
 		c.Error(err)
 	}
@@ -143,7 +165,6 @@ func (s *MainSuite) TestInvalidRelationNameCausesError(c *C) {
 	c.Assert(err, FitsTypeOf, zoom.NewRelationNotFoundError(""))
 }
 
-// TODO: change this so that the error occurs on Fetch() not Save()
 func (s *MainSuite) TestInvalidRelationalIdCausesError(c *C) {
 	// Create and save a new Person
 	p := NewPerson("foo", 99)
@@ -184,5 +205,43 @@ func (s *MainSuite) TestOneToOneRelation(c *C) {
 		c.Error(err)
 	}
 	c.Assert(result, DeepEquals, p1)
+
+}
+
+func (s *MainSuite) TestOneToManyRelation(c *C) {
+
+	// Create some new children
+	child1 := NewPerson("Billy", 7)
+	child1.Save()
+	child2 := NewPerson("Crystal", 4)
+	child2.Save()
+
+	// Create and save a Parent with some ChildrenIds
+	parent := NewParent("Allen")
+	parent.ChildrenIds = append(parent.ChildrenIds, child1.Id, child2.Id)
+	err := parent.Save()
+	if err != nil {
+		c.Error(err)
+	}
+
+	// Use FetchAll to retrieve the Parent's children
+	children, err := parent.FetchAll("children")
+	if err != nil {
+		c.Error(err)
+	}
+
+	// Type assert the results
+	result1 := children[0].(*Person)
+	result2 := children[1].(*Person)
+
+	// Make sure they are the same
+	c.Assert(result1.Id, Equals, child1.Id)
+	c.Assert(result1.Name, Equals, child1.Name)
+	c.Assert(result1.Age, Equals, child1.Age)
+
+	// Make sure they are the same
+	c.Assert(result2.Id, Equals, child2.Id)
+	c.Assert(result2.Name, Equals, child2.Name)
+	c.Assert(result2.Age, Equals, child2.Age)
 
 }
