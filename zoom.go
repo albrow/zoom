@@ -1,7 +1,6 @@
 package zoom
 
 import (
-	"errors"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"reflect"
@@ -96,17 +95,19 @@ func FindById(modelName, id string) (interface{}, error) {
 		return nil, err
 	}
 
+	// create a new struct and cast it to a ModelInterface
 	modelVal := reflect.New(typ.Elem())
-	model := modelVal.Interface()
-	modelI, ok := model.(ModelInterface)
-	if !ok {
-		return nil, errors.New("Couldn't convert to ModelInterface. Does interface implement SetId and GetId?")
-	}
-	modelI.SetId(id)
+	model := modelVal.Interface().(ModelInterface)
 
+	// invoke redis driver to fill in the values of the struct
 	err = redis.ScanStruct(bulk, model)
 	if err != nil {
 		return nil, err
 	}
+
+	// set the id
+	model.SetId(id)
+
+	// return it
 	return model, nil
 }
