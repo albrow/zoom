@@ -15,10 +15,6 @@ type Model struct {
 type ModelInterface interface {
 	GetId() string
 	SetId(string)
-	GetParent() interface{}
-	SetParent(interface{})
-	Save() error
-	Delete() error
 }
 
 // A constructor that automatically sets the parent
