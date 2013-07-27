@@ -59,19 +59,19 @@ func (s *MainSuite) TearDownSuite(c *C) {
 }
 
 func (s *MainSuite) TestSave(c *C) {
-	p := NewPerson("Bob", 25)
+	p := NewPerson("Allen", 25)
 	err := zoom.Save(p)
 	if err != nil {
 		c.Error(err)
 	}
-	c.Assert(p.Name, Equals, "Bob")
+	c.Assert(p.Name, Equals, "Allen")
 	c.Assert(p.Age, Equals, 25)
 	c.Assert(p.Id, Not(Equals), "")
 }
 
 func (s *MainSuite) TestFindById(c *C) {
 	// Create and save a new model
-	p1 := NewPerson("Jane", 26)
+	p1 := NewPerson("Bill", 25)
 	zoom.Save(p1)
 
 	// find the model using FindById
@@ -86,9 +86,33 @@ func (s *MainSuite) TestFindById(c *C) {
 	c.Assert(p2.Age, Equals, p1.Age)
 }
 
+func (s *MainSuite) TestDelete(c *C) {
+	// Create and save a new model
+	p1 := NewPerson("Charles", 25)
+	zoom.Save(p1)
+
+	// Make sure it was saved
+	key := "person:" + p1.Id
+	exists, err := zoom.KeyExists(key)
+	if err != nil {
+		c.Error(err)
+	}
+	c.Assert(exists, Equals, true)
+
+	// delete it
+	zoom.Delete(p1)
+
+	// Make sure it's gone
+	exists, err = zoom.KeyExists(key)
+	if err != nil {
+		c.Error(err)
+	}
+	c.Assert(exists, Equals, false)
+}
+
 func (s *MainSuite) TestDeleteById(c *C) {
 	// Create and save a new model
-	p1 := NewPerson("Jane", 26)
+	p1 := NewPerson("Debbie", 25)
 	zoom.Save(p1)
 
 	// Make sure it was saved
