@@ -42,12 +42,9 @@ type MainSuite struct{}
 var _ = Suite(&MainSuite{})
 
 func (s *MainSuite) SetUpSuite(c *C) {
-	_, err := zoom.InitDb()
-	if err != nil {
-		c.Error(err)
-	}
+	zoom.Init()
 
-	err = zoom.Register(&Person{}, "person")
+	err := zoom.Register(&Person{}, "person")
 	if err != nil {
 		c.Error(err)
 	}
@@ -55,11 +52,13 @@ func (s *MainSuite) SetUpSuite(c *C) {
 
 func (s *MainSuite) TearDownSuite(c *C) {
 	zoom.UnregisterName("person")
-	_, err := zoom.Db().Do("flushdb")
+	conn := zoom.GetConn()
+	_, err := conn.Do("flushdb")
 	if err != nil {
 		c.Error(err)
 	}
-	zoom.CloseDb()
+	conn.Close()
+	zoom.Close()
 }
 
 func (s *MainSuite) TestSave(c *C) {
@@ -98,7 +97,7 @@ func (s *MainSuite) TestDelete(c *C) {
 
 	// Make sure it was saved
 	key := "person:" + p1.Id
-	exists, err := zoom.KeyExists(key)
+	exists, err := zoom.KeyExists(key, nil)
 	if err != nil {
 		c.Error(err)
 	}
@@ -108,7 +107,7 @@ func (s *MainSuite) TestDelete(c *C) {
 	zoom.Delete(p1)
 
 	// Make sure it's gone
-	exists, err = zoom.KeyExists(key)
+	exists, err = zoom.KeyExists(key, nil)
 	if err != nil {
 		c.Error(err)
 	}
@@ -122,7 +121,7 @@ func (s *MainSuite) TestDeleteById(c *C) {
 
 	// Make sure it was saved
 	key := "person:" + p1.Id
-	exists, err := zoom.KeyExists(key)
+	exists, err := zoom.KeyExists(key, nil)
 	if err != nil {
 		c.Error(err)
 	}
@@ -132,7 +131,7 @@ func (s *MainSuite) TestDeleteById(c *C) {
 	zoom.DeleteById("person", p1.Id)
 
 	// Make sure it's gone
-	exists, err = zoom.KeyExists(key)
+	exists, err = zoom.KeyExists(key, nil)
 	if err != nil {
 		c.Error(err)
 	}

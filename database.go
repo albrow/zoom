@@ -13,44 +13,53 @@ import (
 	"time"
 )
 
-var db redis.Conn
+var pool *redis.Pool
 
-// initializes and returns the database connection
-func InitDb() (redis.Conn, error) {
-	if db != nil {
-		return db, nil
-	} else {
-		fmt.Println("zoom: connecting to database...")
-		temp, err := redis.Dial("unix", "/tmp/redis.sock")
-		if err != nil {
-			return nil, err
-		}
-		db = temp
-		// TODO: allow a config variable that sets the databse
-		reply, err := db.Do("select", 7)
-		if err != nil {
-			fmt.Println(redis.String(reply, err))
-			return nil, err
-		}
-		return db, nil
+func GetConn() redis.Conn {
+	return pool.Get()
+}
+
+// initializes a connection pool to be used to conect to database
+// TODO: add some config options
+func Init() {
+	fmt.Println("zoom: creating connection pool...")
+	pool = &redis.Pool{
+		MaxIdle:     3,
+		MaxActive:   0,
+		IdleTimeout: 240 * time.Second,
+		Dial: func() (redis.Conn, error) {
+			c, err := redis.Dial("unix", "/tmp/redis.sock")
+			if err != nil {
+				return nil, err
+			}
+			if _, err := c.Do("select", "7"); err != nil {
+				c.Close()
+				return nil, err
+			}
+			return c, err
+		},
+		TestOnBorrow: func(c redis.Conn, t time.Time) error {
+			_, err := c.Do("PING")
+			return err
+		},
 	}
 }
 
-func Db() redis.Conn {
-	return db
-}
-
-// closes the connection to the database
-func CloseDb() {
-	if db != nil {
-		fmt.Println("zoom: closing database connection...")
-		db.Close()
-	}
+// closes the connection pool
+// Should be run when application exits
+func Close() {
+	pool.Close()
 }
 
 // Returns true iff a given key exists in redis
-func KeyExists(key string) (bool, error) {
-	return redis.Bool(db.Do("exists", key))
+// If conn is nil, a connection will be created for you
+// said connection will be closed before the end of the function
+func KeyExists(key string, conn redis.Conn) (bool, error) {
+	if conn == nil {
+		conn = pool.Get()
+		defer conn.Close()
+	}
+	return redis.Bool(conn.Do("exists", key))
 }
 
 // generates a random string that is more or less

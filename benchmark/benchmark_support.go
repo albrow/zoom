@@ -2,6 +2,7 @@ package benchmark
 
 import (
 	"github.com/stephenalexbrowne/zoom"
+	"log"
 )
 
 type Person struct {
@@ -30,10 +31,21 @@ func NewPerson(name string, age int) *Person {
 // Database helper functions
 // setUp() and tearDown()
 func setUp() {
-	zoom.InitDb()
+	zoom.Init()
 	zoom.Register(&Person{}, "person")
+	conn := zoom.GetConn()
+	_, err := conn.Do("flushdb")
+	if err != nil {
+		log.Fatal(err)
+	}
 }
 
 func tearDown() {
-	zoom.CloseDb()
+	conn := zoom.GetConn()
+	_, err := conn.Do("flushdb")
+	if err != nil {
+		log.Fatal(err)
+	}
+	conn.Close()
+	zoom.Close()
 }

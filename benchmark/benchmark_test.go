@@ -5,9 +5,13 @@ import (
 	"testing"
 )
 
-func BenchmarkSave(b *testing.B) {
-
+// not a real test. Just setup
+func BenchmarkSetUp(b *testing.B) {
 	setUp()
+	b.SkipNow() // only need to do this once
+}
+
+func BenchmarkSave(b *testing.B) {
 
 	// try once to make sure there's no errors
 	pt := NewPerson("Alice", 25)
@@ -28,6 +32,7 @@ func BenchmarkSave(b *testing.B) {
 }
 
 func BenchmarkFindById(b *testing.B) {
+
 	// save a Person model
 	p := NewPerson("Clarence", 25)
 	err := zoom.Save(p)
@@ -40,7 +45,6 @@ func BenchmarkFindById(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		zoom.FindById("person", p.Id)
 	}
-
 }
 
 func BenchmarkDeleteById(b *testing.B) {
@@ -76,12 +80,11 @@ func BenchmarkDeleteById(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		zoom.DeleteById("person", p.Id)
 	}
-
 }
 
 // not an actual test
 // delete any keys leftover from the previous test
 func BenchmarkCleanUp(b *testing.B) {
-	zoom.Db().Do("flushdb")
 	tearDown()
+	b.SkipNow() // only need to do this once
 }
