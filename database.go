@@ -26,8 +26,18 @@ func InitDb() (redis.Conn, error) {
 			return nil, err
 		}
 		db = temp
+		// TODO: allow a config variable that sets the databse
+		reply, err := db.Do("select", 7)
+		if err != nil {
+			fmt.Println(redis.String(reply, err))
+			return nil, err
+		}
 		return db, nil
 	}
+}
+
+func Db() redis.Conn {
+	return db
 }
 
 // closes the connection to the database
@@ -39,7 +49,7 @@ func CloseDb() {
 }
 
 // Returns true iff a given key exists in redis
-func keyExists(key string) (bool, error) {
+func KeyExists(key string) (bool, error) {
 	return redis.Bool(db.Do("exists", key))
 }
 

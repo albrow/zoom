@@ -10,8 +10,17 @@ import (
 // Throughout these, we will try to save, edit, relate, and delete
 // Persons in the database
 type Person struct {
+	Id   string
 	Name string
 	Age  int
+}
+
+func (p *Person) SetId(id string) {
+	p.Id = id
+}
+
+func (p *Person) GetId() string {
+	return p.Id
 }
 
 // A convenient constructor for our Person struct
@@ -57,21 +66,46 @@ func (s *MainSuite) TestSave(c *C) {
 	}
 	c.Assert(p.Name, Equals, "Bob")
 	c.Assert(p.Age, Equals, 25)
+	c.Assert(p.Id, Not(Equals), "")
 }
 
-// func (s *MainSuite) TestFindById(c *C) {
-// 	// Create and save a new model
-// 	p1 := NewPerson("Jane", 26)
-// 	p1.Save()
+func (s *MainSuite) TestFindById(c *C) {
+	// Create and save a new model
+	p1 := NewPerson("Jane", 26)
+	zoom.Save(p1)
 
-// 	// find the model using FindById
-// 	result, err := zoom.FindById("person", p1.Id)
-// 	if err != nil {
-// 		c.Error(err)
-// 	}
-// 	p2 := result.(*Person)
+	// find the model using FindById
+	result, err := zoom.FindById("person", p1.Id)
+	if err != nil {
+		c.Error(err)
+	}
+	p2 := result.(*Person)
 
-// 	// Make sure the found model is the same as original
-// 	c.Assert(p2.Name, Equals, p1.Name)
-// 	c.Assert(p2.Age, Equals, p1.Age)
-// }
+	// Make sure the found model is the same as original
+	c.Assert(p2.Name, Equals, p1.Name)
+	c.Assert(p2.Age, Equals, p1.Age)
+}
+
+func (s *MainSuite) TestDeleteById(c *C) {
+	// Create and save a new model
+	p1 := NewPerson("Jane", 26)
+	zoom.Save(p1)
+
+	// Make sure it was saved
+	key := "person:" + p1.Id
+	exists, err := zoom.KeyExists(key)
+	if err != nil {
+		c.Error(err)
+	}
+	c.Assert(exists, Equals, true)
+
+	// delete it
+	zoom.DeleteById("person", p1.Id)
+
+	// Make sure it's gone
+	exists, err = zoom.KeyExists(key)
+	if err != nil {
+		c.Error(err)
+	}
+	c.Assert(exists, Equals, false)
+}

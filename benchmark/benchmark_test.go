@@ -10,7 +10,7 @@ func BenchmarkSave(b *testing.B) {
 	setUp()
 
 	// try once to make sure there's no errors
-	pt := NewPerson("Bob", 25)
+	pt := NewPerson("Alice", 25)
 	err := zoom.Save(pt)
 	if err != nil {
 		b.Error(err)
@@ -27,39 +27,61 @@ func BenchmarkSave(b *testing.B) {
 
 }
 
-// func BenchmarkFindById(b *testing.B) {
-// 	// save a Person model
-// 	p := NewPerson("Bob", 25)
-// 	err := p.Save()
-// 	if err != nil {
-// 		b.Error(err)
-// 	}
-// 	b.ResetTimer()
+func BenchmarkFindById(b *testing.B) {
+	// save a Person model
+	p := NewPerson("Clarence", 25)
+	err := zoom.Save(p)
+	if err != nil {
+		b.Error(err)
+	}
+	b.ResetTimer()
 
-// 	// run the actual test
-// 	for i := 0; i < b.N; i++ {
-// 		zoom.FindById("person", p.Id)
-// 	}
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		zoom.FindById("person", p.Id)
+	}
 
-// }
+}
 
-// func BenchmarkOneToOneRelation(b *testing.B) {
-// 	// save some peeps. Make them siblings.
-// 	p1 := NewPerson("Alice", 27)
-// 	err := p1.Save()
-// 	if err != nil {
-// 		b.Error(err)
-// 	}
-// 	p2 := NewPerson("Bob", 25)
-// 	p2.SiblingId = p1.Id
-// 	err = p2.Save()
-// 	if err != nil {
-// 		b.Error(err)
-// 	}
-// 	b.ResetTimer()
+func BenchmarkDeleteById(b *testing.B) {
 
-// 	// run the actual test
-// 	for i := 0; i < b.N; i++ {
-// 		p2.Fetch("sibling")
-// 	}
-// }
+	// First, create and delete one person to
+	// make sure there's no errors
+	p := NewPerson("Dennis", 25)
+	err := zoom.Save(p)
+	if err != nil {
+		b.Error(err)
+	}
+	err = zoom.DeleteById("person", p.Id)
+	if err != nil {
+		b.Error(err)
+	}
+
+	// save a shit ton of person models
+	// we don't know how big b.N will be,
+	// so better be safe
+	NUM_IDS := 100000
+	ids := make([]string, 0, NUM_IDS)
+	for i := 0; i < NUM_IDS; i++ {
+		p := NewPerson("Fred", 25)
+		err := zoom.Save(p)
+		if err != nil {
+			b.Error(err)
+		}
+		ids = append(ids, p.Id)
+	}
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		zoom.DeleteById("person", p.Id)
+	}
+
+}
+
+// not an actual test
+// delete any keys leftover from the previous test
+func BenchmarkCleanUp(b *testing.B) {
+	zoom.Db().Do("flushdb")
+	tearDown()
+}
