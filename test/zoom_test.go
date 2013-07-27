@@ -55,6 +55,10 @@ func (s *MainSuite) SetUpSuite(c *C) {
 
 func (s *MainSuite) TearDownSuite(c *C) {
 	zoom.UnregisterName("person")
+	_, err := zoom.Db().Do("flushdb")
+	if err != nil {
+		c.Error(err)
+	}
 	zoom.CloseDb()
 }
 
@@ -84,6 +88,7 @@ func (s *MainSuite) TestFindById(c *C) {
 	// Make sure the found model is the same as original
 	c.Assert(p2.Name, Equals, p1.Name)
 	c.Assert(p2.Age, Equals, p1.Age)
+	c.Assert(p2.Id, Equals, p1.Id)
 }
 
 func (s *MainSuite) TestDelete(c *C) {
