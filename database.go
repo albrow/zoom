@@ -8,23 +8,25 @@ package zoom
 import (
 	"fmt"
 	"github.com/dchest/uniuri"
-	"github.com/stephenalexbrowne/go-redis"
+	"github.com/garyburd/redigo/redis"
 	"strconv"
 	"time"
 )
 
-type DbConfig redis.Configuration
-
-var db *redis.Database
+var db redis.Conn
 
 // initializes and returns the database connection
-func InitDb(config DbConfig) *redis.Database {
+func InitDb() (redis.Conn, error) {
 	if db != nil {
-		return db
+		return db, nil
 	} else {
 		fmt.Println("zoom: connecting to database...")
-		db = redis.Connect(redis.Configuration(config))
-		return db
+		temp, err := redis.Dial("unix", "/tmp/redis.sock")
+		if err != nil {
+			return nil, err
+		}
+		db = temp
+		return db, nil
 	}
 }
 
@@ -38,12 +40,7 @@ func CloseDb() {
 
 // Returns true iff a given key exists in redis
 func keyExists(key string) (bool, error) {
-	result := db.Command("exists", key)
-	if result.Error() != nil {
-		return false, result.Error()
-	}
-
-	return result.ValueAsBool()
+	return redis.Bool(db.Do("exists", key))
 }
 
 // generates a random string that is more or less
