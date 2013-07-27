@@ -28,8 +28,12 @@ func Save(in ModelInterface) error {
 	}
 	key := name + ":" + id
 
+	// get a connection from the pool
+	conn := pool.Get()
+	defer conn.Close()
+
 	// invoke redis driver to commit to database
-	_, err = db.Do("hmset", redis.Args{}.Add(key).AddFlat(in)...)
+	_, err = conn.Do("hmset", redis.Args{}.Add(key).AddFlat(in)...)
 	if err != nil {
 		return err
 	}
@@ -46,12 +50,16 @@ func Delete(in ModelInterface) error {
 	if err != nil {
 		return err
 	}
+	key := name + ":" + in.GetId()
 
 	// TODO: make sure it has an id
 
+	// get a connection
+	conn := pool.Get()
+	defer conn.Close()
+
 	// invoke redis driver to delete the key
-	key := name + ":" + in.GetId()
-	_, err = db.Do("del", key)
+	_, err = conn.Do("del", key)
 	if err != nil {
 		return err
 	}
@@ -61,8 +69,14 @@ func Delete(in ModelInterface) error {
 
 // Find a model by its id and then delete it
 func DeleteById(modelName, id string) error {
+
 	key := modelName + ":" + id
-	_, err := db.Do("del", key)
+
+	// get a connection
+	conn := pool.Get()
+	defer conn.Close()
+
+	_, err := conn.Do("del", key)
 	return err
 }
 
@@ -78,8 +92,12 @@ func FindById(modelName, id string) (interface{}, error) {
 	// create the key based on the modelName and id
 	key := modelName + ":" + id
 
+	// open a connection
+	conn := pool.Get()
+	defer conn.Close()
+
 	// make sure the key exists
-	exists, err := KeyExists(key)
+	exists, err := KeyExists(key, conn)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +107,7 @@ func FindById(modelName, id string) (interface{}, error) {
 	}
 
 	// get the stuff from redis
-	reply, err := db.Do("hgetall", key)
+	reply, err := conn.Do("hgetall", key)
 	bulk, err := redis.MultiBulk(reply, err)
 	if err != nil {
 		return nil, err
