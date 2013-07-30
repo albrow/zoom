@@ -93,7 +93,18 @@ func DeleteById(modelName, id string) error {
 	defer conn.Close()
 
 	_, err := conn.Do("del", key)
-	return err
+	if err != nil {
+		return err
+	}
+
+	// remove from the index
+	key = modelName + ":index"
+	_, err = conn.Do("srem", key, id)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // Find a model by modelName and id. modelName must be the
