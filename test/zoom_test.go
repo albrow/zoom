@@ -6,32 +6,6 @@ import (
 	"testing"
 )
 
-// We'll define a person struct as the basis of all our tests
-// Throughout these, we will try to save, edit, relate, and delete
-// Persons in the database
-type Person struct {
-	Id   string
-	Name string
-	Age  int
-}
-
-func (p *Person) SetId(id string) {
-	p.Id = id
-}
-
-func (p *Person) GetId() string {
-	return p.Id
-}
-
-// A convenient constructor for our Person struct
-func NewPerson(name string, age int) *Person {
-	p := &Person{
-		Name: name,
-		Age:  age,
-	}
-	return p
-}
-
 // Gocheck setup...
 func Test(t *testing.T) {
 	TestingT(t)
@@ -136,4 +110,84 @@ func (s *MainSuite) TestDeleteById(c *C) {
 		c.Error(err)
 	}
 	c.Assert(exists, Equals, false)
+}
+
+// NOTE:
+// All primative types are supported except complex64 and complex128
+// A full list of supported types:
+//
+// uint
+// uint8
+// uint16
+// uint32
+// uint64
+// int
+// int8
+// int16
+// int32
+// int64
+// float32
+// float64
+// complex64
+// complex128
+// byte
+// rune
+// string
+//
+
+func (s *MainSuite) TestSaveSupportedTypes(c *C) {
+
+	// Register our types model
+	zoom.Register(&AllTypes{}, "types")
+
+	// create and save a struct which contains all the numeric types (except complex)
+	myTypes := &AllTypes{
+		Uint:    uint(0),
+		Uint8:   uint8(1),
+		Uint16:  uint16(2),
+		Uint32:  uint32(3),
+		Uint64:  uint64(4),
+		Int:     5,
+		Int8:    int8(6),
+		Int16:   int16(7),
+		Int32:   int32(8),
+		Int64:   int64(9),
+		Float32: float32(10.0),
+		Float64: float64(11.0),
+		Byte:    byte(12),
+		Rune:    rune(13),
+		String:  "14",
+	}
+	err := zoom.Save(myTypes)
+	if err != nil {
+		c.Error(err)
+	}
+	c.Assert(myTypes.Id, NotNil)
+
+	// retrieve it from the database and typecast
+	result, err := zoom.FindById("numeric", myTypes.Id)
+	if err != nil {
+		c.Error(err)
+	}
+	resultTypes, ok := result.(*myTypes)
+	if !ok {
+		c.Error("Couldn't type assert to *myTypes!")
+	}
+
+	// make sure all the struct members are the same as before
+	c.Assert(resultTypes.Uint, Equals, myTypes.Uint)
+	c.Assert(resultTypes.Uint8, Equals, myTypes.Uint8)
+	c.Assert(resultTypes.Uint16, Equals, myTypes.Uint16)
+	c.Assert(resultTypes.Uint32, Equals, myTypes.Uint32)
+	c.Assert(resultTypes.Uint64, Equals, myTypes.Uint64)
+	c.Assert(resultTypes.Int, Equals, myTypes.Int)
+	c.Assert(resultTypes.Int8, Equals, myTypes.Int8)
+	c.Assert(resultTypes.Int16, Equals, myTypes.Int16)
+	c.Assert(resultTypes.Int32, Equals, myTypes.Int32)
+	c.Assert(resultTypes.Int64, Equals, myTypes.Int64)
+	c.Assert(resultTypes.Float32, Equals, myTypes.Float32)
+	c.Assert(resultTypes.Float64, Equals, myTypes.Float64)
+	c.Assert(resultTypes.Byte, Equals, myTypes.Byte)
+	c.Assert(resultTypes.Rune, Equals, myTypes.Rune)
+
 }
