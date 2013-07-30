@@ -45,7 +45,7 @@ func (s *MainSuite) TestSave(c *C) {
 	c.Assert(p.Age, Equals, 25)
 	c.Assert(p.Id, Not(Equals), "")
 
-	// make sure it was added to the database
+	// make sure it was added to the index
 	ismem, err := zoom.SetContains("person:index", p.Id, nil)
 	if err != nil {
 		c.Error(err)
@@ -93,6 +93,14 @@ func (s *MainSuite) TestDelete(c *C) {
 		c.Error(err)
 	}
 	c.Assert(exists, Equals, false)
+
+	// Make sure it was removed from index
+	ismem, err := zoom.SetContains("person:index", p1.Id, nil)
+	if err != nil {
+		c.Error(err)
+	}
+	c.Assert(ismem, Equals, false)
+
 }
 
 func (s *MainSuite) TestDeleteById(c *C) {
