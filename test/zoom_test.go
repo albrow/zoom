@@ -73,11 +73,11 @@ func (s *MainSuite) TestFindById(c *C) {
 
 func (s *MainSuite) TestDelete(c *C) {
 	// Create and save a new model
-	p1 := NewPerson("Charles", 25)
-	zoom.Save(p1)
+	p := NewPerson("Charles", 25)
+	zoom.Save(p)
 
 	// Make sure it was saved
-	key := "person:" + p1.Id
+	key := "person:" + p.Id
 	exists, err := zoom.KeyExists(key, nil)
 	if err != nil {
 		c.Error(err)
@@ -85,7 +85,7 @@ func (s *MainSuite) TestDelete(c *C) {
 	c.Assert(exists, Equals, true)
 
 	// delete it
-	zoom.Delete(p1)
+	zoom.Delete(p)
 
 	// Make sure it's gone
 	exists, err = zoom.KeyExists(key, nil)
@@ -95,7 +95,7 @@ func (s *MainSuite) TestDelete(c *C) {
 	c.Assert(exists, Equals, false)
 
 	// Make sure it was removed from index
-	ismem, err := zoom.SetContains("person:index", p1.Id, nil)
+	ismem, err := zoom.SetContains("person:index", p.Id, nil)
 	if err != nil {
 		c.Error(err)
 	}
@@ -105,11 +105,11 @@ func (s *MainSuite) TestDelete(c *C) {
 
 func (s *MainSuite) TestDeleteById(c *C) {
 	// Create and save a new model
-	p1 := NewPerson("Debbie", 25)
-	zoom.Save(p1)
+	p := NewPerson("Debbie", 25)
+	zoom.Save(p)
 
 	// Make sure it was saved
-	key := "person:" + p1.Id
+	key := "person:" + p.Id
 	exists, err := zoom.KeyExists(key, nil)
 	if err != nil {
 		c.Error(err)
@@ -117,7 +117,7 @@ func (s *MainSuite) TestDeleteById(c *C) {
 	c.Assert(exists, Equals, true)
 
 	// delete it
-	zoom.DeleteById("person", p1.Id)
+	zoom.DeleteById("person", p.Id)
 
 	// Make sure it's gone
 	exists, err = zoom.KeyExists(key, nil)
@@ -125,6 +125,66 @@ func (s *MainSuite) TestDeleteById(c *C) {
 		c.Error(err)
 	}
 	c.Assert(exists, Equals, false)
+}
+
+func (s *MainSuite) TestFindAll(c *C) {
+
+	// register the Pet model
+	err := zoom.Register(new(Pet), "pet")
+	if err != nil {
+		c.Error(err)
+	}
+
+	// Create and save some Pets
+	// we can assume this works since
+	// Save() was tested previously
+	p1 := NewPet("Elroy", "emu")
+	p2 := NewPet("Fred", "ferret")
+	p3 := NewPet("Gus", "gecko")
+	zoom.Save(p1)
+	zoom.Save(p2)
+	zoom.Save(p3)
+
+	// query to get a list of all the pets
+	results, err := zoom.FindAll("pet")
+	if err != nil {
+		c.Error(err)
+	}
+
+	// make sure the results is the right length
+	c.Assert(len(results), Equals, 3)
+
+	// make sure each item in results is correct
+	// NOTE: this is tricky because the order can
+	// change in redis and we haven't asked for any sorting
+	expecteds := []*Pet{p1, p2, p3}
+	for i, result := range results {
+		// first, each item in results should be able to be casted to *Pet
+		pResult, ok := result.(*Pet)
+		if !ok {
+			c.Errorf("Couldn't cast results[%d] to *Pet", i)
+		}
+		// second, each item in results should have a valid Id
+		if pResult.Id == "" {
+			c.Error("Id was not set for Pet: ", pResult)
+		}
+		// third, each item in results should correspond and be equal to
+		// one of the items in expecteds
+		foundIdMatch := false
+		for _, expected := range expecteds {
+			if pResult.Id == expected.Id {
+				c.Assert(pResult.Name, Equals, expected.Name)
+				c.Assert(pResult.Kind, Equals, expected.Kind)
+				foundIdMatch = true
+				break
+			}
+		}
+		// if we've reached here, the result.Id did not match any of the ids
+		// in expecteds.
+		if foundIdMatch == false {
+			c.Errorf("Couldn't find matching id in result set for: %s", pResult.Id)
+		}
+	}
 }
 
 // NOTE:
