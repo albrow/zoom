@@ -145,3 +145,29 @@ func FindById(modelName, id string) (interface{}, error) {
 	// return it
 	return model, nil
 }
+
+func FindAll(modelName string) ([]interface{}, error) {
+
+	// get a connection
+	conn := pool.Get()
+	defer conn.Close()
+
+	// invoke redis driver to get indexed keys and convert to []interface{}
+	key := modelName + ":index"
+	ids, err := redis.Strings(conn.Do("smembers", key))
+	if err != nil {
+		return nil, err
+	}
+
+	// iterate through each id. find the corresponding model. append to results.
+	results := make([]interface{}, len(ids), len(ids))
+	for i, id := range ids {
+		m, err := FindById(modelName, id)
+		if err != nil {
+			return nil, err
+		}
+		results[i] = m
+	}
+
+	return results, nil
+}

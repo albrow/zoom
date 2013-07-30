@@ -26,6 +26,29 @@ func NewPerson(name string, age int) *Person {
 	return p
 }
 
+type Pet struct {
+	Id   string
+	Name string
+	Kind string
+}
+
+func (p *Pet) SetId(id string) {
+	p.Id = id
+}
+
+func (p *Pet) GetId() string {
+	return p.Id
+}
+
+// A convenient constructor for our Pet struct
+func NewPet(name, kind string) *Pet {
+	p := &Pet{
+		Name: name,
+		Kind: kind,
+	}
+	return p
+}
+
 type AllTypes struct {
 	Id      string
 	Uint    uint
