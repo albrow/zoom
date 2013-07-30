@@ -12,7 +12,8 @@ import (
 
 // writes the interface to the redis database
 // throws an error if the type has not yet been
-// registered
+// registered. If in.Id is nil, will mutate in
+// by setting the Id.
 func Save(in ModelInterface) error {
 	// get the registered name
 	name, err := getRegisteredNameFromInterface(in)
@@ -37,6 +38,14 @@ func Save(in ModelInterface) error {
 	if err != nil {
 		return err
 	}
+
+	// add to the index for this model
+	err = addToIndex(name, id, conn)
+	if err != nil {
+		return err
+	}
+
+	// set the id of the model
 	in.SetId(id)
 
 	return nil
