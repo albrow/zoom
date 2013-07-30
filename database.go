@@ -62,6 +62,17 @@ func KeyExists(key string, conn redis.Conn) (bool, error) {
 	return redis.Bool(conn.Do("exists", key))
 }
 
+// Returns true iff the redis set identified by key contains member.
+// If conn is nil, a connection will be created for you.
+// said connection will be closed before the end of the function.
+func SetContains(key, member string, conn redis.Conn) (bool, error) {
+	if conn == nil {
+		conn = pool.Get()
+		defer conn.Close()
+	}
+	return redis.Bool(conn.Do("sismember", key, member))
+}
+
 // generates a random string that is more or less
 // garunteed to be unique. Used as Ids for records
 // where an Id is not otherwise provided.
@@ -70,4 +81,19 @@ func generateRandomId() string {
 	timeString := strconv.FormatInt(timeInt, 36)
 	randomString := uniuri.NewLen(16)
 	return randomString + timeString
+}
+
+// adds value as a member of a redis set identified by {name}:index
+// where {name} is the name of the model you want to index.
+// If the conn paramater is nil, will get a connection from the
+// pool and close it before returning. If conn is a redis.Conn,
+// it will use the existing connection.
+func addToIndex(name, value string, conn redis.Conn) error {
+	if conn == nil {
+		conn = pool.Get()
+		defer conn.Close()
+	}
+	key := name + ":index"
+	_, err := conn.Do("sadd", key, value)
+	return err
 }

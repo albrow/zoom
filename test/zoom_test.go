@@ -44,6 +44,13 @@ func (s *MainSuite) TestSave(c *C) {
 	c.Assert(p.Name, Equals, "Allen")
 	c.Assert(p.Age, Equals, 25)
 	c.Assert(p.Id, Not(Equals), "")
+
+	// make sure it was added to the database
+	ismem, err := zoom.SetContains("person:index", p.Id, nil)
+	if err != nil {
+		c.Error(err)
+	}
+	c.Assert(ismem, Equals, true)
 }
 
 func (s *MainSuite) TestFindById(c *C) {
@@ -165,13 +172,13 @@ func (s *MainSuite) TestSaveSupportedTypes(c *C) {
 	c.Assert(myTypes.Id, NotNil)
 
 	// retrieve it from the database and typecast
-	result, err := zoom.FindById("numeric", myTypes.Id)
+	result, err := zoom.FindById("types", myTypes.Id)
 	if err != nil {
 		c.Error(err)
 	}
-	resultTypes, ok := result.(*myTypes)
+	resultTypes, ok := result.(*AllTypes)
 	if !ok {
-		c.Error("Couldn't type assert to *myTypes!")
+		c.Error("Couldn't type assert to *AllTypes!")
 	}
 
 	// make sure all the struct members are the same as before
