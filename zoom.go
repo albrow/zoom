@@ -73,6 +73,13 @@ func Delete(in ModelInterface) error {
 		return err
 	}
 
+	// remove from the index
+	key = name + ":index"
+	_, err = conn.Do("srem", key, in.GetId())
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
