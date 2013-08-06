@@ -239,6 +239,7 @@ func (s *MainSuite) TestSaveSupportedTypes(c *C) {
 		Byte:    byte(12),
 		Rune:    rune(13),
 		String:  "14",
+		Model:   new(zoom.Model),
 	}
 	err := zoom.Save(myTypes)
 	if err != nil {
