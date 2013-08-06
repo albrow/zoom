@@ -13,7 +13,19 @@ import (
 	"time"
 )
 
+type Configuration struct {
+	Address  string // Address to connect to. Default: "/tmp/redis.sock"
+	Network  string // Network to use. Default: "unix"
+	Database int    // Database id to use (using SELECT). Default: 0
+}
+
 var pool *redis.Pool
+
+var defaultConfiguration = Configuration{
+	Address:  "/tmp/redis.sock",
+	Network:  "unix",
+	Database: 0,
+}
 
 func GetConn() redis.Conn {
 	return pool.Get()
@@ -21,18 +33,21 @@ func GetConn() redis.Conn {
 
 // initializes a connection pool to be used to conect to database
 // TODO: add some config options
-func Init() {
+func Init(passedConfig *Configuration) {
 	fmt.Println("zoom: creating connection pool...")
+
+	config := getConfiguration(passedConfig)
+
 	pool = &redis.Pool{
 		MaxIdle:     3,
 		MaxActive:   0,
 		IdleTimeout: 240 * time.Second,
 		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("unix", "/tmp/redis.sock")
+			c, err := redis.Dial(config.Network, config.Address)
 			if err != nil {
 				return nil, err
 			}
-			if _, err := c.Do("select", "7"); err != nil {
+			if _, err := c.Do("select", strconv.Itoa(config.Database)); err != nil {
 				c.Close()
 				return nil, err
 			}
@@ -96,4 +111,28 @@ func addToIndex(name, value string, conn redis.Conn) error {
 	key := name + ":index"
 	_, err := conn.Do("sadd", key, value)
 	return err
+}
+
+// return a proper configuration struct.
+// if the passed in struct is nil, return defaultConfiguration
+// else, for each attribute, if the passed in struct is "", 0, etc,
+// use the default value for that attribute.
+func getConfiguration(passedConfig *Configuration) Configuration {
+
+	if passedConfig == nil {
+		return defaultConfiguration
+	}
+
+	// copy the passedConfig
+	newConfig := *passedConfig
+
+	if newConfig.Address == "" {
+		newConfig.Address = defaultConfiguration.Address
+	}
+	if newConfig.Network == "" {
+		newConfig.Network = defaultConfiguration.Network
+	}
+	// since the zero value for int is 0, we can skip config.Database
+
+	return newConfig
 }
