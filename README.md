@@ -31,7 +31,7 @@ Installation
 First, you must install redis on your system. [See installation instructions](http://redis.io/download).
 
 By default, Zoom uses a unix socket connection to connect to redis. To do this, you need to enable
-socket connections in your redis config file. If you prefer to use tcp/http instead, see the Set Up
+socket connections in your redis config file. If you prefer to use tcp/http instead, see the Setup
 instructions below.  
 
 To install Zoom itself:
