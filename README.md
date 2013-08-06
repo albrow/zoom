@@ -91,7 +91,10 @@ if err := zoom.Init(config); err != nil {
 }
 ```
 
-In order to save your struct using Zoom, you need to add an embedded struct attribute like so:
+### Creating your models
+
+In order to save a struct using Zoom, you need to add an embedded struct attribute. Throughout the rest of
+this guide, we'll be using a Person struct as an example:
 
 ``` go
 type Person struct {
@@ -101,9 +104,9 @@ type Person struct {
 ```
 
 The *zoom.Model embedded attribute automatically gives you an Id field. You do not need to add an Id field
-to your struct.
+to the struct.
 
-**Important:** In your constructor, you must initialize the embedded *zoom.Model attribute. Something like this:
+**Important:** In the constructor, you must initialize the embedded *zoom.Model attribute. Something like this:
 
 ``` go
 func NewPerson(name string) *Person {
