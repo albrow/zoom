@@ -2,7 +2,7 @@ package zoom
 
 import (
 	"fmt"
-	"github.com/garyburd/redigo/redis"
+	"github.com/stephenalexbrowne/zoom/redis"
 	"reflect"
 )
 

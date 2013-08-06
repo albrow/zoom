@@ -8,7 +8,7 @@ package zoom
 import (
 	"fmt"
 	"github.com/dchest/uniuri"
-	"github.com/garyburd/redigo/redis"
+	"github.com/stephenalexbrowne/zoom/redis"
 	"strconv"
 	"time"
 )
