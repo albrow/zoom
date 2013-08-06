@@ -1,56 +1,45 @@
 package test
 
+import (
+	"github.com/stephenalexbrowne/zoom"
+)
+
 // File contains support code for tests.
 // e.g. type declarations, constructors,
 // and other methods.
 type Person struct {
-	Id   string
 	Name string
 	Age  int
-}
-
-func (p *Person) SetId(id string) {
-	p.Id = id
-}
-
-func (p *Person) GetId() string {
-	return p.Id
+	*zoom.Model
 }
 
 // A convenient constructor for our Person struct
 func NewPerson(name string, age int) *Person {
 	p := &Person{
-		Name: name,
-		Age:  age,
+		Name:  name,
+		Age:   age,
+		Model: new(zoom.Model),
 	}
 	return p
 }
 
 type Pet struct {
-	Id   string
 	Name string
 	Kind string
-}
-
-func (p *Pet) SetId(id string) {
-	p.Id = id
-}
-
-func (p *Pet) GetId() string {
-	return p.Id
+	*zoom.Model
 }
 
 // A convenient constructor for our Pet struct
 func NewPet(name, kind string) *Pet {
 	p := &Pet{
-		Name: name,
-		Kind: kind,
+		Name:  name,
+		Kind:  kind,
+		Model: new(zoom.Model),
 	}
 	return p
 }
 
 type AllTypes struct {
-	Id      string
 	Uint    uint
 	Uint8   uint8
 	Uint16  uint16
@@ -66,12 +55,5 @@ type AllTypes struct {
 	Byte    byte
 	Rune    rune
 	String  string
-}
-
-func (in *AllTypes) SetId(id string) {
-	in.Id = id
-}
-
-func (in *AllTypes) GetId() string {
-	return in.Id
+	*zoom.Model
 }

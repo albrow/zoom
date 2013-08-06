@@ -8,18 +8,12 @@ import (
 )
 
 type Model struct {
-	Id     string
-	Parent interface{} `json:"-"`
+	Id string `redis:"-"`
 }
 
 type ModelInterface interface {
 	GetId() string
 	SetId(string)
-}
-
-// A constructor that automatically sets the parent
-func NewModelFor(in ModelInterface) *Model {
-	return &Model{Parent: in}
 }
 
 func (m *Model) GetId() string {
@@ -28,14 +22,6 @@ func (m *Model) GetId() string {
 
 func (m *Model) SetId(id string) {
 	m.Id = id
-}
-
-func (m *Model) GetParent() interface{} {
-	return m.Parent
-}
-
-func (m *Model) SetParent(parent interface{}) {
-	m.Parent = parent
 }
 
 // maps a type to a string identifier. The string is used
