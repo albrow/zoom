@@ -25,7 +25,7 @@ func NewPerson(name string, age int) *Person {
 // Database helper functions
 // setUp() and tearDown()
 func setUp() {
-	zoom.Init()
+	zoom.Init(&zoom.Configuration{Database: 7})
 	zoom.Register(&Person{}, "person")
 	conn := zoom.GetConn()
 	_, err := conn.Do("flushdb")

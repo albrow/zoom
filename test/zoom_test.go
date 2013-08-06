@@ -16,7 +16,8 @@ type MainSuite struct{}
 var _ = Suite(&MainSuite{})
 
 func (s *MainSuite) SetUpSuite(c *C) {
-	zoom.Init()
+
+	zoom.Init(&zoom.Configuration{Database: 7})
 
 	err := zoom.Register(&Person{}, "person")
 	if err != nil {
