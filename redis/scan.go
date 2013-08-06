@@ -12,6 +12,9 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
+// NOTE: this file has been modified by stephenalexbrowne. See the NOTICE file
+// for more information about the usage of the redigo library here.
+
 package redis
 
 import (
@@ -240,8 +243,8 @@ func compileStructSpec(t reflect.Type, depth map[string]int, index []int, ss *st
 			}
 		default:
 			fs := &fieldSpec{name: f.Name}
-			tag := f.Tag.Get("redis")
-			p := strings.Split(tag, ",")
+			redisTag := f.Tag.Get("redis")
+			p := strings.Split(redisTag, ",")
 			if len(p) > 0 {
 				if p[0] == "-" {
 					continue
@@ -257,6 +260,9 @@ func compileStructSpec(t reflect.Type, depth map[string]int, index []int, ss *st
 						panic(errors.New("redigo: unknown field flag " + s + " for type " + t.Name()))
 					}
 				}
+			}
+			if refersToTag := f.Tag.Get("refersTo"); refersToTag != "" {
+				fmt.Println("refersTo tag found!", refersToTag)
 			}
 			d, found := depth[fs.name]
 			if !found {
