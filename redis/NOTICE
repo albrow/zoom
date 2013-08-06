@@ -1,0 +1,11 @@
+Packages redis and redis_test were originally created by github user garyburd (Gary).
+
+They come from the redigo repository at https://github.com/garyburd/redigo.
+The files are as they were on August 6, 2013, with the exception of
+some bug fixes which I may have pulled from the source repository since that date.
+
+Redigo is available under the Apache License, Version 2.0.
+
+I have clearly indicated which files I have modified.
+
+Much thanks to Gary for creating this awesome redis driver!
