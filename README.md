@@ -181,3 +181,11 @@ The [zoom_example repository](https://github.com/stephenalexbrowne/zoom_example)
 of how to use Zoom in a json/rest application. Use it as a reference if anything above is not clear. Formal
 documentation is on my todo list.
 
+
+LICENSE
+-------
+
+Zoom is licensed under the MIT License. See the LICENSE file for more information.
+
+The redis driver for Zoom is based on https://github.com/garyburd/redigo and is licensed under
+the Apache License, Version 2.0. See redis/NOTICE for more information. Thanks Gary!
