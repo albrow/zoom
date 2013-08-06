@@ -147,7 +147,6 @@ func FindById(modelName, id string) (interface{}, error) {
 
 	// type assert to ModelInterface so we can use SetId()
 	model := modelVal.Interface().(ModelInterface)
-	fmt.Printf("model: %+v\n", model)
 
 	// invoke redis driver to fill in the values of the struct
 	err = redis.ScanStruct(bulk, model)
