@@ -7,13 +7,15 @@ import (
 // File contains support code for tests.
 // e.g. type declarations, constructors,
 // and other methods.
+
+// The Person struct
 type Person struct {
 	Name string
 	Age  int
 	*zoom.Model
 }
 
-// A convenient constructor for our Person struct
+// A convenient constructor for the Person struct
 func NewPerson(name string, age int) *Person {
 	p := &Person{
 		Name:  name,
@@ -23,13 +25,14 @@ func NewPerson(name string, age int) *Person {
 	return p
 }
 
+// The Pet struct
 type Pet struct {
 	Name string
 	Kind string
 	*zoom.Model
 }
 
-// A convenient constructor for our Pet struct
+// A convenient constructor for the Pet struct
 func NewPet(name, kind string) *Pet {
 	p := &Pet{
 		Name:  name,
@@ -39,6 +42,8 @@ func NewPet(name, kind string) *Pet {
 	return p
 }
 
+// The AllTypes struct
+// A struct containing all supported types
 type AllTypes struct {
 	Uint    uint
 	Uint8   uint8
