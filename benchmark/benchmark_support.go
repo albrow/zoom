@@ -5,25 +5,19 @@ import (
 	"log"
 )
 
+// The Person struct
 type Person struct {
-	Id   string
 	Name string
 	Age  int
+	*zoom.Model
 }
 
-func (p *Person) SetId(id string) {
-	p.Id = id
-}
-
-func (p *Person) GetId() string {
-	return p.Id
-}
-
-// A convenient constructor for our Person struct
+// A convenient constructor for the Person struct
 func NewPerson(name string, age int) *Person {
 	p := &Person{
-		Name: name,
-		Age:  age,
+		Name:  name,
+		Age:   age,
+		Model: new(zoom.Model),
 	}
 	return p
 }
