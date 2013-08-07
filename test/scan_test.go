@@ -140,6 +140,9 @@ func ExampleScan() {
 	// Beat not-rated
 	// Earthbound 1
 	// Red 5
+
+	// delete the keys we created so the test passes next time
+	c.Do("DEL", "albums", "album:1", "album:2", "album:3")
 }
 
 type s0 struct {
@@ -275,6 +278,9 @@ func ExampleArgs() {
 	// Output:
 	// {Title:Example Author:Gary Body:Hello}
 	// {Title:Example2 Author:Steve Body:Map}
+
+	// delete the keys we just used
+	c.Do("DEL", "id1", "id2")
 }
 
 type testConn struct {
