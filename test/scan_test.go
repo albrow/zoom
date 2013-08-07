@@ -12,12 +12,16 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-// Note: this file has been moved but not otherwise modified
+// Note: This file has been modified. Package and method names were updated
+// to reflect the fact that the scan file has been moved from zoom/redis/ to
+// zoom/ (the root of this project). I also added some clean up that deletes
+// used keys after each test is complete.
 
-package redis_test
+package test
 
 import (
 	"fmt"
+	"github.com/stephenalexbrowne/zoom"
 	"github.com/stephenalexbrowne/zoom/redis"
 	"math"
 	"reflect"
@@ -74,7 +78,7 @@ func TestScanConversion(t *testing.T) {
 	for _, tt := range scanConversionTests {
 		values := []interface{}{tt.src}
 		dest := reflect.New(reflect.TypeOf(tt.dest))
-		values, err := redis.Scan(values, dest.Interface())
+		values, err := zoom.Scan(values, dest.Interface())
 		if err != nil {
 			t.Errorf("Scan(%v) returned error %v", tt, err)
 			continue
@@ -89,7 +93,7 @@ func TestScanConversionError(t *testing.T) {
 	for _, tt := range scanConversionErrorTests {
 		values := []interface{}{tt.src}
 		dest := reflect.New(reflect.TypeOf(tt.dest))
-		values, err := redis.Scan(values, dest.Interface())
+		values, err := zoom.Scan(values, dest.Interface())
 		if err == nil {
 			t.Errorf("Scan(%v) did not return error", tt)
 		}
@@ -97,7 +101,7 @@ func TestScanConversionError(t *testing.T) {
 }
 
 func ExampleScan() {
-	c, err := dial()
+	c, err := redis.Dial("unix", "/tmp/redis.sock")
 	if err != nil {
 		panic(err)
 	}
@@ -120,7 +124,7 @@ func ExampleScan() {
 	for len(values) > 0 {
 		var title string
 		rating := -1 // initialize to illegal value to detect nil.
-		values, err = redis.Scan(values, &title, &rating)
+		values, err = zoom.Scan(values, &title, &rating)
 		if err != nil {
 			panic(err)
 		}
@@ -134,6 +138,14 @@ func ExampleScan() {
 	// Beat not-rated
 	// Earthbound 1
 	// Red 5
+
+	// delete the keys we created so the test passes next time
+	c.Send("delete", "albums")
+	c.Send("delete", "album:1")
+	c.Send("delete", "album:2")
+	c.Send("delete", "album:3")
+	c.Flush()
+
 }
 
 type s0 struct {
@@ -175,7 +187,7 @@ func TestScanStruct(t *testing.T) {
 
 		value := reflect.New(reflect.ValueOf(tt.value).Type().Elem())
 
-		if err := redis.ScanStruct(reply, value.Interface()); err != nil {
+		if err := zoom.ScanStruct(reply, value.Interface()); err != nil {
 			t.Fatalf("ScanStruct(%s) returned error %v", tt.title, err)
 		}
 
@@ -187,11 +199,11 @@ func TestScanStruct(t *testing.T) {
 
 var argsTests = []struct {
 	title    string
-	actual   redis.Args
-	expected redis.Args
+	actual   zoom.Args
+	expected zoom.Args
 }{
 	{"struct ptr",
-		redis.Args{}.AddFlat(&struct {
+		zoom.Args{}.AddFlat(&struct {
 			I  int    `redis:"i"`
 			U  uint   `redis:"u"`
 			S  string `redis:"s"`
@@ -201,15 +213,15 @@ var argsTests = []struct {
 		}{
 			-1234, 5678, "hello", []byte("world"), true, false,
 		}),
-		redis.Args{"i", int(-1234), "u", uint(5678), "s", "hello", "p", []byte("world"), "Bt", true, "Bf", false},
+		zoom.Args{"i", int(-1234), "u", uint(5678), "s", "hello", "p", []byte("world"), "Bt", true, "Bf", false},
 	},
 	{"struct",
-		redis.Args{}.AddFlat(struct{ I int }{123}),
-		redis.Args{"I", 123},
+		zoom.Args{}.AddFlat(struct{ I int }{123}),
+		zoom.Args{"I", 123},
 	},
 	{"slice",
-		redis.Args{}.Add(1).AddFlat([]string{"a", "b", "c"}).Add(2),
-		redis.Args{1, "a", "b", "c", 2},
+		zoom.Args{}.Add(1).AddFlat([]string{"a", "b", "c"}).Add(2),
+		zoom.Args{1, "a", "b", "c", 2},
 	},
 }
 
@@ -222,7 +234,7 @@ func TestArgs(t *testing.T) {
 }
 
 func ExampleArgs() {
-	c, err := dial()
+	c, err := redis.Dial("unix", "/tmp/redis.sock")
 	if err != nil {
 		panic(err)
 	}
@@ -238,7 +250,7 @@ func ExampleArgs() {
 	p1.Author = "Gary"
 	p1.Body = "Hello"
 
-	if _, err := c.Do("HMSET", redis.Args{}.Add("id1").AddFlat(&p1)...); err != nil {
+	if _, err := c.Do("HMSET", zoom.Args{}.Add("id1").AddFlat(&p1)...); err != nil {
 		panic(err)
 	}
 
@@ -248,7 +260,7 @@ func ExampleArgs() {
 		"body":   "Map",
 	}
 
-	if _, err := c.Do("HMSET", redis.Args{}.Add("id2").AddFlat(m)...); err != nil {
+	if _, err := c.Do("HMSET", zoom.Args{}.Add("id2").AddFlat(m)...); err != nil {
 		panic(err)
 	}
 
@@ -259,7 +271,7 @@ func ExampleArgs() {
 			panic(err)
 		}
 
-		if err := redis.ScanStruct(v, &p2); err != nil {
+		if err := zoom.ScanStruct(v, &p2); err != nil {
 			panic(err)
 		}
 
@@ -269,4 +281,9 @@ func ExampleArgs() {
 	// Output:
 	// {Title:Example Author:Gary Body:Hello}
 	// {Title:Example2 Author:Steve Body:Map}
+
+	// delete the keys we just used
+	c.Send("delete", "id1")
+	c.Send("delete", "id2")
+	c.Flush()
 }
