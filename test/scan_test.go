@@ -20,12 +20,14 @@
 package test
 
 import (
+	"errors"
 	"fmt"
 	"github.com/stephenalexbrowne/zoom"
 	"github.com/stephenalexbrowne/zoom/redis"
 	"math"
 	"reflect"
 	"testing"
+	"time"
 )
 
 var scanConversionTests = []struct {
@@ -101,7 +103,7 @@ func TestScanConversionError(t *testing.T) {
 }
 
 func ExampleScan() {
-	c, err := redis.Dial("unix", "/tmp/redis.sock")
+	c, err := dial()
 	if err != nil {
 		panic(err)
 	}
@@ -138,9 +140,6 @@ func ExampleScan() {
 	// Beat not-rated
 	// Earthbound 1
 	// Red 5
-
-	// delete the keys we created so the test passes next time
-	c.Do("DEL", "albums", "album:1", "album:2", "album:3")
 }
 
 type s0 struct {
@@ -229,7 +228,7 @@ func TestArgs(t *testing.T) {
 }
 
 func ExampleArgs() {
-	c, err := redis.Dial("unix", "/tmp/redis.sock")
+	c, err := dial()
 	if err != nil {
 		panic(err)
 	}
@@ -276,7 +275,31 @@ func ExampleArgs() {
 	// Output:
 	// {Title:Example Author:Gary Body:Hello}
 	// {Title:Example2 Author:Steve Body:Map}
+}
 
-	// delete the keys we just used
-	c.Do("DEL", "id1", "id2")
+type testConn struct {
+	redis.Conn
+}
+
+func dial() (redis.Conn, error) {
+	c, err := redis.DialTimeout("tcp", ":6379", 0, 1*time.Second, 1*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = c.Do("SELECT", "9")
+	if err != nil {
+		return nil, err
+	}
+
+	n, err := redis.Int(c.Do("DBSIZE"))
+	if err != nil {
+		return nil, err
+	}
+
+	if n != 0 {
+		return nil, errors.New("Database #9 is not empty, test can not continue")
+	}
+
+	return testConn{c}, nil
 }
