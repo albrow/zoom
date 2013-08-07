@@ -140,12 +140,7 @@ func ExampleScan() {
 	// Red 5
 
 	// delete the keys we created so the test passes next time
-	c.Send("delete", "albums")
-	c.Send("delete", "album:1")
-	c.Send("delete", "album:2")
-	c.Send("delete", "album:3")
-	c.Flush()
-
+	c.Do("DEL", "albums", "album:1", "album:2", "album:3")
 }
 
 type s0 struct {
@@ -283,7 +278,5 @@ func ExampleArgs() {
 	// {Title:Example2 Author:Steve Body:Map}
 
 	// delete the keys we just used
-	c.Send("delete", "id1")
-	c.Send("delete", "id2")
-	c.Flush()
+	c.Do("DEL", "id1", "id2")
 }
