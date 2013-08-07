@@ -34,7 +34,7 @@ func Save(in ModelInterface) error {
 	defer conn.Close()
 
 	// invoke redis driver to commit to database
-	_, err = conn.Do("hmset", redis.Args{}.Add(key).AddFlat(in)...)
+	_, err = conn.Do("hmset", Args{}.Add(key).AddFlat(in)...)
 	if err != nil {
 		return err
 	}
@@ -149,7 +149,7 @@ func FindById(modelName, id string) (interface{}, error) {
 	model := modelVal.Interface().(ModelInterface)
 
 	// invoke redis driver to fill in the values of the struct
-	err = redis.ScanStruct(bulk, model)
+	err = ScanStruct(bulk, model)
 	if err != nil {
 		return nil, err
 	}
