@@ -5,17 +5,18 @@ import (
 	"testing"
 )
 
-// not a real test. Just setup
-func BenchmarkSetUp(b *testing.B) {
-	setUp()
-	b.SkipNow() // only need to do this once
-}
-
 func BenchmarkSave(b *testing.B) {
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
 
 	// try once to make sure there's no errors
 	pt := NewPerson("Alice", 25)
-	err := zoom.Save(pt)
+	err = zoom.Save(pt)
 	if err != nil {
 		b.Error(err)
 	}
@@ -33,9 +34,16 @@ func BenchmarkSave(b *testing.B) {
 
 func BenchmarkFindById(b *testing.B) {
 
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
 	// save a Person model
 	p := NewPerson("Clarence", 25)
-	err := zoom.Save(p)
+	err = zoom.Save(p)
 	if err != nil {
 		b.Error(err)
 	}
@@ -49,10 +57,17 @@ func BenchmarkFindById(b *testing.B) {
 
 func BenchmarkDeleteById(b *testing.B) {
 
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
 	// First, create and delete one person to
 	// make sure there's no errors
 	p := NewPerson("Dennis", 25)
-	err := zoom.Save(p)
+	err = zoom.Save(p)
 	if err != nil {
 		b.Error(err)
 	}
@@ -80,11 +95,4 @@ func BenchmarkDeleteById(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		zoom.DeleteById("person", p.Id)
 	}
-}
-
-// not an actual test
-// delete any keys leftover from the previous test
-func BenchmarkCleanUp(b *testing.B) {
-	tearDown()
-	b.SkipNow() // only need to do this once
 }
