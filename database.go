@@ -6,7 +6,6 @@ package zoom
 // for (e.g.) checking if a key exists in redis.
 
 import (
-	"fmt"
 	"github.com/dchest/uniuri"
 	"github.com/stephenalexbrowne/zoom/redis"
 	"strconv"
@@ -34,7 +33,6 @@ func GetConn() redis.Conn {
 // initializes a connection pool to be used to conect to database
 // TODO: add some config options
 func Init(passedConfig *Configuration) {
-	fmt.Println("zoom: creating connection pool...")
 
 	config := getConfiguration(passedConfig)
 
