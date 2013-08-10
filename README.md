@@ -23,6 +23,7 @@ Zoom allows you to:
 
 Zoom, like the Go language, is intended to be minimal. It is a light-weight ORM with a clear set of goals.
 It does what it's supposed to and it also does it ***very fast***.
+[Check the benchmarks](https://github.com/stephenalexbrowne/zoom#running-the-benchmarks).
 
 
 Installation
@@ -236,6 +237,24 @@ Example Usage
 The [zoom_example repository](https://github.com/stephenalexbrowne/zoom_example) is an up-to-date example
 of how to use Zoom in a json/rest application. Use it as a reference if anything above is not clear. Formal
 documentation is on my todo list.
+
+
+TODO
+----
+
+In no particular order, here's what I'm working on:
+
+- Implement one-to-one relations
+- Implement one-to-many relations
+- Implement many-to-many relations
+- Use transactions where possible to increase performance and robustness (a la multi/exec)
+- Implement sorting
+- Add CreatedAt and UpdatedAt attributes to zoom.Model
+- Be able to save arrays embedded in structs
+- Implement saving arbitrary embedded structs (even if not registered)
+- Write good, formal documentation
+- Re-implement low-level pub/sub (currently missing entirely)
+- Implement high-level watching for record changes
 
 
 LICENSE
