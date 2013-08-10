@@ -1,6 +1,7 @@
 package zoom
 
 import (
+	"errors"
 	"fmt"
 	"github.com/stephenalexbrowne/zoom/redis"
 	"reflect"
@@ -15,6 +16,26 @@ import (
 // registered. If in.Id is nil, will mutate in
 // by setting the Id.
 func Save(in ModelInterface) error {
+	// make sure we'll dealing with a pointer
+	typ := reflect.TypeOf(in)
+	if typ.Kind() != reflect.Ptr {
+		msg := fmt.Sprintf("zoom: Save() requires a pointer as an argument. The type %T is not a pointer.", in)
+		return errors.New(msg)
+	}
+
+	// get a connection from the pool
+	conn := pool.Get()
+	defer conn.Close()
+
+	// get the value
+	val := reflect.ValueOf(in)
+	if val.IsNil() {
+		return errors.New("zoom: attempted to call save on a nil pointer!")
+	}
+
+	// get the struct spec
+	ss := structSpecForType(typ.Elem())
+
 	// get the registered name
 	name, err := getRegisteredNameFromInterface(in)
 	if err != nil {
@@ -23,15 +44,10 @@ func Save(in ModelInterface) error {
 
 	// prepare the arguments for redis driver
 	// if no id was provided, we should generate one
-	id := in.GetId()
-	if id == "" {
-		id = generateRandomId()
+	if in.GetId() == "" {
+		in.SetId(generateRandomId())
 	}
-	key := name + ":" + id
-
-	// get a connection from the pool
-	conn := pool.Get()
-	defer conn.Close()
+	key := name + ":" + in.GetId()
 
 	// invoke redis driver to commit to database
 	_, err = conn.Do("hmset", Args{}.Add(key).AddFlat(in)...)
@@ -40,13 +56,60 @@ func Save(in ModelInterface) error {
 	}
 
 	// add to the index for this model
-	err = addToIndex(name, id, conn)
+	err = addToIndex(name, in.GetId(), conn)
 	if err != nil {
 		return err
 	}
 
-	// set the id of the model
-	in.SetId(id)
+	// iterate through relations
+	for _, r := range ss.relations {
+
+		relVal := val.Elem().FieldByName(r.fieldName)
+		if !relVal.IsValid() {
+			msg := fmt.Sprintf("zoom: Could not find field %s in %T. Value was %+v\n", r.fieldName, val.Elem().Interface(), val.Elem().Interface())
+			return errors.New(msg)
+		}
+		if relVal.IsNil() {
+			// skip empty relations
+			continue
+		}
+
+		// cast to a ModelInterface
+		relModel, ok := relVal.Interface().(ModelInterface)
+		if !ok {
+			msg := fmt.Sprintf("The type %T does not implement ModelInterface. Does it have a *zoom.Model embedded field?", relVal.Interface())
+			return errors.New(msg)
+		}
+
+		// assign an id if needed
+		if relModel.GetId() == "" {
+			relModel.SetId(generateRandomId())
+		}
+
+		// format the args
+		key := r.redisName + ":" + relModel.GetId()
+		args := Args{}.Add(key)
+		args = append(args, argsForSpec(relVal.Elem(), r.spec)...)
+
+		// invoke redis driver to commit to database
+		_, err := conn.Do("hmset", args...)
+		if err != nil {
+			return err
+		}
+
+		// add to the index for this model
+		err = addToIndex(r.redisName, relModel.GetId(), conn)
+		if err != nil {
+			return err
+		}
+
+		// add a relation key to the parent interface (in)
+		key = name + ":" + in.GetId() + ":" + r.redisName
+		_, err = conn.Do("set", key, relModel.GetId())
+		if err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
@@ -156,6 +219,70 @@ func FindById(modelName, id string) (interface{}, error) {
 
 	// set the id
 	model.SetId(id)
+
+	// get the relations, if any
+	ss := structSpecForType(typ.Elem())
+	for _, r := range ss.relations {
+		key := modelName + ":" + id + ":" + r.redisName
+		exists, err := KeyExists(key, conn)
+		if err != nil {
+			return nil, err
+		}
+		if exists {
+
+			// get the id of the relation from redis
+			relId, err := redis.String(conn.Do("get", key))
+			if err != nil {
+				return nil, err
+			}
+
+			// set the new key
+			key = r.redisName + ":" + relId
+
+			// see if the relation has been saved in redis
+			// if not we should just leave it as nil
+			exists, err := KeyExists(key, conn)
+			if err != nil {
+				return nil, err
+			}
+			if !exists {
+				continue
+			}
+
+			relField := modelVal.Elem().FieldByName(r.fieldName)
+			if !relField.CanSet() {
+				msg := fmt.Sprintf("zoom: couldn't set field: %+v\n", relField)
+				return nil, errors.New(msg)
+			} else {
+				// get the stuff from redis
+				reply, err := conn.Do("hgetall", key)
+				bulk, err := redis.MultiBulk(reply, err)
+				if err != nil {
+					return nil, err
+				}
+
+				// create a new struct and instantiate its Model attribute
+				// this gives us the embedded methods and properties on Model
+				relVal := reflect.New(relField.Type().Elem())
+				relVal.Elem().FieldByName("Model").Set(reflect.ValueOf(new(Model)))
+
+				// type assert to ModelInterface so we can use SetId()
+				relModel := relVal.Interface().(ModelInterface)
+
+				// invoke redis driver to fill in the values of the struct
+				err = ScanStruct(bulk, relModel)
+				if err != nil {
+					return nil, err
+				}
+
+				relModel.SetId(relId)
+
+				relField.Set(relVal)
+			}
+		} else {
+			fmt.Println("key didn't exist")
+		}
+	}
 
 	// return it
 	return model, nil

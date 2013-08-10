@@ -55,18 +55,18 @@ func (s *RelateSuite) TestOneToOne(c *C) {
 		c.Error(err)
 	}
 
-	// result, err := zoom.FindById("person", person.Id)
-	// if err != nil {
-	// 	c.Error(err)
-	// }
+	result, err := zoom.FindById("person", person.Id)
+	if err != nil {
+		c.Error(err)
+	}
 
-	// person2, ok := result.(*Person)
-	// if !ok {
-	// 	c.Error("Couldn't type assert to *Person: ", person2)
-	// }
+	person2, ok := result.(*Person)
+	if !ok {
+		c.Error("Couldn't type assert to *Person: ", person2)
+	}
 
-	// pet2 := person2.Pet
-	// c.Assert(pet2, NotNil)
-	// c.Assert(pet2.Name, Equals, "Billy")
-	// c.Assert(pet2.Kind, Equals, "barracuda")
+	pet2 := person2.Pet
+	c.Assert(pet2, NotNil)
+	c.Assert(pet2.Name, Equals, "Billy")
+	c.Assert(pet2.Kind, Equals, "barracuda")
 }
