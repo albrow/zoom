@@ -28,8 +28,9 @@ func NewPerson(name string, age int) *Person {
 
 // The Pet struct
 type Pet struct {
-	Name string
-	Kind string
+	Name  string
+	Kind  string
+	Owner *Person
 	*zoom.Model
 }
 
