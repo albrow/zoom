@@ -2,6 +2,7 @@ package test_relate
 
 import (
 	"github.com/stephenalexbrowne/zoom"
+	"github.com/stephenalexbrowne/zoom/redis"
 	. "launchpad.net/gocheck"
 	"testing"
 )
@@ -17,9 +18,21 @@ var _ = Suite(&RelateSuite{})
 
 func (s *RelateSuite) SetUpSuite(c *C) {
 
-	zoom.Init(&zoom.Configuration{Database: 7})
+	zoom.Init(&zoom.Configuration{Database: 9})
 
-	err := zoom.Register(&Person{}, "person")
+	conn := zoom.GetConn()
+	defer conn.Close()
+
+	n, err := redis.Int(conn.Do("DBSIZE"))
+	if err != nil {
+		c.Error(err)
+	}
+
+	if n != 0 {
+		c.Errorf("Database #9 is not empty, test can not continue")
+	}
+
+	err = zoom.Register(&Person{}, "person")
 	if err != nil {
 		c.Error(err)
 	}

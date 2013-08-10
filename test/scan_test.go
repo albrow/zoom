@@ -288,7 +288,7 @@ type testConn struct {
 }
 
 func dial() (redis.Conn, error) {
-	c, err := redis.DialTimeout("tcp", ":6379", 0, 1*time.Second, 1*time.Second)
+	c, err := redis.DialTimeout("unix", "/tmp/redis.sock", 0, 1*time.Second, 1*time.Second)
 	if err != nil {
 		return nil, err
 	}

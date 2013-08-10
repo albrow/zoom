@@ -2,6 +2,7 @@ package test
 
 import (
 	"github.com/stephenalexbrowne/zoom"
+	"github.com/stephenalexbrowne/zoom/redis"
 	. "launchpad.net/gocheck"
 	"testing"
 )
@@ -17,9 +18,20 @@ var _ = Suite(&MainSuite{})
 
 func (s *MainSuite) SetUpSuite(c *C) {
 
-	zoom.Init(&zoom.Configuration{Database: 7})
+	zoom.Init(&zoom.Configuration{Database: 9})
+	conn := zoom.GetConn()
+	defer conn.Close()
 
-	err := zoom.Register(&Person{}, "person")
+	n, err := redis.Int(conn.Do("DBSIZE"))
+	if err != nil {
+		c.Error(err)
+	}
+
+	if n != 0 {
+		c.Errorf("Database #9 is not empty, test can not continue")
+	}
+
+	err = zoom.Register(&Person{}, "person")
 	if err != nil {
 		c.Error(err)
 	}
