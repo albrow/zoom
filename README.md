@@ -23,7 +23,7 @@ Zoom allows you to:
 
 Zoom, like the Go language, is intended to be minimal. It is a light-weight ORM with a clear set of goals.
 It does what it's supposed to and it also does it ***very fast***.
-[Check the benchmarks](https://github.com/stephenalexbrowne/zoom#running-the-benchmarks).
+[Check the benchmarks](#running-the-benchmarks).
 
 
 Installation
