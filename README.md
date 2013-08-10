@@ -187,6 +187,9 @@ If you receive PONG in response, then you are good to go. If anything else happe
 properly. Check out the [official redis docs](http://redis.io/topics/config) for help. You might also find
 the [redis quickstart guide](http://redis.io/topics/quickstart) helpful, especially the bottom sections.
 
+All the tests and benchmarks will use database #9. If database #9 is non-empty, they will will throw and
+error and not run. (so as to not corrupt your data). Database #9 is flushed at the end of every test/benchmark.
+
 ### Running the Tests:
 
 To run the tests, make sure you're in the project root directory and run:
