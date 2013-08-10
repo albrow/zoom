@@ -23,7 +23,6 @@ import (
 	"github.com/stephenalexbrowne/zoom/redis"
 	"reflect"
 	"strconv"
-	"strings"
 	"sync"
 )
 
@@ -218,12 +217,18 @@ func Scan(src []interface{}, dest ...interface{}) ([]interface{}, error) {
 type fieldSpec struct {
 	name  string
 	index []int
-	//omitEmpty bool
 }
 
 type structSpec struct {
-	m map[string]*fieldSpec
-	l []*fieldSpec
+	m         map[string]*fieldSpec
+	l         []*fieldSpec
+	relations []*relation
+}
+
+type relation struct {
+	redisName string
+	fieldName string
+	spec      *structSpec
 }
 
 func (ss *structSpec) fieldSpec(name []byte) *fieldSpec {
@@ -242,28 +247,30 @@ func compileStructSpec(t reflect.Type, depth map[string]int, index []int, ss *st
 			if f.Type.Kind() == reflect.Struct {
 				compileStructSpec(f.Type, depth, append(index, i), ss)
 			}
+		case f.Type.Kind() == reflect.Ptr:
+			rType := f.Type
+			if rType.Elem().Kind() == reflect.Struct {
+				// we might have a relation here
+				if alreadyRegisteredType(rType) {
+					rSpec := &structSpec{m: make(map[string]*fieldSpec)}
+					compileStructSpec(rType.Elem(), make(map[string]int), nil, rSpec)
+					rName := typeToName[rType]
+					relation := &relation{redisName: rName, fieldName: f.Name, spec: rSpec}
+					// if ss.relations == nil {
+					// 	ss.relations = make([]*relation)
+					// }
+					ss.relations = append(ss.relations, relation)
+				}
+			}
 		default:
 			fs := &fieldSpec{name: f.Name}
 			redisTag := f.Tag.Get("redis")
-			p := strings.Split(redisTag, ",")
-			if len(p) > 0 {
-				if p[0] == "-" {
+			if redisTag != "" {
+				if redisTag == "-" {
 					continue
+				} else {
+					fs.name = redisTag
 				}
-				if len(p[0]) > 0 {
-					fs.name = p[0]
-				}
-				for _, s := range p[1:] {
-					switch s {
-					//case "omitempty":
-					//  fs.omitempty = true
-					default:
-						panic(errors.New("redigo: unknown field flag " + s + " for type " + t.Name()))
-					}
-				}
-			}
-			if refersToTag := f.Tag.Get("refersTo"); refersToTag != "" {
-				fmt.Println("refersTo tag found!", refersToTag)
 			}
 			d, found := depth[fs.name]
 			if !found {
@@ -431,4 +438,19 @@ func flattenStruct(args Args, v reflect.Value) Args {
 		args = append(args, fs.name, fv.Interface())
 	}
 	return args
+}
+
+func argsForSpec(v reflect.Value, ss *structSpec) Args {
+	args := Args{}
+	for _, fs := range ss.l {
+		fv := v.FieldByIndex(fs.index)
+		args = append(args, fs.name, fv.Interface())
+	}
+	return args
+}
+
+func debugStructSpecCache() {
+	for typ, spec := range structSpecCache {
+		fmt.Printf("Type: %+v\n Spec: %+v\n", typ, spec)
+	}
 }

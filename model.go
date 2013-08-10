@@ -48,6 +48,9 @@ func Register(in interface{}, name string) error {
 	}
 	typeToName[typ] = name
 	nameToType[name] = typ
+	// ss := &structSpec{m: make(map[string]*fieldSpec), relations: make(map[string]*structSpec)}
+	// compileStructSpec(typ.Elem(), make(map[string]int), nil, ss)
+	// structSpecCache[typ.Elem()] = ss
 	return nil
 }
 
