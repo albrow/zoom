@@ -173,6 +173,62 @@ for i, result := range results {
     persons[i] = person
 }
 ```
+
+Testing & Benchmarking
+----------------------
+
+**Important:** Before running any tests or benchmarks, make sure that you have redis running and accepting
+connections on a unix socket at /tmp/unix.sock. To test if your redis server is properly set up, you can run:
+
+    redis-cli -s /tmp/redis.sock -c ping
+    
+If you receive PONG in response, then you are good to go. If anything else happens, redis is not setup
+properly. Check out the [official redis docs](http://redis.io/topics/config) for help. You might also find
+the [redis quickstart guide](http://redis.io/topics/quickstart) helpful, especially the bottom sections.
+
+### Running the Tests:
+
+To run the tests, make sure you're in the project root directory and run:
+
+    go test ./...
+    
+If everything passes, you should see something like:
+
+    ?   	github.com/stephenalexbrowne/zoom	[no test files]
+    ok  	github.com/stephenalexbrowne/zoom/benchmark	0.147s
+    ok  	github.com/stephenalexbrowne/zoom/redis	0.272s
+    ok  	github.com/stephenalexbrowne/zoom/test	0.155s
+    ok  	github.com/stephenalexbrowne/zoom/test_relate	0.277s
+    
+If any of the tests fail, please [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new) and
+describe what happened.
+
+### Running the Benchmarks:
+
+To run the benchmarks, again make sure you're in the project root directory and run:
+
+    go test ./... --bench="."
+    
+You should see some runtimes for various operations. If you see an error or if the build fails, please
+[open an issue](https://github.com/stephenalexbrowne/zoom/issues/new).
+
+Here are the results from my laptop (2.3GHz intel i7, 8G ram):
+
+```
+BenchmarkSave	   20000	     99562 ns/op
+BenchmarkFindById	   50000	     73934 ns/op
+BenchmarkDeleteById	   50000	     70942 ns/op
+```
+
+To put the results another way: 
+
+- Writes take about 100 microseconds (0.01 ms)
+- You can perform about 10k writes/second
+- Reads take about 75 microseconds (0.075 ms)
+- You can perform about 13.5k writes/second
+
+That's already pretty fast! And improving these speeds is one of the top priorities for this project.
+
     
 Example Usage
 -------------
