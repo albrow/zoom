@@ -82,4 +82,28 @@ func (s *RelateSuite) TestOneToOne(c *C) {
 	c.Assert(pet2, NotNil)
 	c.Assert(pet2.Name, Equals, "Billy")
 	c.Assert(pet2.Kind, Equals, "barracuda")
+
+	// we'll test the inverse relationship separately for now.
+	// Later, zoom might recognize this and set it automatically.
+	pet2.Owner = person
+	err = zoom.Save(pet2)
+	if err != nil {
+		c.Error(err)
+	}
+
+	result, err = zoom.FindById("pet", pet2.Id)
+	if err != nil {
+		c.Error(err)
+	}
+
+	pet3, ok := result.(*Pet)
+	if !ok {
+		c.Errorf("Couldn't convert result to *Pet")
+	}
+
+	person3 := pet3.Owner
+	c.Assert(person3, NotNil)
+	c.Assert(person3.Name, Equals, "Alex")
+	c.Assert(person3.Age, Equals, 20)
+
 }
