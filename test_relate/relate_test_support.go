@@ -43,3 +43,33 @@ func NewPet(name, kind string) *Pet {
 	}
 	return p
 }
+
+// The Parent struct
+type Parent struct {
+	Name     string
+	Children []*Child
+	*zoom.Model
+}
+
+// A convenient constructor for the Parent struct
+func NewParent(name string) *Parent {
+	return &Parent{
+		Name:  name,
+		Model: new(zoom.Model),
+	}
+}
+
+// The Child struct
+type Child struct {
+	Name   string
+	Parent *Parent
+	*zoom.Model
+}
+
+// A convenient constructor for the Child struct
+func NewChild(name string) *Child {
+	return &Child{
+		Name:  name,
+		Model: new(zoom.Model),
+	}
+}

@@ -225,10 +225,18 @@ type structSpec struct {
 	relations []*relation
 }
 
+type relationType int
+
+const (
+	ONE_TO_ONE = iota
+	ONE_TO_MANY
+)
+
 type relation struct {
 	redisName string
 	fieldName string
 	spec      *structSpec
+	typ       relationType
 }
 
 func (ss *structSpec) fieldSpec(name []byte) *fieldSpec {
@@ -238,46 +246,81 @@ func (ss *structSpec) fieldSpec(name []byte) *fieldSpec {
 func compileStructSpec(t reflect.Type, depth map[string]int, index []int, ss *structSpec) {
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
-		switch {
-		case f.PkgPath != "":
+
+		// check the redis tag
+		redisTag := f.Tag.Get("redis")
+		if redisTag != "" {
+			if redisTag == "-" {
+				// means we should skip this field entirely
+				continue
+			}
+		}
+
+		if f.PkgPath != "" {
 			// Ignore unexported fields.
-		case f.Anonymous:
+			return
+		} else if f.Anonymous {
 			// TODO: Handle pointers. Requires change to decoder and
 			// protection against infinite recursion.
 			if f.Type.Kind() == reflect.Struct {
 				compileStructSpec(f.Type, depth, append(index, i), ss)
 			}
-		case f.Type.Kind() == reflect.Ptr:
+		} else if f.Type.Kind() == reflect.Ptr {
 			rType := f.Type
 			if rType.Elem().Kind() == reflect.Struct {
-				// we might have a relation here
 				if alreadyRegisteredType(rType) {
-					rSpec := &structSpec{m: make(map[string]*fieldSpec)}
-					compileStructSpec(rType.Elem(), make(map[string]int), nil, rSpec)
-					rName := typeToName[rType]
-					relation := &relation{redisName: rName, fieldName: f.Name, spec: rSpec}
-					// if ss.relations == nil {
-					// 	ss.relations = make([]*relation)
-					// }
-					ss.relations = append(ss.relations, relation)
-				}
-			}
-		default:
-			fs := &fieldSpec{name: f.Name}
-			redisTag := f.Tag.Get("redis")
-			if redisTag != "" {
-				if redisTag == "-" {
-					continue
+					// this would indicate a one-to-one relation
+					// that is, a pointer to struct for which
+					// the struct type has been registered
+					ss.addRelation(ONE_TO_ONE, rType, f)
 				} else {
-					fs.name = redisTag
+					// this would indicate a pointer to an arbitrary struct
+					// there is no relation because the struct type hasn't been
+					// registered. The result should be storing the struct literal.
+					// TODO: handle this!
 				}
+			} else {
+				// This would indicate a pointer to some arbitrary type
+				// we should probably just store the type inside the main
+				// model struct.
+				// TODO: handle this!
+			}
+		} else if f.Type.Kind() == reflect.Slice && f.Type.Elem().Kind() == reflect.Ptr ||
+			f.Type.Kind() == reflect.Array && f.Type.Elem().Kind() == reflect.Ptr {
+
+			rType := f.Type.Elem()
+			if rType.Elem().Kind() == reflect.Struct {
+				if alreadyRegisteredType(rType) {
+					// this would indicate a one-to-many relation
+					// that is, an array of pointers to struct for which
+					// the struct type has been registered
+					ss.addRelation(ONE_TO_MANY, rType, f)
+				} else {
+					// this would indicate an array of pointers to arbitrary structs.
+					// there is no relation because the struct type hasn't been registered.
+					// Is this allowed?
+					// TODO: handle this!
+				}
+			} else {
+				// This would indicate an array of arbitrary type.
+				// We should store as a list literal in redis, with
+				// a key appended to the main struct key,
+				// e.g. rpush person:a@8Fj$di_wefy0:interests 'people watching' 'origami' 'roller derby'
+				// TODO: handle this!
+			}
+		} else {
+			// the default case is for a single, non-struct, non-pointer value
+			// this will be added to structSpec as a fieldSpec
+			// later, we will just add it to the hmset command to store the struct in redis
+			fs := &fieldSpec{name: f.Name}
+			if redisTag != "" {
+				fs.name = redisTag
 			}
 			d, found := depth[fs.name]
 			if !found {
 				d = 1 << 30
 			}
-			switch {
-			case len(index) == d:
+			if len(index) == d {
 				// At same depth, remove from result.
 				delete(ss.m, fs.name)
 				j := 0
@@ -288,7 +331,7 @@ func compileStructSpec(t reflect.Type, depth map[string]int, index []int, ss *st
 					}
 				}
 				ss.l = ss.l[:j]
-			case len(index) < d:
+			} else if len(index) < d {
 				fs.index = make([]int, len(index)+1)
 				copy(fs.index, index)
 				fs.index[len(index)] = i
@@ -296,8 +339,23 @@ func compileStructSpec(t reflect.Type, depth map[string]int, index []int, ss *st
 				ss.m[fs.name] = fs
 				ss.l = append(ss.l, fs)
 			}
+			structSpecCache[t] = ss
 		}
 	}
+}
+
+func (ss *structSpec) addRelation(typ relationType, rType reflect.Type, field reflect.StructField) {
+	rSpec, found := structSpecCache[rType.Elem()]
+	if !found {
+		// if it's not in the cache yet, we need to compile it
+		rSpec = &structSpec{m: make(map[string]*fieldSpec)}
+		compileStructSpec(rType.Elem(), make(map[string]int), nil, rSpec)
+	}
+	// create a relation and add it to the struct spec
+	rName := typeToName[rType]
+	relation := &relation{redisName: rName, fieldName: field.Name, spec: rSpec, typ: typ}
+	ss.relations = append(ss.relations, relation)
+	structSpecCache[rType.Elem()] = rSpec
 }
 
 var (
@@ -324,7 +382,6 @@ func structSpecForType(t reflect.Type) *structSpec {
 
 	ss = &structSpec{m: make(map[string]*fieldSpec)}
 	compileStructSpec(t, make(map[string]int), nil, ss)
-	structSpecCache[t] = ss
 	return ss
 }
 
