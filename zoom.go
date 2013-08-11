@@ -74,40 +74,81 @@ func Save(in ModelInterface) error {
 			continue
 		}
 
-		// cast to a ModelInterface
-		relModel, ok := relVal.Interface().(ModelInterface)
-		if !ok {
-			msg := fmt.Sprintf("The type %T does not implement ModelInterface. Does it have a *zoom.Model embedded field?", relVal.Interface())
-			return errors.New(msg)
-		}
+		if r.typ == ONE_TO_ONE {
+			// cast to a ModelInterface
+			relModel, ok := relVal.Interface().(ModelInterface)
+			if !ok {
+				msg := fmt.Sprintf("The type %T does not implement ModelInterface. Does it have a *zoom.Model embedded field?", relVal.Interface())
+				return errors.New(msg)
+			}
 
-		// assign an id if needed
-		if relModel.GetId() == "" {
-			relModel.SetId(generateRandomId())
-		}
+			// assign an id if needed
+			if relModel.GetId() == "" {
+				relModel.SetId(generateRandomId())
+			}
 
-		// format the args
-		key := r.redisName + ":" + relModel.GetId()
-		args := Args{}.Add(key)
-		args = append(args, argsForSpec(relVal.Elem(), r.spec)...)
+			// format the args
+			key := r.redisName + ":" + relModel.GetId()
+			args := Args{}.Add(key)
+			args = append(args, argsForSpec(relVal.Elem(), r.spec)...)
 
-		// invoke redis driver to commit to database
-		_, err := conn.Do("hmset", args...)
-		if err != nil {
-			return err
-		}
+			// invoke redis driver to commit to database
+			_, err := conn.Do("hmset", args...)
+			if err != nil {
+				return err
+			}
 
-		// add to the index for this model
-		err = addToIndex(r.redisName, relModel.GetId(), conn)
-		if err != nil {
-			return err
-		}
+			// add to the index for this model
+			err = addToIndex(r.redisName, relModel.GetId(), conn)
+			if err != nil {
+				return err
+			}
 
-		// add a relation key to the parent interface (in)
-		key = name + ":" + in.GetId() + ":" + r.redisName
-		_, err = conn.Do("set", key, relModel.GetId())
-		if err != nil {
-			return err
+			// add a relation key to the parent interface (in)
+			key = name + ":" + in.GetId() + ":" + r.fieldName
+			_, err = conn.Do("set", key, relModel.GetId())
+			if err != nil {
+				return err
+			}
+		} else if r.typ == ONE_TO_MANY {
+			// iterate through the array and save each one
+			for i := 0; i < relVal.Len(); i++ {
+				relElem := relVal.Index(i)
+				relModel, ok := relElem.Interface().(ModelInterface)
+				if !ok {
+					msg := fmt.Sprintf("The type %T does not implement ModelInterface. Does it have a *zoom.Model embedded field?", relElem.Interface())
+					return errors.New(msg)
+				}
+
+				// assign an id if needed
+				if relModel.GetId() == "" {
+					relModel.SetId(generateRandomId())
+				}
+
+				// format the args
+				key := r.redisName + ":" + relModel.GetId()
+				args := Args{}.Add(key)
+				args = append(args, argsForSpec(relElem.Elem(), r.spec)...)
+
+				// invoke redis driver to commit to database
+				_, err := conn.Do("hmset", args...)
+				if err != nil {
+					return err
+				}
+
+				// add to the index for this model
+				err = addToIndex(r.redisName, relModel.GetId(), conn)
+				if err != nil {
+					return err
+				}
+
+				// add a relation key to the parent interface (in)
+				key = name + ":" + in.GetId() + ":" + r.fieldName
+				_, err = conn.Do("sadd", key, relModel.GetId())
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -223,7 +264,7 @@ func FindById(modelName, id string) (interface{}, error) {
 	// get the relations, if any
 	ss := structSpecForType(typ.Elem())
 	for _, r := range ss.relations {
-		key := modelName + ":" + id + ":" + r.redisName
+		key := modelName + ":" + id + ":" + r.fieldName
 		exists, err := KeyExists(key, conn)
 		if err != nil {
 			return nil, err

@@ -18,6 +18,7 @@ var _ = Suite(&RelateSuite{})
 
 func (s *RelateSuite) SetUpSuite(c *C) {
 
+	// select database 9 and make sure it's empty
 	zoom.Init(&zoom.Configuration{Database: 9})
 
 	conn := zoom.GetConn()
@@ -32,6 +33,7 @@ func (s *RelateSuite) SetUpSuite(c *C) {
 		c.Errorf("Database #9 is not empty, test can not continue")
 	}
 
+	// register the structs we plan to use
 	err = zoom.Register(&Person{}, "person")
 	if err != nil {
 		c.Error(err)
@@ -41,12 +43,24 @@ func (s *RelateSuite) SetUpSuite(c *C) {
 	if err != nil {
 		c.Error(err)
 	}
+
+	err = zoom.Register(&Parent{}, "parent")
+	if err != nil {
+		c.Error(err)
+	}
+
+	err = zoom.Register(&Child{}, "child")
+	if err != nil {
+		c.Error(err)
+	}
 }
 
 func (s *RelateSuite) TearDownSuite(c *C) {
 
 	zoom.UnregisterName("person")
 	zoom.UnregisterName("pet")
+	zoom.UnregisterName("parent")
+	zoom.UnregisterName("child")
 
 	conn := zoom.GetConn()
 	_, err := conn.Do("flushdb")
@@ -59,6 +73,9 @@ func (s *RelateSuite) TearDownSuite(c *C) {
 }
 
 func (s *RelateSuite) TestOneToOne(c *C) {
+
+	//c.Skip("Focuse on oneToMany")
+
 	person := NewPerson("Alex", 20)
 	pet := NewPet("Billy", "barracuda")
 
@@ -106,4 +123,22 @@ func (s *RelateSuite) TestOneToOne(c *C) {
 	c.Assert(person3.Name, Equals, "Alex")
 	c.Assert(person3.Age, Equals, 20)
 
+}
+
+func (s *RelateSuite) TestOneToMany(c *C) {
+	// Create a Parent and two children
+	parent := NewParent("Christine")
+	child1 := NewChild("Derick")
+	child2 := NewChild("Elise")
+
+	// assign the children to the parent
+	parent.Children = append(parent.Children, child1, child2)
+
+	// save the parent
+	err := zoom.Save(parent)
+	if err != nil {
+		c.Error(err)
+	}
+
+	// TODO: retrieve the parent from db and make sure the children match
 }
