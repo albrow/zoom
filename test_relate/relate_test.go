@@ -74,8 +74,6 @@ func (s *RelateSuite) TearDownSuite(c *C) {
 
 func (s *RelateSuite) TestOneToOne(c *C) {
 
-	//c.Skip("Focuse on oneToMany")
-
 	person := NewPerson("Alex", 20)
 	pet := NewPet("Billy", "barracuda")
 
@@ -140,5 +138,33 @@ func (s *RelateSuite) TestOneToMany(c *C) {
 		c.Error(err)
 	}
 
-	// TODO: retrieve the parent from db and make sure the children match
+	// retrieve the parent from db
+	reply, err := zoom.FindById("parent", parent.Id)
+	if err != nil {
+		c.Error(err)
+	}
+
+	// type assert it to *Parent
+	parent2, ok := reply.(*Parent)
+	if !ok {
+		c.Errorf("Couldn't convert result to *Parent: ", reply)
+	}
+
+	// make sure that the children match the original
+	// length should be 2
+	c.Assert(len(parent2.Children), Equals, 2)
+	// the names of the two children should be "Derick" and "Elise"
+	expectedNames := []string{"Derick", "Elise"}
+	for _, child := range parent2.Children {
+		index := indexOfStringSlice(child.Name, expectedNames)
+		if index == -1 {
+			c.Error("Unexpected child.name: ", child.Name)
+		}
+		// remove from expected. makes sure we have one of each
+		expectedNames = removeFromStringSlice(expectedNames, index)
+	}
+	// now expectedNames should be empty. If it's not, there's a problem
+	if len(expectedNames) != 0 {
+		c.Errorf("At least one expected child.name was not found: %v\n", expectedNames)
+	}
 }
