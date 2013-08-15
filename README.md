@@ -129,7 +129,7 @@ if err := zoom.Register(&Person{}, "person"); err != nil {
 }
 ```
 
-### Saving to redis
+### Saving to Redis
 
 To persistently save a Person model to the databse, you would simply call zoom.Save()
 
@@ -140,19 +140,21 @@ if err := zoom.Save(p); err != nil {
 }
 ```
 
-### Retreiving from redis
+### Retreiving from Redis
 
 Zoom will automatically assign a random, unique id to each saved model. To retrieve a model by id,
 you must use the same string name you used in zoom.Register. The return type
 is interface{}, so you may need to cast to *Person using a type assertion.
 
 ``` go
-if result, err := zoom.FindById("person", "your-person-id"); err != nil {
+result, err := zoom.FindById("person", "your-person-id")
+if err != nil {
     // handle error
 }
 
 // type assert
-if person, ok := result.(*Person); !ok {
+person, ok := result.(*Person)
+if !ok {
     // handle !ok
 }
 ```
@@ -161,7 +163,8 @@ To retrieve a list of all persons use zoom.FindAll(). Like FindById() the return
 If you want an array or slice of *Person, you need to type assert each element individually.
 
 ``` go
-if results, err := zoom.FindAll("person"); err != nil {
+results, err := zoom.FindAll("person")
+if err != nil {
     // handle error
 }
 
@@ -173,6 +176,188 @@ for i, result := range results {
     }
     persons[i] = person
 }
+```
+
+### One-to-One Relations
+
+Relations in Zoom are dead simple. There are no special return types or methods for using relations.
+What you put in is what you get out. For these examples we're going to introduce two new struct types:
+
+``` go
+// The PetOwner struct
+type PetOwner struct {
+	Name  string
+	Pet   *Pet    // *Pet should also be a registered type
+	*zoom.Model
+}
+
+// A convenient constructor for the PetOwner struct
+func NewPetOwner(name string) *PetOwner {
+	return &PetOwner{
+		Name:  name,
+		Model: new(zoom.Model),
+	}
+}
+
+// The Pet struct
+type Pet struct {
+	Name   string
+	*zoom.Model
+}
+
+// A convenient constructor for the Pet struct
+func NewPet(name string) *Pet {
+	return &Pet{
+		Name:  name,
+		Model: new(zoom.Model),
+	}
+}
+```
+
+Assuming you've registered both the *PetOwner and *Pet types, Zoom will automatically set up a relation
+when you save a PetOwner with a non-nil Pet.
+
+``` go
+// create a new PetOwner and a Pet
+owner := NewPetOwner("Bob")
+pet := NewPet("Spot")
+
+// set the PetOwner's pet
+owner.Pet = pet
+
+// save it
+if err := zoom.Save(owner); err != nil {
+	// handle error
+}
+```
+
+Behind the scenes, Zoom creates a seperate database entry for Pet and assigns it an Id. Now if you retrieve
+the PetOwner by it's id, the Pet attribute will persist as well.
+
+``` go
+reply, err := zoom.FindById("petOwner", "the_id_of_above_pet_owner")
+if err != nil {
+	// handle error
+}
+
+// don't forget to type assert
+ownerCopy, ok := reply.(*PetOwner)
+if !ok {
+	// handle this
+}
+
+// the Pet attribute is still set
+fmt.Println(ownerCopy.Pet.Name)
+
+// output:
+//	Spot
+```
+
+The Pet is stored in its own database entry, so you could retreive the pet named "Spot" directly by 
+it's id (if you know it). You can also examine the list of pets to see that it is there.
+
+``` go
+// this would work
+reply, err := zoom.FindById("pet", "the_id_of_above_pet")
+
+// this would work too
+results, err := zoom.FindAll("pet")
+// results would contain the one Pet named Spot
+```
+
+
+### One-to-Many Relations
+
+One-to-many relations work similarly. This time we're going to use two new struct types in the examples.
+
+``` go
+// The Parent struct
+type Parent struct {
+	Name     string
+	Children []*Child  // *Child should also be a registered type
+	*zoom.Model
+}
+
+// A convenient constructor for the Parent struct
+func NewParent(name string) *Parent {
+	return &Parent{
+		Name:  name,
+		Model: new(zoom.Model),
+	}
+}
+
+// The Child struct
+type Child struct {
+	Name   string
+	*zoom.Model
+}
+
+// A convenient constructor for the Child struct
+func NewChild(name string) *Child {
+	return &Child{
+		Name:  name,
+		Model: new(zoom.Model),
+	}
+}
+```
+
+Assuming you register both the *Parent and *Child types, Zoom will automatically set up a relation
+for you when you save a Parent with non-nil Children. Here's an example:
+
+``` go
+// create a parent and two children
+parent := NewParent("Christine")
+child1 := NewChild("Derick")
+child2 := NewChild("Elise")
+
+// assign the children to the parent
+parent.Children = append(parent.Children, child1, child2)
+
+// save the parent
+if err := zoom.Save(parent); err != nil {
+	// handle error
+}
+```
+
+When the above code is run, Zoom will create a database entry for each child, and give them a unique id.
+
+Now when you retrieve a parent by id, it's Children attribute will automatically be populated. So getting
+the children again is straight forward.
+
+``` go
+reply, err := zoom.FindById("parent", "the_id_of_above_parent")
+if err != nil {
+	// handle error
+}
+
+// don't forget to type assert
+parentCopy, ok := reply.(*Parent)
+if !ok {
+	// handle this
+}
+
+// now you can access the children normally
+for _, child := range parentCopy.Children {
+	fmt.Println(child.Name)
+}
+
+// output:
+//	Derick
+//	Elise
+
+```
+
+Since each child is its own database entry, you could also access the children directly or get a list
+of all children.
+
+``` go
+// this would work
+reply, err := zoom.FindById("child", "the_id_of_an_above_child")
+
+// this would work too
+results, err := zoom.FindAll("child")
+// results would contain both children
+
 ```
 
 Testing & Benchmarking
