@@ -34,7 +34,7 @@ func (s *RelateSuite) SetUpSuite(c *C) {
 	}
 
 	// register the structs we plan to use
-	err = zoom.Register(&Person{}, "person")
+	err = zoom.Register(&PetOwner{}, "petOwner")
 	if err != nil {
 		c.Error(err)
 	}
@@ -53,14 +53,20 @@ func (s *RelateSuite) SetUpSuite(c *C) {
 	if err != nil {
 		c.Error(err)
 	}
+
+	err = zoom.Register(&Person{}, "person")
+	if err != nil {
+		c.Error(err)
+	}
 }
 
 func (s *RelateSuite) TearDownSuite(c *C) {
 
-	zoom.UnregisterName("person")
+	zoom.UnregisterName("petOwner")
 	zoom.UnregisterName("pet")
 	zoom.UnregisterName("parent")
 	zoom.UnregisterName("child")
+	zoom.UnregisterName("person")
 
 	conn := zoom.GetConn()
 	_, err := conn.Do("flushdb")
@@ -74,52 +80,52 @@ func (s *RelateSuite) TearDownSuite(c *C) {
 
 func (s *RelateSuite) TestOneToOne(c *C) {
 
-	person := NewPerson("Alex", 20)
+	owner := NewPetOwner("Alex", 20)
 	pet := NewPet("Billy", "barracuda")
 
-	person.Pet = pet
-	err := zoom.Save(person)
+	owner.Pet = pet
+	err := zoom.Save(owner)
 	if err != nil {
 		c.Error(err)
 	}
 
-	result, err := zoom.FindById("person", person.Id)
+	result, err := zoom.FindById("petOwner", owner.Id)
 	if err != nil {
 		c.Error(err)
 	}
 
-	person2, ok := result.(*Person)
+	ownerCopy, ok := result.(*PetOwner)
 	if !ok {
-		c.Error("Couldn't type assert to *Person: ", person2)
+		c.Error("Couldn't type assert to *PetOwner: ", ownerCopy)
 	}
 
-	pet2 := person2.Pet
-	c.Assert(pet2, NotNil)
-	c.Assert(pet2.Name, Equals, "Billy")
-	c.Assert(pet2.Kind, Equals, "barracuda")
+	petCopy := ownerCopy.Pet
+	c.Assert(petCopy, NotNil)
+	c.Assert(petCopy.Name, Equals, "Billy")
+	c.Assert(petCopy.Kind, Equals, "barracuda")
 
 	// we'll test the inverse relationship separately for now.
 	// Later, zoom might recognize this and set it automatically.
-	pet2.Owner = person
-	err = zoom.Save(pet2)
+	petCopy.Owner = owner
+	err = zoom.Save(petCopy)
 	if err != nil {
 		c.Error(err)
 	}
 
-	result, err = zoom.FindById("pet", pet2.Id)
+	result, err = zoom.FindById("pet", petCopy.Id)
 	if err != nil {
 		c.Error(err)
 	}
 
-	pet3, ok := result.(*Pet)
+	petCopy2, ok := result.(*Pet)
 	if !ok {
 		c.Errorf("Couldn't convert result to *Pet")
 	}
 
-	person3 := pet3.Owner
-	c.Assert(person3, NotNil)
-	c.Assert(person3.Name, Equals, "Alex")
-	c.Assert(person3.Age, Equals, 20)
+	personCopy2 := petCopy2.Owner
+	c.Assert(personCopy2, NotNil)
+	c.Assert(personCopy2.Name, Equals, "Alex")
+	c.Assert(personCopy2.Age, Equals, 20)
 
 }
 
@@ -166,5 +172,105 @@ func (s *RelateSuite) TestOneToMany(c *C) {
 	// now expectedNames should be empty. If it's not, there's a problem
 	if len(expectedNames) != 0 {
 		c.Errorf("At least one expected child.name was not found: %v\n", expectedNames)
+	}
+}
+
+func (s *RelateSuite) TestManyToMany(c *C) {
+
+	// create 5 people
+	fred := NewPerson("Fred")
+	george := NewPerson("George")
+	hellen := NewPerson("Hellen")
+	ilene := NewPerson("Ilene")
+	jim := NewPerson("Jim")
+
+	// Fred is friends with George, Hellen, and Jim
+	fred.Friends = append(fred.Friends, george, hellen, jim)
+
+	// George is friends with Fred, Hellen, and Ilene
+	george.Friends = append(george.Friends, fred, hellen, ilene)
+
+	// save both Fred and George
+	if err := zoom.Save(fred); err != nil {
+		c.Error(err)
+	}
+	if err := zoom.Save(george); err != nil {
+		c.Error(err)
+	}
+
+	// make sure that all 5 people were saved.
+	// Hellen, Ilene, and Jim were not saved explicitly, but should
+	// be saved because they are referenced by Fred and George.
+	// This also checks to make sure Hellen wasn't saved twice.
+	results, err := zoom.FindAll("person")
+	if err != nil {
+		c.Error(err)
+	}
+	c.Assert(len(results), Equals, 5)
+
+	expectedNames := []string{"Fred", "George", "Hellen", "Ilene", "Jim"}
+	gotNames := []string{}
+	for _, result := range results {
+		friend, ok := result.(*Person)
+		if !ok {
+			c.Errorf("Couldn't convert %+v to *Person\n", result)
+		}
+		gotNames = append(gotNames, friend.Name)
+	}
+	equal, msg := compareAsStringSet(expectedNames, gotNames)
+	if !equal {
+		c.Errorf(msg)
+	}
+
+	// retrieve fred from the database
+	result, err := zoom.FindById("person", fred.Id)
+	if err != nil {
+		c.Error(err)
+	}
+
+	// type assert to *Person
+	fredCopy, ok := result.(*Person)
+	if !ok {
+		c.Errorf("Could not convert result to *Person: %+v\n", result)
+	}
+
+	// make sure he remembers his name
+	c.Assert(fredCopy.Name, Equals, "Fred")
+
+	// make sure he remembers his friends
+	expectedNames = []string{"George", "Hellen", "Jim"}
+	gotNames = []string{}
+	for _, friend := range fred.Friends {
+		gotNames = append(gotNames, friend.Name)
+	}
+	equal, msg = compareAsStringSet(expectedNames, gotNames)
+	if !equal {
+		c.Errorf(msg)
+	}
+
+	// retrieve george from the database
+	result, err = zoom.FindById("person", george.Id)
+	if err != nil {
+		c.Error(err)
+	}
+
+	// type assert to *Person
+	georgeCopy, ok := result.(*Person)
+	if !ok {
+		c.Errorf("Could not convert result to *Person: %+v\n", result)
+	}
+
+	// make sure he remembers his name
+	c.Assert(georgeCopy.Name, Equals, "George")
+
+	// make sure he remembers his friends
+	expectedNames = []string{"Fred", "Hellen", "Ilene"}
+	gotNames = []string{}
+	for _, friend := range george.Friends {
+		gotNames = append(gotNames, friend.Name)
+	}
+	equal, msg = compareAsStringSet(expectedNames, gotNames)
+	if !equal {
+		c.Errorf(msg)
 	}
 }

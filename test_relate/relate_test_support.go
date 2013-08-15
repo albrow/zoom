@@ -1,6 +1,7 @@
 package test_relate
 
 import (
+	"fmt"
 	"github.com/stephenalexbrowne/zoom"
 )
 
@@ -8,17 +9,17 @@ import (
 // e.g. type declarations, constructors,
 // and other methods.
 
-// The Person struct
-type Person struct {
+// The PetOwner struct
+type PetOwner struct {
 	Name string
 	Age  int
 	Pet  *Pet
 	*zoom.Model
 }
 
-// A convenient constructor for the Person struct
-func NewPerson(name string, age int) *Person {
-	p := &Person{
+// A convenient constructor for the PetOwner struct
+func NewPetOwner(name string, age int) *PetOwner {
+	p := &PetOwner{
 		Name:  name,
 		Age:   age,
 		Model: new(zoom.Model),
@@ -30,7 +31,7 @@ func NewPerson(name string, age int) *Person {
 type Pet struct {
 	Name  string
 	Kind  string
-	Owner *Person
+	Owner *PetOwner
 	*zoom.Model
 }
 
@@ -74,6 +75,22 @@ func NewChild(name string) *Child {
 	}
 }
 
+// The Person struct
+type Person struct {
+	Name    string
+	Friends []*Person
+	*zoom.Model
+}
+
+// A convenient constructor for the Person struct
+func NewPerson(name string) *Person {
+	p := &Person{
+		Name:  name,
+		Model: new(zoom.Model),
+	}
+	return p
+}
+
 func indexOfStringSlice(a string, list []string) int {
 	for i, b := range list {
 		if b == a {
@@ -85,4 +102,22 @@ func indexOfStringSlice(a string, list []string) int {
 
 func removeFromStringSlice(list []string, i int) []string {
 	return append(list[:i], list[i+1:]...)
+}
+
+func compareAsStringSet(expecteds, gots []string) (bool, string) {
+	for _, got := range gots {
+		index := indexOfStringSlice(got, expecteds)
+		if index == -1 {
+			msg := fmt.Sprintf("Found unexpected element: %v", got)
+			return false, msg
+		}
+		// remove from expecteds. makes sure we have one of each
+		expecteds = removeFromStringSlice(expecteds, index)
+	}
+	// now expecteds should be empty. If it's not, there's a problem
+	if len(expecteds) != 0 {
+		msg := fmt.Sprintf("The following expected elements were not found: %v\n", expecteds)
+		return false, msg
+	}
+	return true, "ok"
 }
