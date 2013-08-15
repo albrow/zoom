@@ -73,3 +73,16 @@ func NewChild(name string) *Child {
 		Model: new(zoom.Model),
 	}
 }
+
+func indexOfStringSlice(a string, list []string) int {
+	for i, b := range list {
+		if b == a {
+			return i
+		}
+	}
+	return -1
+}
+
+func removeFromStringSlice(list []string, i int) []string {
+	return append(list[:i], list[i+1:]...)
+}
