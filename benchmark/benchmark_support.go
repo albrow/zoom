@@ -24,6 +24,28 @@ func NewPerson(name string, age int) *Person {
 	return p
 }
 
+// The Invoice struct
+type Invoice struct {
+	Created  int64
+	Updated  int64
+	Memo     string
+	PersonId int64
+	IsPaid   bool
+	*zoom.Model
+}
+
+// A convenient constructor for the Invoice struct
+func NewInvoice(created, updated int64, memo string, personId int64, isPaid bool) *Invoice {
+	return &Invoice{
+		Created:  created,
+		Updated:  updated,
+		Memo:     memo,
+		PersonId: personId,
+		IsPaid:   isPaid,
+		Model:    new(zoom.Model),
+	}
+}
+
 // Database helper functions
 // setUp() and tearDown()
 func setUp() error {
@@ -42,6 +64,7 @@ func setUp() error {
 	}
 
 	zoom.Register(&Person{}, "person")
+	zoom.Register(&Invoice{}, "invoice")
 	return nil
 }
 
