@@ -14,7 +14,7 @@ import (
 )
 
 type Configuration struct {
-	Address  string // Address to connect to. Default: "localhost:6380"
+	Address  string // Address to connect to. Default: "localhost:6379"
 	Network  string // Network to use. Default: "tcp"
 	Database int    // Database id to use (using SELECT). Default: 0
 }
