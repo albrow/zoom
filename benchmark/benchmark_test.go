@@ -1,6 +1,7 @@
 package benchmark
 
 import (
+	"fmt"
 	"github.com/stephenalexbrowne/zoom"
 	"testing"
 )
@@ -55,7 +56,58 @@ func BenchmarkFindById(b *testing.B) {
 	}
 }
 
+// The following benchmarks a sequential Create, Find, Update, and Delete
+func BenchmarkCrud(b *testing.B) {
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	// create and save one invoice to make sure there's no errors
+	inv := NewInvoice(100, 200, "my memo", 0, true)
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		err := zoom.Save(inv)
+		if err != nil {
+			panic(err)
+		}
+
+		obj, err := zoom.FindById("invoice", inv.Id)
+		if err != nil {
+			panic(err)
+		}
+
+		inv2, ok := obj.(*Invoice)
+		if !ok {
+			panic(fmt.Sprintf("expected *Invoice, got: %v", obj))
+		}
+
+		inv2.Created = 1000
+		inv2.Updated = 2000
+		inv2.Memo = "my memo 2"
+		inv2.PersonId = 3000
+		err = zoom.Save(inv2)
+		if err != nil {
+			panic(err)
+		}
+
+		err = zoom.Delete(inv2)
+		if err != nil {
+			panic(err)
+		}
+
+	}
+
+}
+
 func BenchmarkDeleteById(b *testing.B) {
+
+	b.Skip("This one takes much longer. Skipping for now.")
 
 	err := setUp()
 	if err != nil {
