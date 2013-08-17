@@ -1,7 +1,7 @@
 Zoom
 ====
 
-Version: 0.0.1
+Version: X.X.X
 
 A blazing-fast, lightweight ORM-ish library for go and redis.
 
