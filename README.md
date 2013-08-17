@@ -27,10 +27,7 @@ Installation
 ------------
 
 First, you must install redis on your system. [See installation instructions](http://redis.io/download).
-
-By default, Zoom uses a unix socket connection to connect to redis. To do this, you need to enable
-socket connections in your redis config file. If you prefer to use tcp/http instead, see the Setup
-instructions below.  
+By default, Zoom will use a tcp/http connection on localhost:6379 (same as the redis default).
 
 To install Zoom itself:
 
@@ -71,21 +68,29 @@ defaults:
 
 ``` go
 type Configuration struct {
-    Address  string // Address to connect to.   Default: "/tmp/redis.sock"
-	Network  string // Network to use.          Default: "unix"
-	Database int    // Database id to use.      Default: 0
+	Address  string // Address to connect to. Default: "localhost:6379"
+	Network  string // Network to use. Default: "tcp"
+	Database int    // Database id to use (using SELECT). Default: 0
 }
 ```
 
-So, if you wanted to connect with tcp/http on the default port (6380), you would do this:
+If possible, it is ***strongly recommended*** that you use a unix socket connection instead of tcp.
+Redis is roughly [50% faster](http://redis.io/topics/benchmarks) this way. To connect with a unix
+socket, you must first configure redis to accept socket connections on /tmp/redis.sock (or somewhere else).
+If you are unsure how to do this, refer to the [official redis docs](http://redis.io/topics/config) for help.
+You might also find the [redis quickstart guide](http://redis.io/topics/quickstart) helpful, especially the bottom
+sections.
+
+Then, when you call Zoom.Init(), simply pass in "unix" as the Network and "/tmp/unix.sock" as the Address:
+
 
 ``` go
 config := &zoom.Configuration {
-    Address: "localhost:6380",
-    Network: "tcp",
+	Address: "/tmp/redis.sock",
+	Network: "unix",
 }
 if err := zoom.Init(config); err != nil {
-    // handle err
+	// handle err
 }
 ```
 
@@ -456,17 +461,12 @@ for _, friend := range fred.Friends {
 Testing & Benchmarking
 ----------------------
 
-**Important:** Before running any tests or benchmarks, make sure that you have redis running and accepting
-connections on a unix socket at /tmp/unix.sock. To test if your redis server is properly set up, you can run:
+**IMPORTANT**: Before running any tests or benchmarks, make sure you have a redis-server instance running.
+Tests will use a tcp connection on localhost:6379. Benchmarks will use a unix socket connection on /tmp/unix.sock.
 
-    redis-cli -s /tmp/redis.sock -c ping
-    
-If you receive PONG in response, then you are good to go. If anything else happens, redis is not setup
-properly. Check out the [official redis docs](http://redis.io/topics/config) for help. You might also find
-the [redis quickstart guide](http://redis.io/topics/quickstart) helpful, especially the bottom sections.
-
-All the tests and benchmarks will use database #9. If database #9 is non-empty, they will will throw and
-error and not run. (so as to not corrupt your data). Database #9 is flushed at the end of every test/benchmark.
+All the tests and benchmarks will use database #9. If database #9 is non-empty, they will
+will throw and error and not run. (so as to not corrupt your data). Database #9 is flushed at the end of
+every test/benchmark.
 
 ### Running the Tests:
 
@@ -486,6 +486,18 @@ If any of the tests fail, please [open an issue](https://github.com/stephenalexb
 describe what happened.
 
 ### Running the Benchmarks:
+
+**Important:** Before running the benchmarks, make sure that you have redis running and accepting
+connections on a unix socket at /tmp/unix.sock. The benchmarks use a unix socket connection to ensure
+that the times shown reflect the maximum potential speed.
+
+To test if your redis server is properly set up, you can run:
+
+    redis-cli -s /tmp/redis.sock -c ping
+    
+If you receive PONG in response, then you are good to go. If anything else happens, redis is not setup
+properly. Check out the [official redis docs](http://redis.io/topics/config) for help. You might also find
+the [redis quickstart guide](http://redis.io/topics/quickstart) helpful, especially the bottom sections.
 
 To run the benchmarks, again make sure you're in the project root directory and run:
 
