@@ -5,13 +5,8 @@ Version: 0.0.1
 
 A blazing-fast, lightweight ORM-ish library for go and redis.
 
-Why "ORM-ish" instead of just "ORM"? Go doesn't really have objects in the traditional sense.
-Perhaps it would be more accurate to call it SRM (Struct Relational Mapping), but no one would really
-know what that acronym stands for.
-
 **WARNING:** this isn't done yet and may change significantly before the official release. I do not
-advise using Zoom for production or mission-critical applications. However, you are free to inspect
-the code and play around with it.
+advise using Zoom for production or mission-critical applications. Feedback and pull requests are welcome :)
 
 
 Philosophy
@@ -21,7 +16,7 @@ Zoom allows you to:
 
 - Persistently save structs of any type
 - Retrieve structs from the database
-- Preserve relationships between structs (The "R" in ORM)
+- Preserve relationships between structs
 
 Zoom, like the Go language, is intended to be minimal. It is a light-weight ORM with a clear set of goals.
 It does what it's supposed to and it also does it ***very fast***.
@@ -41,7 +36,7 @@ To install Zoom itself:
 
     go get github.com/stephenalexbrowne/zoom
     
-This will pull the current master branch, which is (most likely) stable but is quickly changing.
+This will pull the current master branch, which is (most likely) working but is quickly changing.
 
 Getting Started
 -----
@@ -426,7 +421,7 @@ if err := zoom.Save(george); err != nil {
 }
 ```
 
-Recall that Zoom does not support reflexivity of many-to-many relations. So if you want friendships to be bidirectional,
+Recall that Zoom does not support reflexivity of relations. So if you want friendships to be bidirectional,
 you would have to manually add each person to the list of the other's friends. This might change in the future.
 
 Also note that in the above example, Zoom will create separate database entries for Hellen, Ilene, and Jim
@@ -457,9 +452,6 @@ for _, friend := range fred.Friends {
 // 	Hellen
 //	Jim
 ```
-
-
-
 
 Testing & Benchmarking
 ----------------------
@@ -532,6 +524,7 @@ TODO
 ----
 
 In no particular order, here's what I'm working on:
+
 
 - Use transactions where possible to increase performance and robustness (a la multi/exec)
 - Implement sorting
