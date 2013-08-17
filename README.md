@@ -1,6 +1,8 @@
 Zoom
 ====
 
+Version: 0.0.1
+
 A blazing-fast, lightweight ORM-ish library for go and redis.
 
 Why "ORM-ish" instead of just "ORM"? Go doesn't really have objects in the traditional sense.
@@ -531,9 +533,6 @@ TODO
 
 In no particular order, here's what I'm working on:
 
-- Implement one-to-one relations
-- Implement one-to-many relations
-- Implement many-to-many relations
 - Use transactions where possible to increase performance and robustness (a la multi/exec)
 - Implement sorting
 - Add CreatedAt and UpdatedAt attributes to zoom.Model
