@@ -234,6 +234,10 @@ if err := zoom.Save(owner); err != nil {
 Behind the scenes, Zoom creates a seperate database entry for Pet and assigns it an Id. Now if you retrieve
 the PetOwner by it's id, the Pet attribute will persist as well.
 
+For now, Zoom does not support reflexivity of one-to-one relations. So if you want pet ownership to be
+bidirectional (i.e. if you want an owner to know about its pet **and** a pet to know about its owner),
+you would have to manually set up both relations.
+
 ``` go
 reply, err := zoom.FindById("petOwner", "the_id_of_above_pet_owner")
 if err != nil {
@@ -321,6 +325,9 @@ if err := zoom.Save(parent); err != nil {
 
 When the above code is run, Zoom will create a database entry for each child, and give them a unique id.
 
+Again, Zoom does not support reflexivity. So if you wanted a Child to know about its Parent, you would have
+to set up and manage the relation manually. This might change in the future.
+
 Now when you retrieve a parent by id, it's Children attribute will automatically be populated. So getting
 the children again is straight forward.
 
@@ -359,6 +366,98 @@ results, err := zoom.FindAll("child")
 // results would contain both children
 
 ```
+
+### Many-to-Many Relations
+
+There is nothing special about many-to-many relations. They are basically made up of multiple one-to-many
+relations.
+
+Here's an example:
+
+``` go
+// The Friend struct
+type Friend struct {
+	Name    string
+	Friends []*Friend
+	*zoom.Model
+}
+
+// A convenient constructor for the Friend struct
+func NewFriend(name string) *Friend {
+	return &Friend{
+		Name:  name,
+		Model: new(zoom.Model),
+	}
+}
+```
+
+Each Friend struct holds a list of his/her friends. Assuming a two-way friend relationship,
+if Joe is friends with Amy, there would be two entries: Amy's id is in Joe's list of friends and Joe's id is in
+Amy's list of friends. This redundancy makes queries faster at the expense of higher memory usage. Since there are
+no joins needed to lookup Joe's friends, we can get them from the database quickly. The latency scales
+linearly with the number of Joe's friends, regardless of the total number of Friend entries or the total number
+of Friend-to-Friend relations.
+
+Here's how you would save some friends in the database:
+
+
+``` go
+// create 5 people
+fred := NewFriend("Fred")
+george := NewFriend("George")
+hellen := NewFriend("Hellen")
+ilene := NewFriend("Ilene")
+jim := NewFriend("Jim")
+
+// Fred is friends with George, Hellen, and Jim
+fred.Friends = append(fred.Friends, george, hellen, jim)
+
+// George is friends with Fred, Hellen, and Ilene
+george.Friends = append(george.Friends, fred, hellen, ilene)
+
+// save both Fred and George
+if err := zoom.Save(fred); err != nil {
+	c.Error(err)
+}
+if err := zoom.Save(george); err != nil {
+	c.Error(err)
+}
+```
+
+Recall that Zoom does not support reflexivity of many-to-many relations. So if you want friendships to be bidirectional,
+you would have to manually add each person to the list of the other's friends. This might change in the future.
+
+Also note that in the above example, Zoom will create separate database entries for Hellen, Ilene, and Jim
+because they are related to Fred and George, even though we did not call Save() explicitly.
+
+Retrieving many-to-many relations works exactly the same as one-to-many. When you get a Friend struct from
+the database using FindById or FindAll, the Friends array is auto-filled. You get out whatever you put in.
+
+``` go
+// retrieve fred from the database
+result, err := zoom.FindById("friend", fred.Id)
+if err != nil {
+	// handle err
+}
+
+// type assert to *Friend
+fredCopy, ok := result.(*Friend)
+if !ok {
+	// handle this
+}
+
+for _, friend := range fred.Friends {
+	fmt.Println(friend.Name)
+}
+
+// output:
+//	George
+// 	Hellen
+//	Jim
+```
+
+
+
 
 Testing & Benchmarking
 ----------------------
