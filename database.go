@@ -1,9 +1,10 @@
 package zoom
 
 // File contains code strictly related to the database, including
-// establishing a connection, instantiating a package-wide db var
-// and closing the connection. There are also convenience functions
-// for (e.g.) checking if a key exists in redis.
+// setting up the database with given config, generating unique,
+// random ids, and creating and managing a connection pool. There
+// are also convenience functions for (e.g.) checking if a key exists
+// in redis.
 
 import (
 	"github.com/dchest/uniuri"
@@ -13,16 +14,16 @@ import (
 )
 
 type Configuration struct {
-	Address  string // Address to connect to. Default: "/tmp/redis.sock"
-	Network  string // Network to use. Default: "unix"
+	Address  string // Address to connect to. Default: "localhost:6380"
+	Network  string // Network to use. Default: "tcp"
 	Database int    // Database id to use (using SELECT). Default: 0
 }
 
 var pool *redis.Pool
 
 var defaultConfiguration = Configuration{
-	Address:  "/tmp/redis.sock",
-	Network:  "unix",
+	Address:  "localhost:6379",
+	Network:  "tcp",
 	Database: 0,
 }
 
