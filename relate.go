@@ -209,6 +209,8 @@ func scanOneToManyRelation(r *relation, modelVal reflect.Value, key string, conn
 		if err != nil {
 			return err
 		}
+		// if validId is not blank, we take it to mean that the command was added
+		// and the model with the id validId is going to be read and scanned
 		if validId != "" {
 			validIds = append(validIds, validId)
 		}
@@ -259,6 +261,8 @@ func scanOneToManyRelation(r *relation, modelVal reflect.Value, key string, conn
 	return nil
 }
 
+// returns an id if the command was successfully added to the queue. If the key didn't exist,
+// then it returns an empty string but not an error
 func queueOneToManyRelation(r *relation, relId string, conn redis.Conn) (string, error) {
 
 	// see if the relation has been saved in redis
@@ -275,7 +279,7 @@ func queueOneToManyRelation(r *relation, relId string, conn redis.Conn) (string,
 		return "", nil
 	}
 
-	// add the command to the queu
+	// add the command to the queue
 	if err := conn.Send("hgetall", key); err != nil {
 		return "", err
 	}
