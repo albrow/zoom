@@ -3,7 +3,6 @@ Zoom
 
 Version: 0.1.1
 
-
 A blazing-fast, lightweight ORM-ish library for go and redis.
 
 **WARNING:** this isn't done yet and may change significantly before the official release. I do not
@@ -161,6 +160,20 @@ if !ok {
     // handle !ok
 }
 ```
+
+You also have the option of using the ScanById() function. Instead of taking a string name, it takes a
+pointer to a struct as an argument and fills in the fields of that struct. This can lead to slightly cleaner
+code because it removes the need for a type assertion.
+
+``` go
+p := &Person{}
+if err := zoom.ScanById(p, "your-person-id"); err != nil {
+    // handle error
+}
+```
+
+Note that in the above code, we didn't need to use the NewPerson constructor or instantiate the zoom.Model
+anonymous field. Just pass in an empty struct of any registered type.
     
 To retrieve a list of all persons use zoom.FindAll(). Like FindById() the return type is []interface{}.
 If you want an array or slice of *Person, you need to type assert each element individually.
@@ -180,6 +193,9 @@ for i, result := range results {
     persons[i] = person
 }
 ```
+
+To avoid redundant type assertions, it might be helpful to wrap your own functions/methods around the Zoom API.
+Especially for FindAll methods.
 
 ### One-to-One Relations
 
