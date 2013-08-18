@@ -112,6 +112,17 @@ func addToIndex(name, value string, conn redis.Conn) error {
 	return err
 }
 
+// Like addToIndex, but uses Send to add the command to a queue
+// instead of executing it immediately
+func queueAddToIndex(name, value string, conn redis.Conn) error {
+	if conn == nil {
+		conn = pool.Get()
+		defer conn.Close()
+	}
+	key := name + ":index"
+	return conn.Send("sadd", key, value)
+}
+
 // return a proper configuration struct.
 // if the passed in struct is nil, return defaultConfiguration
 // else, for each attribute, if the passed in struct is "", 0, etc,

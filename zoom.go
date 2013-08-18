@@ -51,14 +51,22 @@ func Save(in ModelInterface) error {
 	}
 	key := name + ":" + in.GetId()
 
-	// invoke redis driver to commit to database
-	_, err = conn.Do("hmset", Args{}.Add(key).AddFlat(in)...)
-	if err != nil {
+	// start a multi/exec command. i.e. create a command queue
+	if err := conn.Send("multi"); err != nil {
+		// cancel transaction and return err
+		conn.Do("discard")
+		return err
+	}
+
+	// add command to queue
+	if err := conn.Send("hmset", Args{}.Add(key).AddFlat(in)...); err != nil {
+		// cancel transaction and return err
+		conn.Do("discard")
 		return err
 	}
 
 	// add to the index for this model
-	err = addToIndex(name, in.GetId(), conn)
+	err = queueAddToIndex(name, in.GetId(), conn)
 	if err != nil {
 		return err
 	}
@@ -66,6 +74,12 @@ func Save(in ModelInterface) error {
 	// save the relations
 	err = saveRelations(in, val, ss, name, conn)
 	if err != nil {
+		return err
+	}
+
+	// finally, commit the transaction
+	// they were all writes, so the return value isn't needed
+	if _, err := conn.Do("exec"); err != nil {
 		return err
 	}
 

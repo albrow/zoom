@@ -29,15 +29,17 @@ func saveRelations(in ModelInterface, val reflect.Value, ss *structSpec, name st
 		if r.typ == ONE_TO_ONE {
 
 			// commit to database
-			relModel, err := commitRelation(r, relVal, conn)
+			relModel, err := queueRelation(r, relVal, conn)
 			if err != nil {
 				return err
 			}
 
+			// add a command to the queue which will
 			// add a relation key to the parent interface (in)
 			key := name + ":" + in.GetId() + ":" + r.fieldName
-			_, err = conn.Do("set", key, relModel.GetId())
-			if err != nil {
+			if err := conn.Send("set", key, relModel.GetId()); err != nil {
+				// cancel transaction and return err
+				conn.Do("discard")
 				return err
 			}
 
@@ -47,15 +49,17 @@ func saveRelations(in ModelInterface, val reflect.Value, ss *structSpec, name st
 				relElem := relVal.Index(i)
 
 				// commit to database
-				relModel, err := commitRelation(r, relElem, conn)
+				relModel, err := queueRelation(r, relElem, conn)
 				if err != nil {
 					return err
 				}
 
+				// add a command to the queue which will
 				// add a relation key to the parent interface (in)
 				key := name + ":" + in.GetId() + ":" + r.fieldName
-				_, err = conn.Do("sadd", key, relModel.GetId())
-				if err != nil {
+				if err := conn.Send("sadd", key, relModel.GetId()); err != nil {
+					// cancel transaction and return err
+					conn.Do("discard")
 					return err
 				}
 			}
@@ -64,9 +68,9 @@ func saveRelations(in ModelInterface, val reflect.Value, ss *structSpec, name st
 	return nil
 }
 
-// commits the relational struct to database and returns a ModelInterface that can be used
-// to get the id
-func commitRelation(r *relation, relVal reflect.Value, conn redis.Conn) (ModelInterface, error) {
+// adds a command to the queue to add the relational struct to database and
+// returns a ModelInterface that can be used
+func queueRelation(r *relation, relVal reflect.Value, conn redis.Conn) (ModelInterface, error) {
 	// cast to a ModelInterface
 	relModel, ok := relVal.Interface().(ModelInterface)
 	if !ok {
@@ -84,15 +88,16 @@ func commitRelation(r *relation, relVal reflect.Value, conn redis.Conn) (ModelIn
 	args := Args{}.Add(key)
 	args = append(args, argsForSpec(relVal.Elem(), r.spec)...)
 
-	// invoke redis driver to commit to database
-	_, err := conn.Do("hmset", args...)
-	if err != nil {
+	// add a command to the queue which will
+	// add the struct to the database as a redis hash
+	if err := conn.Send("hmset", args...); err != nil {
+		// cancel transaction and return err
+		conn.Do("discard")
 		return nil, err
 	}
 
 	// add to the index for this model
-	err = addToIndex(r.redisName, relModel.GetId(), conn)
-	if err != nil {
+	if err := queueAddToIndex(r.redisName, relModel.GetId(), conn); err != nil {
 		return nil, err
 	}
 
