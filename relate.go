@@ -200,11 +200,17 @@ func scanOneToManyRelation(r *relation, modelVal reflect.Value, key string, conn
 		return err
 	}
 
+	validIds := make([]string, 0)
+
 	// We'll pipeline this by first executing all the redis queries,
 	// then dealing with each response.
 	for _, relId := range relIds {
-		if err := queueOneToManyRelation(r, relId, conn); err != nil {
+		validId, err := queueOneToManyRelation(r, relId, conn)
+		if err != nil {
 			return err
+		}
+		if validId != "" {
+			validIds = append(validIds, validId)
 		}
 	}
 
@@ -241,8 +247,9 @@ func scanOneToManyRelation(r *relation, modelVal reflect.Value, key string, conn
 		}
 
 		// set the id
-		// TODO: fix this!
-		// relModel.SetId(relId)
+		id := validIds[0]
+		validIds = validIds[1:]
+		relModel.SetId(id)
 
 		// append to the slice of related structs
 		sliceVal := reflect.Append(settable, relVal)
@@ -252,7 +259,7 @@ func scanOneToManyRelation(r *relation, modelVal reflect.Value, key string, conn
 	return nil
 }
 
-func queueOneToManyRelation(r *relation, relId string, conn redis.Conn) error {
+func queueOneToManyRelation(r *relation, relId string, conn redis.Conn) (string, error) {
 
 	// see if the relation has been saved in redis
 	// if not we should just leave it as nil
@@ -262,16 +269,16 @@ func queueOneToManyRelation(r *relation, relId string, conn redis.Conn) error {
 	// going on in our current conn.
 	exists, err := KeyExists(key, nil)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if !exists {
-		return nil
+		return "", nil
 	}
 
 	// add the command to the queu
 	if err := conn.Send("hgetall", key); err != nil {
-		return err
+		return "", err
 	}
 
-	return nil
+	return relId, nil
 }
