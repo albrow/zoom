@@ -84,6 +84,24 @@ func (s *MainSuite) TestFindById(c *C) {
 	c.Assert(p2.Id, Equals, p1.Id)
 }
 
+func (s *MainSuite) TestScanById(c *C) {
+	// Create and save a new model
+	p1 := NewPerson("Joe", 23)
+	zoom.Save(p1)
+
+	// find and scan the model using ScanById
+	p2 := &Person{}
+	err := zoom.ScanById(p2, p1.Id)
+	if err != nil {
+		c.Error(err)
+	}
+
+	// Make sure the found model is the same as original
+	c.Assert(p2.Name, Equals, p1.Name)
+	c.Assert(p2.Age, Equals, p1.Age)
+	c.Assert(p2.Id, Equals, p1.Id)
+}
+
 func (s *MainSuite) TestDelete(c *C) {
 	// Create and save a new model
 	p := NewPerson("Charles", 25)
