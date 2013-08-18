@@ -167,7 +167,7 @@ code because it removes the need for a type assertion.
 
 ``` go
 p := &Person{}
-if err := zoom.FindById(p, "your-person-id"); err != nil {
+if err := zoom.ScanById(p, "your-person-id"); err != nil {
     // handle error
 }
 ```
