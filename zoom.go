@@ -188,6 +188,64 @@ func FindById(modelName, id string) (interface{}, error) {
 	return model, nil
 }
 
+// ScanById is like FindById, but it will scan the results from the database
+// into model, avoiding the need for typecasting after the find.
+func ScanById(model ModelInterface, id string) error {
+
+	// get the type and name
+	typ := reflect.TypeOf(model)
+	modelName, found := typeToName[typ]
+	if !found {
+		return NewModelTypeNotRegisteredError(typ)
+	}
+
+	// create the key based on the modelName and id
+	key := modelName + ":" + id
+
+	// open a connection
+	conn := pool.Get()
+	defer conn.Close()
+
+	// make sure the key exists
+	exists, err := KeyExists(key, conn)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		msg := fmt.Sprintf("Couldn't find %s with id = %s", modelName, id)
+		return NewKeyNotFoundError(msg)
+	}
+
+	// get the stuff from redis
+	reply, err := conn.Do("hgetall", key)
+	bulk, err := redis.MultiBulk(reply, err)
+	if err != nil {
+		return err
+	}
+
+	// create a new struct and instantiate its Model attribute
+	// this gives us the embedded methods and properties on Model
+	modelVal := reflect.ValueOf(model)
+	modelVal.Elem().FieldByName("Model").Set(reflect.ValueOf(new(Model)))
+
+	// invoke redis driver to fill in the values of the struct
+	err = ScanStruct(bulk, model)
+	if err != nil {
+		return err
+	}
+
+	// set the id
+	model.SetId(id)
+
+	// scan relations and add them as attributes to model
+	ss := structSpecForType(typ.Elem())
+	if err := scanRelations(ss, modelName, id, modelVal, conn); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func FindAll(modelName string) ([]interface{}, error) {
 
 	// get a connection
