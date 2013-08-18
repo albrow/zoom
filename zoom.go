@@ -168,13 +168,6 @@ func FindById(modelName, id string) (interface{}, error) {
 		return nil, NewKeyNotFoundError(msg)
 	}
 
-	// get the stuff from redis
-	reply, err := conn.Do("hgetall", key)
-	bulk, err := redis.MultiBulk(reply, err)
-	if err != nil {
-		return nil, err
-	}
-
 	// create a new struct and instantiate its Model attribute
 	// this gives us the embedded methods and properties on Model
 	modelVal := reflect.New(typ.Elem())
@@ -183,7 +176,14 @@ func FindById(modelName, id string) (interface{}, error) {
 	// type assert to ModelInterface so we can use SetId()
 	model := modelVal.Interface().(ModelInterface)
 
-	// invoke redis driver to fill in the values of the struct
+	// get the field values from redis
+	reply, err := conn.Do("hgetall", key)
+	bulk, err := redis.MultiBulk(reply, err)
+	if err != nil {
+		return nil, err
+	}
+
+	// fill in the values of the struct
 	err = ScanStruct(bulk, model)
 	if err != nil {
 		return nil, err
