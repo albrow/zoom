@@ -130,6 +130,7 @@ func (s *RelateSuite) TestOneToOne(c *C) {
 }
 
 func (s *RelateSuite) TestOneToMany(c *C) {
+
 	// Create a Parent and two children
 	parent := NewParent("Christine")
 	child1 := NewChild("Derick")
