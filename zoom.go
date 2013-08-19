@@ -94,31 +94,13 @@ func Delete(in ModelInterface) error {
 	if err != nil {
 		return err
 	}
-	key := name + ":" + in.GetId()
 
 	// TODO: make sure it has an id
 
-	// get a connection
-	conn := pool.Get()
-	defer conn.Close()
-
-	// invoke redis driver to delete the key
-	_, err = conn.Do("del", key)
-	if err != nil {
-		return err
-	}
-
-	// remove from the index
-	key = name + ":index"
-	_, err = conn.Do("srem", key, in.GetId())
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return DeleteById(name, in.GetId())
 }
 
-// Find a model by its id and then delete it
+// Delete a record from the interface by its id only
 func DeleteById(modelName, id string) error {
 
 	key := modelName + ":" + id
@@ -127,14 +109,24 @@ func DeleteById(modelName, id string) error {
 	conn := pool.Get()
 	defer conn.Close()
 
-	_, err := conn.Do("del", key)
-	if err != nil {
+	// start a transaction
+	conn.Send("multi")
+
+	// add a command to the queue which will
+	// delete the main key
+	if err := conn.Send("del", key); err != nil {
 		return err
 	}
 
-	// remove from the index
+	// add a command to the queue which will
+	// remove it from the index
 	key = modelName + ":index"
-	_, err = conn.Do("srem", key, id)
+	if err := conn.Send("srem", key, id); err != nil {
+		return err
+	}
+
+	// execute the commands
+	_, err := conn.Do("exec")
 	if err != nil {
 		return err
 	}
