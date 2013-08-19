@@ -5,6 +5,9 @@ import (
 	"github.com/stephenalexbrowne/zoom"
 	"github.com/stephenalexbrowne/zoom/redis"
 	"log"
+	"math/rand"
+	"strconv"
+	"time"
 )
 
 // The Person struct
@@ -49,7 +52,11 @@ func NewInvoice(created, updated int64, memo string, personId int64, isPaid bool
 // Database helper functions
 // setUp() and tearDown()
 func setUp() error {
-	zoom.Init(&zoom.Configuration{Address: "/tmp/redis.sock", Network: "unix", Database: 9})
+	zoom.Init(&zoom.Configuration{
+		Address:  "/tmp/redis.sock",
+		Network:  "unix",
+		Database: 9,
+	})
 
 	conn := zoom.GetConn()
 	defer conn.Close()
@@ -62,6 +69,10 @@ func setUp() error {
 	if n != 0 {
 		return errors.New("Database #9 is not empty, test can not continue")
 	}
+
+	zoom.ClearCache()
+
+	rand.Seed(time.Now().UTC().UnixNano())
 
 	zoom.Register(&Person{}, "person")
 	zoom.Register(&Invoice{}, "invoice")
@@ -76,4 +87,57 @@ func tearDown() {
 	}
 	conn.Close()
 	zoom.Close()
+}
+
+// generate a random int from min (inclusively) to max
+// (exclusively). I.e. to get either 1 or 0, use randInt(0,2)
+func randInt(min int, max int) int {
+	return min + rand.Intn(max-min)
+}
+
+// creates num persons, saves them. Returns a slice of their ids
+func savePersons(num int) []string {
+	// create a sequence of persons and save each
+	// we'll do this concurrently so it's faster.
+	ids := make([]string, num)
+	idsChan := make(chan string, num)
+	for i := 0; i < num; i++ {
+		go func() {
+			name := "person_" + strconv.Itoa(i)
+			p := NewPerson(name, i)
+			zoom.Save(p)
+			idsChan <- p.Id
+		}()
+	}
+
+	// wait for all the channels above to send,
+	// indicating that they are done
+	for i := 0; i < num; i++ {
+		ids[i] = <-idsChan
+	}
+
+	return ids
+}
+
+// creates num persons but does not save them. Returns an slice of persons
+func createPersons(num int) []*Person {
+	// create a sequence of persons
+	// we'll do this concurrently so it's faster.
+	persons := make([]*Person, num)
+	personsChan := make(chan *Person, num)
+	for i := 0; i < num; i++ {
+		go func() {
+			name := "person_" + strconv.Itoa(i)
+			p := NewPerson(name, i)
+			personsChan <- p
+		}()
+	}
+
+	// wait for all the channels above to send,
+	// indicating that they are done
+	for i := 0; i < num; i++ {
+		persons[i] = <-personsChan
+	}
+
+	return persons
 }
