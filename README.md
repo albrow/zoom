@@ -520,7 +520,7 @@ the [redis quickstart guide](http://redis.io/topics/quickstart) helpful, especia
 
 To run the benchmarks, again make sure you're in the project root directory and run:
 
-    go test ./... --bench="."
+    go test ./bench --bench="."
     
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new).
@@ -528,18 +528,29 @@ You should see some runtimes for various operations. If you see an error or if t
 Here are the results from my laptop (2.3GHz intel i7, 8GB ram):
 
 ```
-BenchmarkSave			50000	     73688 ns/op
-BenchmarkFindById	   	50000	     67253 ns/op
-BenchmarkCrud	   		10000	    283122 ns/op
-BenchmarkDeleteById	   	50000	     57467 ns/op
+BenchmarkRepeatSave	   			50000	     67835 ns/op
+BenchmarkSequentialSave	   		20000	     70997 ns/op
+BenchmarkRepeatFindById	 		5000000	       452 ns/op
+BenchmarkSequentialFindById	 	5000000	       584 ns/op
+BenchmarkRandomFindById	 		5000000	       629 ns/op
+BenchmarkRepeatDeleteById	   	50000	     55818 ns/op
+BenchmarkSequentialDeleteById	20000	     62132 ns/op
+BenchmarkRandomDeleteById	   	20000	     62767 ns/op
+BenchmarkFindAll10	   			50000	     59475 ns/op
+BenchmarkFindAll100	   			10000	    183178 ns/op
+BenchmarkFindAll1000	    	1000	   1437346 ns/op
+BenchmarkFindAll10000	     	100	  	  16920303 ns/op
 ```
 
-To put the results another way: 
+Because Zoom features an LRU read-only cache, FindById calls for cached elements are incredibly fast.
+If you're only reading from cache, you can do about 1.5 million random reads per second. The
+SequentialFindById and RandomFindById benchmarks each create 10,000 person objects and save
+them to the database. All 10,000 persons fit inside the cache, so those benchmarks don't demonstrate
+cache miss times. (TODO: add a benchmark to show cache miss times).
 
-- Writes: 		74 microseconds each 	@ 13.5k/second
-- Reads: 		67 microseconds each 	@ 14.8k/second
-- CRUD cycle: 	283 microseconds each 	@ 3.5k/second
-- Deletes: 		57 microseconds each 	@ 17.4k/second
+The slowest benchmarks by far are FindAll. The benchmarks show what happens for FindAll calls with bigger and
+bigger datasets. It's apparent that the calls have a latency on the order of O(n) where n is the number
+of records for the particular type. (TODO: improve FindAll benchmarks with concurrency and/or transactions).
 
 You should run your own benchmarks that are closer to your use case to get a real sense of how Zoom will
 perform for you. The speeds above are already pretty fast, but improving them is one of the top priorities
