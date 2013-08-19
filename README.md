@@ -523,23 +523,25 @@ To run the benchmarks, again make sure you're in the project root directory and 
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new).
 
-Here are the results from my laptop (2.3GHz intel i7, 8G ram):
+Here are the results from my laptop (2.3GHz intel i7, 8GB ram):
 
 ```
-BenchmarkSave	   20000	     99562 ns/op
-BenchmarkFindById	   50000	     73934 ns/op
-BenchmarkDeleteById	   50000	     70942 ns/op
+BenchmarkSave			50000	     73688 ns/op
+BenchmarkFindById	   	50000	     67253 ns/op
+BenchmarkCrud	   		10000	    283122 ns/op
+BenchmarkDeleteById	   	50000	     57467 ns/op
 ```
 
 To put the results another way: 
 
-- Writes take about 100 microseconds (0.01 ms)
-- You can perform about 10k writes/second
-- Reads take about 75 microseconds (0.075 ms)
-- You can perform about 13.5k writes/second
+- Writes: 		74 microseconds each 	@ 13.5k/second
+- Reads: 		67 microseconds each 	@ 14.8k/second
+- CRUD cycle: 	283 microseconds each 	@ 3.5k/second
+- Deletes: 		57 microseconds each 	@ 17.4k/second
 
-That's already pretty fast! And improving these speeds is one of the top priorities for this project.
-
+You should run your own benchmarks that are closer to your use case to get a real sense of how Zoom will
+perform for you. The speeds above are already pretty fast, but improving them is one of the top priorities
+for this project.
     
 Example Usage
 -------------
