@@ -206,6 +206,9 @@ func FindById(modelName, id string) (interface{}, error) {
 		return nil, err
 	}
 
+	// add to the cache
+	modelCache.SetIfAbsent(key, newCacheValue(model))
+
 	// return it
 	return model, nil
 }
@@ -276,6 +279,9 @@ func ScanById(model ModelInterface, id string) error {
 	if err := scanRelations(ss, modelName, id, modelVal, conn); err != nil {
 		return err
 	}
+
+	// add to the cache
+	modelCache.SetIfAbsent(key, newCacheValue(model))
 
 	return nil
 }
