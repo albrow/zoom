@@ -123,8 +123,8 @@ func DeleteById(modelName, id string) error {
 
 	// add a command to the queue which will
 	// remove it from the index
-	key = modelName + ":index"
-	if err := conn.Send("srem", key, id); err != nil {
+	indexKey := modelName + ":index"
+	if err := conn.Send("srem", indexKey, id); err != nil {
 		return err
 	}
 
@@ -207,7 +207,7 @@ func FindById(modelName, id string) (interface{}, error) {
 	}
 
 	// add to the cache
-	modelCache.SetIfAbsent(key, newCacheValue(model))
+	modelCache.Set(key, newCacheValue(model))
 
 	// return it
 	return model, nil
@@ -281,7 +281,7 @@ func ScanById(model ModelInterface, id string) error {
 	}
 
 	// add to the cache
-	modelCache.SetIfAbsent(key, newCacheValue(model))
+	modelCache.Set(key, newCacheValue(model))
 
 	return nil
 }

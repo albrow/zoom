@@ -1,8 +1,12 @@
 package zoom
 
 import (
+	"fmt"
+	"github.com/stephenalexbrowne/zoom/cache"
 	"reflect"
 )
+
+var modelCache *cache.LRUCache
 
 type cacheValue struct {
 	value interface{}
@@ -16,4 +20,8 @@ func newCacheValue(in interface{}) *cacheValue {
 
 func (c *cacheValue) Size() int {
 	return c.size
+}
+
+func ClearCache() {
+	modelCache.Clear()
 }
