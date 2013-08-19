@@ -83,6 +83,9 @@ func Save(in ModelInterface) error {
 		return err
 	}
 
+	// add to the cache
+	modelCache.Set(key, newCacheValue(in))
+
 	return nil
 }
 
@@ -131,6 +134,9 @@ func DeleteById(modelName, id string) error {
 		return err
 	}
 
+	// remove from the cache
+	modelCache.Delete(key)
+
 	return nil
 }
 
@@ -145,6 +151,16 @@ func FindById(modelName, id string) (interface{}, error) {
 
 	// create the key based on the modelName and id
 	key := modelName + ":" + id
+
+	// check if the model is in the cache
+	val, found := modelCache.Get(key)
+	if found {
+		cv, ok := val.(*cacheValue)
+		if !ok {
+			return nil, errors.New("zoom: Got from cache but couldn't convert to cacheValue")
+		}
+		return cv.value, nil
+	}
 
 	// open a connection
 	conn := pool.Get()
@@ -207,6 +223,18 @@ func ScanById(model ModelInterface, id string) error {
 
 	// create the key based on the modelName and id
 	key := modelName + ":" + id
+
+	// check if the model is in the cache
+	val, found := modelCache.Get(key)
+	if found {
+		cv, ok := val.(*cacheValue)
+		if !ok {
+			return errors.New("zoom: Got from cache but couldn't convert to cacheValue")
+		}
+		modelVal := reflect.ValueOf(model).Elem()
+		modelVal.Set(reflect.ValueOf(cv.value).Elem())
+		return nil
+	}
 
 	// open a connection
 	conn := pool.Get()

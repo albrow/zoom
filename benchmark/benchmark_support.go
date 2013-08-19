@@ -49,7 +49,11 @@ func NewInvoice(created, updated int64, memo string, personId int64, isPaid bool
 // Database helper functions
 // setUp() and tearDown()
 func setUp() error {
-	zoom.Init(&zoom.Configuration{Address: "/tmp/redis.sock", Network: "unix", Database: 9})
+	zoom.Init(&zoom.Configuration{
+		Address:  "/tmp/redis.sock",
+		Network:  "unix",
+		Database: 9,
+	})
 
 	conn := zoom.GetConn()
 	defer conn.Close()
