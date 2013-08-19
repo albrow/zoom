@@ -528,29 +528,35 @@ You should see some runtimes for various operations. If you see an error or if t
 Here are the results from my laptop (2.3GHz intel i7, 8GB ram):
 
 ```
-BenchmarkRepeatSave	   			50000	     67835 ns/op
-BenchmarkSequentialSave	   		20000	     70997 ns/op
-BenchmarkRepeatFindById	 		5000000	       452 ns/op
-BenchmarkSequentialFindById	 	5000000	       584 ns/op
-BenchmarkRandomFindById	 		5000000	       629 ns/op
-BenchmarkRepeatDeleteById	   	50000	     55818 ns/op
-BenchmarkSequentialDeleteById	20000	     62132 ns/op
-BenchmarkRandomDeleteById	   	20000	     62767 ns/op
-BenchmarkFindAll10	   			50000	     59475 ns/op
-BenchmarkFindAll100	   			10000	    183178 ns/op
-BenchmarkFindAll1000	    	1000	   1437346 ns/op
-BenchmarkFindAll10000	     	100	  	  16920303 ns/op
+BenchmarkRepeatSave	   				50000	     66644 ns/op
+BenchmarkSequentialSave	   			20000	     70499 ns/op
+BenchmarkRepeatFindById	 			5000000	       460 ns/op
+BenchmarkSequentialFindById	 		5000000	       587 ns/op
+BenchmarkRandomFindById	 			2000000	       620 ns/op
+BenchmarkRepeatFindByIdNoCache	   	50000	     68513 ns/op
+BenchmarkSequentialFindByIdNoCache	20000	     72180 ns/op
+BenchmarkRandomFindByIdNoCache	   	20000	     71904 ns/op
+BenchmarkRepeatDeleteById	   		50000	     56375 ns/op
+BenchmarkSequentialDeleteById	   	20000	     61850 ns/op
+BenchmarkRandomDeleteById	   		20000	     62037 ns/op
+BenchmarkFindAll10	   				50000	     59085 ns/op
+BenchmarkFindAll100	   				10000	    181426 ns/op
+BenchmarkFindAll1000	    		1000	   1410810 ns/op
+BenchmarkFindAll10000	     		100	  	  16803423 ns/op
+
 ```
 
-Because Zoom features an LRU read-only cache, FindById calls for cached elements are incredibly fast.
-If you're only reading from cache, you can do about 1.5 million random reads per second. The
-SequentialFindById and RandomFindById benchmarks each create 10,000 person objects and save
-them to the database. All 10,000 persons fit inside the cache, so those benchmarks don't demonstrate
-cache miss times. (TODO: add a benchmark to show cache miss times).
+Because Zoom features an LRU read-only cache, FindById calls for cached elements are incredibly fast
+(you can do about 1.5 million random reads per second). The SequentialFindById and RandomFindById benchmarks
+each create 10,000 person objects and save them to the database. All 10,000 persons fit inside the cache,
+so those benchmarks don't demonstrate cache miss times. The benchmarks with the NoCache suffix clear the cache
+on each iteration, so they reflect latency for finding a record not in the cache. Typically, you will have a
+mix of cache hits and misses and should experiment with cache size to get the best performance for your use
+case.
 
-The slowest benchmarks by far are FindAll. The benchmarks show what happens for FindAll calls with bigger and
-bigger datasets. It's apparent that the calls have a latency on the order of O(n) where n is the number
-of records for the particular type. (TODO: improve FindAll benchmarks with concurrency and/or transactions).
+The slowest benchmarks by far are FindAll. It's apparent that the calls have a latency on the order of
+O(n) where n is the number of records for the particular type. (TODO: improve FindAll benchmarks with
+concurrency and/or transactions).
 
 You should run your own benchmarks that are closer to your use case to get a real sense of how Zoom will
 perform for you. The speeds above are already pretty fast, but improving them is one of the top priorities
