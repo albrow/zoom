@@ -68,9 +68,11 @@ defaults:
 
 ``` go
 type Configuration struct {
-	Address  string // Address to connect to. Default: "localhost:6379"
-	Network  string // Network to use. Default: "tcp"
-	Database int    // Database id to use (using SELECT). Default: 0
+	Address       string // Address to connect to. Default: "localhost:6379"
+	Network       string // Network to use. Default: "tcp"
+	Database      int    // Database id to use (using SELECT). Default: 0
+	CacheCapacity uint64 // Size of the cache in bytes. Default: 100000 (100kB)
+	CacheDisabled bool   // If true, cache will be disabled. Default: false
 }
 ```
 
