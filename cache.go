@@ -1,7 +1,6 @@
 package zoom
 
 import (
-	"fmt"
 	"github.com/stephenalexbrowne/zoom/cache"
 	"reflect"
 )
