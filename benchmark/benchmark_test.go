@@ -1,12 +1,11 @@
 package benchmark
 
 import (
-	"fmt"
 	"github.com/stephenalexbrowne/zoom"
 	"testing"
 )
 
-func BenchmarkSave(b *testing.B) {
+func BenchmarkRepeatSave(b *testing.B) {
 
 	err := setUp()
 	if err != nil {
@@ -16,24 +15,24 @@ func BenchmarkSave(b *testing.B) {
 	}
 
 	// try once to make sure there's no errors
-	pt := NewPerson("Alice", 25)
-	err = zoom.Save(pt)
-	if err != nil {
-		b.Error(err)
-	}
+	persons := createPersons(1)
 
 	// reset the timer
 	b.ResetTimer()
 
 	// run the actual test
 	for i := 0; i < b.N; i++ {
-		p := NewPerson("Bob", 25)
+		b.StopTimer()
+		p := persons[0]
+		b.StartTimer()
 		zoom.Save(p)
 	}
 
 }
 
-func BenchmarkFindById(b *testing.B) {
+func BenchmarkSequentialSave(b *testing.B) {
+
+	const NUM_PERSONS = 10000
 
 	err := setUp()
 	if err != nil {
@@ -42,22 +41,30 @@ func BenchmarkFindById(b *testing.B) {
 		defer tearDown()
 	}
 
-	// save a Person model
-	p := NewPerson("Clarence", 25)
-	err = zoom.Save(p)
+	// try once to make sure there's no errors
+	pt := NewPerson("Amy", 25)
+	err = zoom.Save(pt)
 	if err != nil {
 		b.Error(err)
 	}
+
+	// create a sequence of persons to be saved
+	persons := createPersons(NUM_PERSONS)
+
+	// reset the timer
 	b.ResetTimer()
 
 	// run the actual test
 	for i := 0; i < b.N; i++ {
-		zoom.FindById("person", p.Id)
+		b.StopTimer()
+		index := i % NUM_PERSONS
+		p := persons[index]
+		b.StartTimer()
+		zoom.Save(p)
 	}
 }
 
-// The following benchmarks a sequential Create, Find, Update, and Delete
-func BenchmarkCrud(b *testing.B) {
+func BenchmarkRepeatFindById(b *testing.B) {
 
 	err := setUp()
 	if err != nil {
@@ -66,85 +73,225 @@ func BenchmarkCrud(b *testing.B) {
 		defer tearDown()
 	}
 
-	// create and save one invoice to make sure there's no errors
-	inv := NewInvoice(100, 200, "my memo", 0, true)
+	ids := savePersons(1)
 
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		err := zoom.Save(inv)
-		if err != nil {
-			panic(err)
-		}
-
-		obj, err := zoom.FindById("invoice", inv.Id)
-		if err != nil {
-			panic(err)
-		}
-
-		inv2, ok := obj.(*Invoice)
-		if !ok {
-			panic(fmt.Sprintf("expected *Invoice, got: %v", obj))
-		}
-
-		inv2.Created = 1000
-		inv2.Updated = 2000
-		inv2.Memo = "my memo 2"
-		inv2.PersonId = 3000
-		err = zoom.Save(inv2)
-		if err != nil {
-			panic(err)
-		}
-
-		err = zoom.Delete(inv2)
-		if err != nil {
-			panic(err)
-		}
-
-	}
-
-}
-
-func BenchmarkDeleteById(b *testing.B) {
-
-	b.Skip("This one takes much longer. Skipping for now.")
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	// First, create and delete one person to
-	// make sure there's no errors
-	p := NewPerson("Dennis", 25)
-	err = zoom.Save(p)
-	if err != nil {
-		b.Error(err)
-	}
-	err = zoom.DeleteById("person", p.Id)
-	if err != nil {
-		b.Error(err)
-	}
-
-	// save a shit ton of person models
-	// we don't know how big b.N will be,
-	// so better be safe
-	NUM_IDS := 100000
-	ids := make([]string, 0, NUM_IDS)
-	for i := 0; i < NUM_IDS; i++ {
-		p := NewPerson("Fred", 25)
-		err := zoom.Save(p)
-		if err != nil {
-			b.Error(err)
-		}
-		ids = append(ids, p.Id)
-	}
 	b.ResetTimer()
 
 	// run the actual test
 	for i := 0; i < b.N; i++ {
-		zoom.DeleteById("person", p.Id)
+		b.StopTimer()
+		id := ids[0]
+		b.StartTimer()
+		zoom.FindById("person", id)
+	}
+}
+
+func BenchmarkSequentialFindById(b *testing.B) {
+
+	const NUM_PERSONS = 10000
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	ids := savePersons(NUM_PERSONS)
+
+	// reset the timer
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		index := i % NUM_PERSONS
+		id := ids[index]
+		b.StartTimer()
+		zoom.FindById("person", id)
+	}
+}
+
+func BenchmarkRandomFindById(b *testing.B) {
+
+	const NUM_PERSONS = 10000
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	ids := savePersons(NUM_PERSONS)
+
+	// reset the timer
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		index := randInt(0, NUM_PERSONS)
+		id := ids[index]
+		b.StartTimer()
+		zoom.FindById("person", id)
+	}
+}
+
+func BenchmarkRepeatDeleteById(b *testing.B) {
+
+	const NUM_PERSONS = 1
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	ids := savePersons(NUM_PERSONS)
+
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		id := ids[0]
+		b.StartTimer()
+		zoom.DeleteById("person", id)
+	}
+}
+
+func BenchmarkSequentialDeleteById(b *testing.B) {
+
+	const NUM_PERSONS = 10000
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	ids := savePersons(NUM_PERSONS)
+
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		index := i % NUM_PERSONS
+		id := ids[index]
+		b.StartTimer()
+		zoom.DeleteById("person", id)
+	}
+}
+
+func BenchmarkRandomDeleteById(b *testing.B) {
+
+	const NUM_PERSONS = 10000
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	ids := savePersons(NUM_PERSONS)
+
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		index := randInt(0, NUM_PERSONS)
+		id := ids[index]
+		b.StartTimer()
+		zoom.DeleteById("person", id)
+	}
+}
+
+func BenchmarkFindAll10(b *testing.B) {
+
+	const NUM_PERSONS = 10
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	savePersons(NUM_PERSONS)
+
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		zoom.FindAll("person")
+	}
+}
+
+func BenchmarkFindAll100(b *testing.B) {
+
+	const NUM_PERSONS = 100
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	savePersons(NUM_PERSONS)
+
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		zoom.FindAll("person")
+	}
+}
+
+func BenchmarkFindAll1000(b *testing.B) {
+
+	const NUM_PERSONS = 1000
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	savePersons(NUM_PERSONS)
+
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		zoom.FindAll("person")
+	}
+}
+
+func BenchmarkFindAll10000(b *testing.B) {
+
+	const NUM_PERSONS = 10000
+
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	savePersons(NUM_PERSONS)
+
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		zoom.FindAll("person")
 	}
 }

@@ -23,7 +23,6 @@ type Configuration struct {
 }
 
 var pool *redis.Pool
-var modelCache *cache.LRUCache
 
 var defaultConfiguration = Configuration{
 	Address:       "localhost:6379",
@@ -44,7 +43,7 @@ func Init(passedConfig *Configuration) {
 	config := getConfiguration(passedConfig)
 
 	pool = &redis.Pool{
-		MaxIdle:     3,
+		MaxIdle:     10,
 		MaxActive:   0,
 		IdleTimeout: 240 * time.Second,
 		Dial: func() (redis.Conn, error) {
