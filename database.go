@@ -63,7 +63,7 @@ func Init(passedConfig *Configuration) {
 		},
 	}
 
-	modelCache = cache.NewLRUCache(config.CacheCapacity)
+	zoomCache = cache.NewLRUCache(config.CacheCapacity)
 }
 
 // closes the connection pool

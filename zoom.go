@@ -84,7 +84,12 @@ func Save(in ModelInterface) error {
 	}
 
 	// add to the cache
-	modelCache.Set(key, newCacheValue(in))
+	zoomCache.Set(key, newCacheValue(in))
+
+	// update the index cache
+	indexKey := name + ":index"
+	zoomCache.Delete(indexKey)
+	ScheduleIndexCacheUpdate(name)
 
 	return nil
 }
@@ -135,7 +140,11 @@ func DeleteById(modelName, id string) error {
 	}
 
 	// remove from the cache
-	modelCache.Delete(key)
+	zoomCache.Delete(key)
+
+	// update the index cache
+	zoomCache.Delete(indexKey)
+	ScheduleIndexCacheUpdate(modelName)
 
 	return nil
 }
@@ -153,7 +162,7 @@ func FindById(modelName, id string) (interface{}, error) {
 	key := modelName + ":" + id
 
 	// check if the model is in the cache
-	val, found := modelCache.Get(key)
+	val, found := zoomCache.Get(key)
 	if found {
 		cv, ok := val.(*cacheValue)
 		if !ok {
@@ -207,7 +216,7 @@ func FindById(modelName, id string) (interface{}, error) {
 	}
 
 	// add to the cache
-	modelCache.Set(key, newCacheValue(model))
+	zoomCache.Set(key, newCacheValue(model))
 
 	// return it
 	return model, nil
@@ -228,7 +237,7 @@ func ScanById(model ModelInterface, id string) error {
 	key := modelName + ":" + id
 
 	// check if the model is in the cache
-	val, found := modelCache.Get(key)
+	val, found := zoomCache.Get(key)
 	if found {
 		cv, ok := val.(*cacheValue)
 		if !ok {
@@ -281,7 +290,7 @@ func ScanById(model ModelInterface, id string) error {
 	}
 
 	// add to the cache
-	modelCache.Set(key, newCacheValue(model))
+	zoomCache.Set(key, newCacheValue(model))
 
 	return nil
 }
@@ -294,6 +303,22 @@ func FindAll(modelName string) ([]interface{}, error) {
 
 	// invoke redis driver to get indexed keys and convert to []interface{}
 	key := modelName + ":index"
+
+	// check if the whole result is in the cache
+	val, found := zoomCache.Get(key)
+	if found {
+		cv, ok := val.(*cacheValue)
+		if !ok {
+			return nil, errors.New("zoom: Got from cache but couldn't convert to cacheValue")
+		}
+		results, ok := cv.value.([]interface{})
+		if !ok {
+			msg := fmt.Sprintf("zoom: couldn't convert %+v to []interface{}\n", cv.value)
+			return nil, errors.New(msg)
+		}
+		return results, nil
+	}
+
 	ids, err := redis.Strings(conn.Do("smembers", key))
 	if err != nil {
 		return nil, err
@@ -308,6 +333,8 @@ func FindAll(modelName string) ([]interface{}, error) {
 		}
 		results[i] = m
 	}
+
+	zoomCache.Set(key, newCacheValue(results))
 
 	return results, nil
 }

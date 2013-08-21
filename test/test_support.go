@@ -1,6 +1,7 @@
 package test
 
 import (
+	"fmt"
 	"github.com/stephenalexbrowne/zoom"
 )
 
@@ -61,4 +62,35 @@ type AllTypes struct {
 	Rune    rune
 	String  string
 	*zoom.Model
+}
+
+func indexOfStringSlice(a string, list []string) int {
+	for i, b := range list {
+		if b == a {
+			return i
+		}
+	}
+	return -1
+}
+
+func removeFromStringSlice(list []string, i int) []string {
+	return append(list[:i], list[i+1:]...)
+}
+
+func compareAsStringSet(expecteds, gots []string) (bool, string) {
+	for _, got := range gots {
+		index := indexOfStringSlice(got, expecteds)
+		if index == -1 {
+			msg := fmt.Sprintf("Found unexpected element: %v", got)
+			return false, msg
+		}
+		// remove from expecteds. makes sure we have one of each
+		expecteds = removeFromStringSlice(expecteds, index)
+	}
+	// now expecteds should be empty. If it's not, there's a problem
+	if len(expecteds) != 0 {
+		msg := fmt.Sprintf("The following expected elements were not found: %v\n", expecteds)
+		return false, msg
+	}
+	return true, "ok"
 }

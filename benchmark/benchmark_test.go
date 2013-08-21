@@ -482,6 +482,30 @@ func BenchmarkFindAll10000(b *testing.B) {
 	benchmarkFindAll(b, 10000)
 }
 
+// calls FindAll for a dataset of size 10,
+// clearing the cache on each iteration
+func BenchmarkFindAllNoCache10(b *testing.B) {
+	benchmarkFindAllNoCache(b, 10)
+}
+
+// calls FindAll for a dataset of size 100,
+// clearing the cache on each iteration
+func BenchmarkFindAllNoCache100(b *testing.B) {
+	benchmarkFindAllNoCache(b, 100)
+}
+
+// calls FindAll for a dataset of size 1000,
+// clearing the cache on each iteration
+func BenchmarkFindAllNoCache1000(b *testing.B) {
+	benchmarkFindAllNoCache(b, 1000)
+}
+
+// calls FindAll for a dataset of size 10000,
+// clearing the cache on each iteration
+func BenchmarkFindAllNoCache10000(b *testing.B) {
+	benchmarkFindAllNoCache(b, 10000)
+}
+
 // create a parent with 10 children and repeatedly call Save on it
 func BenchmarkRepeatSaveOneToMany10(b *testing.B) {
 	benchmarkRepeatSaveOneToMany(b, 10)

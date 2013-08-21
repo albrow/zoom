@@ -251,6 +251,27 @@ func benchmarkFindAll(b *testing.B, num int) {
 	}
 }
 
+func benchmarkFindAllNoCache(b *testing.B, num int) {
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	savePersons(num)
+
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		zoom.FindAll("person")
+		b.StopTimer()
+		zoom.ClearCache()
+		b.StartTimer()
+	}
+}
+
 func benchmarkRepeatSaveOneToMany(b *testing.B, numChildren int) {
 	err := setUp()
 	if err != nil {
