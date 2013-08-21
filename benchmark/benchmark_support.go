@@ -140,7 +140,7 @@ func saveParentsWithChildren(numParents, numChildren int) []string {
 	return ids
 }
 
-func benchmarkSetTransaction(b *testing.B, num int) {
+func benchmarkCommand(b *testing.B, setup func(), checkReply func(interface{}, error), cmd string, args ...interface{}) {
 	err := setUp()
 	if err != nil {
 		b.Fatal(err)
@@ -148,43 +148,25 @@ func benchmarkSetTransaction(b *testing.B, num int) {
 		defer tearDown()
 	}
 
-	conn := zoom.GetConn()
-
-	if err := conn.Send("MULTI"); err != nil {
-		b.Fatal(err)
+	if setup != nil {
+		setup()
 	}
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
+		conn := zoom.GetConn()
+		reply, err := conn.Do(cmd, args...)
 		b.StopTimer()
-		key := "foo_" + strconv.Itoa(i)
-		val := "bar_" + strconv.Itoa(i)
+		if checkReply != nil {
+			checkReply(reply, err)
+		}
 		b.StartTimer()
-		err := conn.Send("SET", key, val)
-		b.StopTimer()
-		if err != nil {
-			b.Fatal(err)
-		}
-		if i%num == 0 {
-			b.StartTimer()
-			// call exec and start a new transaction
-			_, err := conn.Do("EXEC")
-			b.StopTimer()
-			if err != nil {
-				b.Fatal(err)
-			}
-			b.StartTimer()
-			conn.Send("MULTI")
-		}
+		conn.Close()
 	}
-
-	// make sure the pipeline is flushed before the next test
-	conn.Do("EXEC")
-	conn.Close()
 }
 
-func benchmarkGetTransaction(b *testing.B, num int) {
+func benchmarkSave(b *testing.B, num int, personSelect func(int, []*Person) *Person) {
 	err := setUp()
 	if err != nil {
 		b.Fatal(err)
@@ -192,48 +174,70 @@ func benchmarkGetTransaction(b *testing.B, num int) {
 		defer tearDown()
 	}
 
-	tConn := zoom.GetConn() // used for transactional GETs
-	mConn := zoom.GetConn() // used for non-transactional SETs in between
+	// create a sequence of persons to be saved
+	persons := createPersons(num)
 
-	if err := tConn.Send("MULTI"); err != nil {
-		b.Fatal(err)
-	}
-
+	// reset the timer
 	b.ResetTimer()
 
+	// run the actual test
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		key := "foo_" + strconv.Itoa(i)
-		val := "bar_" + strconv.Itoa(i)
-		_, err := mConn.Do("SET", key, val)
+		p := personSelect(i, persons)
+		b.StartTimer()
+		err := zoom.Save(p)
+		b.StopTimer()
 		if err != nil {
 			b.Fatal(err)
 		}
 		b.StartTimer()
-		err = tConn.Send("GET", key)
-		b.StopTimer()
-		if err != nil {
-			b.Fatal(err)
-		}
-		if i%num == 0 {
-			b.StartTimer()
-			// call exec and start a new transaction
-			_, err := tConn.Do("EXEC")
-			b.StopTimer()
-			if err != nil {
-				b.Fatal(err)
-			}
-			b.StartTimer()
-			tConn.Send("MULTI")
-		}
 	}
-
-	// make sure the pipeline is flushed before the next test
-	tConn.Do("EXEC")
-	tConn.Close()
 }
 
-func benchmarkFindAll(b *testing.B, num int) {
+func benchmarkFindById(b *testing.B, num int, idSelect func(int, []string) string) {
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	ids := savePersons(num)
+
+	// reset the timer
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		id := idSelect(i, ids)
+		b.StartTimer()
+		zoom.FindById("person", id)
+	}
+}
+
+func benchmarkDeleteById(b *testing.B, num int, idSelect func(int, []string) string) {
+	err := setUp()
+	if err != nil {
+		b.Fatal(err)
+	} else {
+		defer tearDown()
+	}
+
+	ids := savePersons(num)
+
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		id := idSelect(i, ids)
+		b.StartTimer()
+		zoom.DeleteById("person", id)
+	}
+}
+
+func benchmarkFindAll(b *testing.B, num int, onEach func()) {
 	err := setUp()
 	if err != nil {
 		b.Fatal(err)
@@ -248,28 +252,20 @@ func benchmarkFindAll(b *testing.B, num int) {
 	// run the actual test
 	for i := 0; i < b.N; i++ {
 		zoom.FindAll("person")
+		b.StopTimer()
+		if onEach != nil {
+			onEach()
+		}
+		b.StartTimer()
 	}
+}
+
+func benchmarkFindAllWithCache(b *testing.B, num int) {
+	benchmarkFindAll(b, num, nil)
 }
 
 func benchmarkFindAllNoCache(b *testing.B, num int) {
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	savePersons(num)
-
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		zoom.FindAll("person")
-		b.StopTimer()
-		zoom.ClearCache()
-		b.StartTimer()
-	}
+	benchmarkFindAll(b, num, func() { zoom.ClearCache() })
 }
 
 func benchmarkRepeatSaveOneToMany(b *testing.B, numChildren int) {
@@ -296,7 +292,7 @@ func benchmarkRepeatSaveOneToMany(b *testing.B, numChildren int) {
 	}
 }
 
-func benchmarkRepeatFindOneToMany(b *testing.B, numChildren int) {
+func benchmarkFindOneToMany(b *testing.B, numParents, numChildren int, selectId func(int, []string) string) {
 	err := setUp()
 	if err != nil {
 		b.Fatal(err)
@@ -304,14 +300,14 @@ func benchmarkRepeatFindOneToMany(b *testing.B, numChildren int) {
 		defer tearDown()
 	}
 
-	ids := saveParentsWithChildren(1, numChildren)
+	ids := saveParentsWithChildren(numParents, numChildren)
 
 	b.ResetTimer()
 
 	// run the actual test
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		id := ids[0]
+		id := selectId(i, ids)
 		b.StartTimer()
 		_, err := zoom.FindById("parent", id)
 		b.StopTimer()
@@ -322,66 +318,29 @@ func benchmarkRepeatFindOneToMany(b *testing.B, numChildren int) {
 	}
 }
 
-func benchmarkSequentialFindOneToMany(b *testing.B, numChildren int) {
-
-	b.StopTimer()
-
-	const NUM_PARENTS = 100
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	ids := saveParentsWithChildren(NUM_PARENTS, numChildren)
-
-	b.StartTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		index := i % NUM_PARENTS
-		id := ids[index]
-		b.StartTimer()
-		_, err := zoom.FindById("parent", id)
-		b.StopTimer()
-		if err != nil {
-			b.Fatal(err)
-		}
-		b.StartTimer()
-	}
+func singleIdSelect(i int, ids []string) string {
+	return ids[0]
 }
 
-func benchmarkRandomFindOneToMany(b *testing.B, numChildren int) {
+func sequentialIdSelect(i int, ids []string) string {
+	return ids[i%len(ids)]
+}
 
-	b.StopTimer()
+func randomIdSelect(i int, ids []string) string {
+	return ids[randInt(0, len(ids))]
+}
 
-	const NUM_PARENTS = 100
+func singleIdSelectNoCache(i int, ids []string) string {
+	zoom.ClearCache()
+	return ids[0]
+}
 
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
+func sequentialIdSelectNoCache(i int, ids []string) string {
+	zoom.ClearCache()
+	return ids[i%len(ids)]
+}
 
-	ids := saveParentsWithChildren(NUM_PARENTS, numChildren)
-
-	b.StartTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		index := randInt(0, NUM_PARENTS)
-		id := ids[index]
-		b.StartTimer()
-		_, err := zoom.FindById("parent", id)
-		b.StopTimer()
-		if err != nil {
-			b.Fatal(err)
-		}
-		b.StartTimer()
-	}
+func randomIdSelectNoCache(i int, ids []string) string {
+	zoom.ClearCache()
+	return ids[randInt(0, len(ids))]
 }

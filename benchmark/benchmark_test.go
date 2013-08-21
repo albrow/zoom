@@ -26,19 +26,7 @@ func BenchmarkConnection(b *testing.B) {
 // get a connection, call PING, wait for response, and close it
 func BenchmarkPing(b *testing.B) {
 
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		conn := zoom.GetConn()
-		reply, err := conn.Do("PING")
-		b.StopTimer()
+	checkReply := func(reply interface{}, err error) {
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -49,82 +37,36 @@ func BenchmarkPing(b *testing.B) {
 		if str != "PONG" {
 			b.Fatal("reply was not PONG: ", str)
 		}
-		b.StartTimer()
-		conn.Close()
 	}
+
+	benchmarkCommand(b, nil, checkReply, "PING")
 }
 
 // get a connection, call SET, wait for response, and close it
 func BenchmarkSet(b *testing.B) {
 
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
-		conn := zoom.GetConn()
-		_, err := conn.Do("SET", "foo", "bar")
-		b.StopTimer()
+	checkReply := func(reply interface{}, err error) {
 		if err != nil {
 			b.Fatal(err)
 		}
-		b.StartTimer()
-		conn.Close()
 	}
-}
 
-// perform transactions with 10 SET commands each. Every 10th iteration,
-// the transaction is executed with a call to EXEC
-func BenchmarkSet10(b *testing.B) {
-	benchmarkSetTransaction(b, 10)
-}
-
-// perform transactions with 100 SET commands each. Every 100th iteration,
-// the transaction is executed with a call to EXEC
-func BenchmarkSet100(b *testing.B) {
-	benchmarkSetTransaction(b, 100)
-}
-
-// perform transactions with 1,000 SET commands each. Every 1,000th iteration,
-// the transaction is executed with a call to EXEC
-func BenchmarkSet1000(b *testing.B) {
-	benchmarkSetTransaction(b, 1000)
-}
-
-// perform transactions with 10,000 SET commands each. Every 10,000th iteration,
-// the transaction is executed with a call to EXEC
-func BenchmarkSet10000(b *testing.B) {
-	benchmarkSetTransaction(b, 10000)
+	benchmarkCommand(b, nil, checkReply, "SET", "foo", "bar")
 }
 
 // get a connection, call GET, wait for response, and close it
 func BenchmarkGet(b *testing.B) {
 
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	conn := zoom.GetConn()
-	_, err = conn.Do("SET", "foo", "bar")
-	if err != nil {
-		b.Fatal(err)
-	}
-	conn.Close()
-
-	b.ResetTimer()
-
-	for i := 0; i < b.N; i++ {
+	setup := func() {
 		conn := zoom.GetConn()
-		reply, err := conn.Do("GET", "foo")
-		b.StopTimer()
+		_, err := conn.Do("SET", "foo", "bar")
+		if err != nil {
+			b.Fatal(err)
+		}
+		conn.Close()
+	}
+
+	checkReply := func(reply interface{}, err error) {
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -136,350 +78,95 @@ func BenchmarkGet(b *testing.B) {
 		if str != "bar" {
 			b.Fatal("reply was not bar: ", str)
 		}
-		b.StartTimer()
-		conn.Close()
 	}
-}
 
-// perform transactions with 10 GET commands each. Every 10th iteration,
-// the transaction is executed with a call to EXEC
-func BenchmarkGet10(b *testing.B) {
-	benchmarkGetTransaction(b, 10)
-}
-
-// perform transactions with 100 GET commands each. Every 100th iteration,
-// the transaction is executed with a call to EXEC
-func BenchmarkGet100(b *testing.B) {
-	benchmarkGetTransaction(b, 100)
-}
-
-// perform transactions with 1,000 GET commands each. Every 1,000th iteration,
-// the transaction is executed with a call to EXEC
-func BenchmarkGet1000(b *testing.B) {
-	benchmarkGetTransaction(b, 1000)
-}
-
-// perform transactions with 10,000 GET commands each. Every 10,000th iteration,
-// the transaction is executed with a call to EXEC
-func BenchmarkGet10000(b *testing.B) {
-	benchmarkGetTransaction(b, 10000)
+	benchmarkCommand(b, setup, checkReply, "GET", "foo")
 }
 
 // saves the same record repeatedly
 // (after the first save, nothing changes)
 func BenchmarkRepeatSave(b *testing.B) {
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
+	singlePersonSelect := func(i int, persons []*Person) *Person {
+		return persons[0]
 	}
-
-	// try once to make sure there's no errors
-	persons := createPersons(1)
-
-	// reset the timer
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		p := persons[0]
-		b.StartTimer()
-		zoom.Save(p)
-	}
-
+	benchmarkSave(b, 1, singlePersonSelect)
 }
 
 // sequentially saves a list of records
 func BenchmarkSequentialSave(b *testing.B) {
-
-	const NUM_PERSONS = 10000
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
+	sequentialPersonSelect := func(i int, persons []*Person) *Person {
+		return persons[i%len(persons)]
 	}
-
-	// try once to make sure there's no errors
-	pt := NewPerson("Amy", 25)
-	err = zoom.Save(pt)
-	if err != nil {
-		b.Error(err)
-	}
-
-	// create a sequence of persons to be saved
-	persons := createPersons(NUM_PERSONS)
-
-	// reset the timer
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		index := i % NUM_PERSONS
-		p := persons[index]
-		b.StartTimer()
-		zoom.Save(p)
-	}
+	benchmarkSave(b, 1000, sequentialPersonSelect)
 }
 
 // finds the same record over and over
 func BenchmarkRepeatFindById(b *testing.B) {
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	ids := savePersons(1)
-
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		id := ids[0]
-		b.StartTimer()
-		zoom.FindById("person", id)
-	}
+	benchmarkFindById(b, 1000, singleIdSelect)
 }
 
 // sequentially finds a list of records one by one
 func BenchmarkSequentialFindById(b *testing.B) {
-
-	const NUM_PERSONS = 10000
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	ids := savePersons(NUM_PERSONS)
-
-	// reset the timer
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		index := i % NUM_PERSONS
-		id := ids[index]
-		b.StartTimer()
-		zoom.FindById("person", id)
-	}
+	benchmarkFindById(b, 1000, sequentialIdSelect)
 }
 
-// finds all the records in a list on by one in random order
+// randomly finds records from a list
 func BenchmarkRandomFindById(b *testing.B) {
-
-	const NUM_PERSONS = 10000
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	ids := savePersons(NUM_PERSONS)
-
-	// reset the timer
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		index := randInt(0, NUM_PERSONS)
-		id := ids[index]
-		b.StartTimer()
-		zoom.FindById("person", id)
-	}
+	benchmarkFindById(b, 1000, randomIdSelect)
 }
 
-// for the ..NoCache bencchmarks, we clear the cache before each Find
+// finds the same record over and over,
+// clearing the cache on each iteration
 func BenchmarkRepeatFindByIdNoCache(b *testing.B) {
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	ids := savePersons(1)
-
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		id := ids[0]
-		zoom.ClearCache()
-		b.StartTimer()
-		zoom.FindById("person", id)
-	}
+	benchmarkFindById(b, 1000, singleIdSelectNoCache)
 }
 
-// for the ..NoCache bencchmarks, we clear the cache before each Find
+// sequentially finds a list of records one by one,
+// clearing the cache on each iteration
 func BenchmarkSequentialFindByIdNoCache(b *testing.B) {
-
-	const NUM_PERSONS = 10000
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	ids := savePersons(NUM_PERSONS)
-
-	// reset the timer
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		index := i % NUM_PERSONS
-		id := ids[index]
-		zoom.ClearCache()
-		b.StartTimer()
-		zoom.FindById("person", id)
-	}
+	benchmarkFindById(b, 1000, sequentialIdSelectNoCache)
 }
 
-// for the ..NoCache bencchmarks, we clear the cache before each Find
+// randomly finds records from a list,
+// clearing the cache on each iteration
 func BenchmarkRandomFindByIdNoCache(b *testing.B) {
-
-	const NUM_PERSONS = 10000
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	ids := savePersons(NUM_PERSONS)
-
-	// reset the timer
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		index := randInt(0, NUM_PERSONS)
-		id := ids[index]
-		zoom.ClearCache()
-		b.StartTimer()
-		zoom.FindById("person", id)
-	}
+	benchmarkFindById(b, 1000, randomIdSelectNoCache)
 }
 
 // repeatedly calls delete on a record
 // (after the first, the record will have already been deleted)
 func BenchmarkRepeatDeleteById(b *testing.B) {
-
-	const NUM_PERSONS = 1
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	ids := savePersons(NUM_PERSONS)
-
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		id := ids[0]
-		b.StartTimer()
-		zoom.DeleteById("person", id)
-	}
+	benchmarkDeleteById(b, 1, singleIdSelect)
 }
 
 // sequentially deletes a list of records one by one
 func BenchmarkSequentialDeleteById(b *testing.B) {
-
-	const NUM_PERSONS = 10000
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	ids := savePersons(NUM_PERSONS)
-
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		index := i % NUM_PERSONS
-		id := ids[index]
-		b.StartTimer()
-		zoom.DeleteById("person", id)
-	}
+	benchmarkDeleteById(b, 1000, sequentialIdSelect)
 }
 
-// deletes a list of records one by one in random order
+// randomly calls delete on a list of records
 func BenchmarkRandomDeleteById(b *testing.B) {
-
-	const NUM_PERSONS = 10000
-
-	err := setUp()
-	if err != nil {
-		b.Fatal(err)
-	} else {
-		defer tearDown()
-	}
-
-	ids := savePersons(NUM_PERSONS)
-
-	b.ResetTimer()
-
-	// run the actual test
-	for i := 0; i < b.N; i++ {
-		b.StopTimer()
-		index := randInt(0, NUM_PERSONS)
-		id := ids[index]
-		b.StartTimer()
-		zoom.DeleteById("person", id)
-	}
+	benchmarkDeleteById(b, 1000, randomIdSelect)
 }
 
 // calls FindAll for a dataset of size 10
 func BenchmarkFindAll10(b *testing.B) {
-	benchmarkFindAll(b, 10)
+	benchmarkFindAllWithCache(b, 10)
 }
 
 // calls FindAll for a dataset of size 100
 func BenchmarkFindAll100(b *testing.B) {
-	benchmarkFindAll(b, 100)
+	benchmarkFindAllWithCache(b, 100)
 }
 
 // calls FindAll for a dataset of size 1000
 func BenchmarkFindAll1000(b *testing.B) {
-	benchmarkFindAll(b, 1000)
+	benchmarkFindAllWithCache(b, 1000)
 }
 
 // calls FindAll for a dataset of size 10000
 func BenchmarkFindAll10000(b *testing.B) {
-	benchmarkFindAll(b, 10000)
+	benchmarkFindAllWithCache(b, 10000)
 }
 
 // calls FindAll for a dataset of size 10,
@@ -511,73 +198,31 @@ func BenchmarkRepeatSaveOneToMany10(b *testing.B) {
 	benchmarkRepeatSaveOneToMany(b, 10)
 }
 
-// create a parent with 100 children and repeatedly call Save on it
-func BenchmarkRepeatSaveOneToMany100(b *testing.B) {
-	benchmarkRepeatSaveOneToMany(b, 100)
-}
-
 // create a parent with 1,000 children and repeatedly call Save on it
 func BenchmarkRepeatSaveOneToMany1000(b *testing.B) {
 	benchmarkRepeatSaveOneToMany(b, 1000)
 }
 
-// create a parent with 10,000 children and repeatedly call Save on it
-func BenchmarkRepeatSaveOneToMany10000(b *testing.B) {
-	benchmarkRepeatSaveOneToMany(b, 10000)
-}
-
-// create a parent with 10 children and repeatedly call find on it
-func BenchmarkRepeatFindOneToMany10(b *testing.B) {
-	benchmarkRepeatFindOneToMany(b, 10)
-}
-
-// create a parent with 100 children and repeatedly call find on it
-func BenchmarkRepeatFindOneToMany100(b *testing.B) {
-	benchmarkRepeatFindOneToMany(b, 100)
-}
-
-// create a parent with 1,000 children and repeatedly call find on it
-func BenchmarkRepeatFindOneToMany1000(b *testing.B) {
-	benchmarkRepeatFindOneToMany(b, 1000)
-}
-
-// create a parent with 10,000 children and repeatedly call find on it
-func BenchmarkRepeatFindOneToMany10000(b *testing.B) {
-	benchmarkRepeatFindOneToMany(b, 10000)
-}
-
-// create a list of parents with 10 children each. Then iterate through
-// the list sequentially calling FindById on each parent.
-func BenchmarkSequentialFindOneToMany10(b *testing.B) {
-	benchmarkSequentialFindOneToMany(b, 10)
-}
-
-// create a list of parents with 100 children each. Then iterate through
-// the list sequentially calling FindById on each parent.
-func BenchmarkSequentialFindOneToMany100(b *testing.B) {
-	benchmarkSequentialFindOneToMany(b, 100)
-}
-
-// create a list of parents with 1,000 children each. Then iterate through
-// the list sequentially calling FindById on each parent.
-func BenchmarkSequentialFindOneToMany1000(b *testing.B) {
-	benchmarkSequentialFindOneToMany(b, 1000)
-}
-
-// create a list of parents with 10 children each. Then iterate through
-// the list in random order, calling FindById on each parent.
+// create a list of parents with 10 children each. Then call
+// FindById for randomly selected parents in the list.
 func BenchmarkRandomFindOneToMany10(b *testing.B) {
-	benchmarkRandomFindOneToMany(b, 10)
+	benchmarkFindOneToMany(b, 100, 10, randomIdSelect)
 }
 
-// create a list of parents with 100 children each. Then iterate through
-// the list in random order, calling FindById on each parent.
-func BenchmarkRandomFindOneToMany100(b *testing.B) {
-	benchmarkRandomFindOneToMany(b, 100)
-}
-
-// create a list of parents with 1,000 children each. Then iterate through
-// the list in random order, calling FindById on each parent.
+// create a list of parents with 1,000 children each. Then call
+// FindById for randomly selected parents in the list.
 func BenchmarkRandomFindOneToMany1000(b *testing.B) {
-	benchmarkRandomFindOneToMany(b, 1000)
+	benchmarkFindOneToMany(b, 100, 1000, randomIdSelect)
+}
+
+// create a list of parents with 10 children each. Then call
+// FindById for randomly selected parents in the list.
+func BenchmarkRandomFindOneToManyNoCache10(b *testing.B) {
+	benchmarkFindOneToMany(b, 100, 10, randomIdSelectNoCache)
+}
+
+// create a list of parents with 1,000 children each. Then call
+// FindById for randomly selected parents in the list.
+func BenchmarkRandomFindOneToManyNoCache1000(b *testing.B) {
+	benchmarkFindOneToMany(b, 100, 1000, randomIdSelectNoCache)
 }

@@ -14,7 +14,7 @@ var zoomCache *cache.LRUCache
 // of once per model per INDEX_CACHE_THROTTLE duration.
 const INDEX_CACHE_THROTTLE time.Duration = 1 * time.Second
 
-var indexCaches map[string]*indexCache = make(map[string]*indexCache)
+var indexCacheLocks map[string]*indexCacheLock = make(map[string]*indexCacheLock)
 
 type cacheValue struct {
 	value interface{}
@@ -26,13 +26,13 @@ func newCacheValue(in interface{}) *cacheValue {
 	return &cacheValue{in, s}
 }
 
-type indexCache struct {
+type indexCacheLock struct {
 	m     *sync.Mutex
 	timer *time.Timer
 }
 
-func newIndexCache() *indexCache {
-	return &indexCache{
+func newIndexCache() *indexCacheLock {
+	return &indexCacheLock{
 		m:     &sync.Mutex{},
 		timer: nil,
 	}
@@ -47,10 +47,10 @@ func ClearCache() {
 }
 
 func ScheduleIndexCacheUpdate(modelName string) {
-	ic, found := indexCaches[modelName]
+	ic, found := indexCacheLocks[modelName]
 	if !found {
 		ic = newIndexCache()
-		indexCaches[modelName] = ic
+		indexCacheLocks[modelName] = ic
 	}
 	ic.m.Lock()
 	if ic.timer == nil {
@@ -63,10 +63,6 @@ func ScheduleIndexCacheUpdate(modelName string) {
 	} else {
 	}
 	ic.m.Unlock()
-}
-
-func asyncUpdateIndexCache(ic *indexCache, modelName string) {
-
 }
 
 func updateIndexCache(modelName string) {
