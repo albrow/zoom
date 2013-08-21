@@ -520,7 +520,7 @@ the [redis quickstart guide](http://redis.io/topics/quickstart) helpful, especia
 
 To run the benchmarks, again make sure you're in the project root directory and run:
 
-    go test ./bench --bench="."
+    go test ./benchmark -bench .
     
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new).
@@ -528,46 +528,54 @@ You should see some runtimes for various operations. If you see an error or if t
 Here are the results from my laptop (2.3GHz intel i7, 8GB ram):
 
 ```
-BenchmarkRepeatSave	   				50000	     66644 ns/op
-BenchmarkSequentialSave	   			20000	     70499 ns/op
-BenchmarkRepeatFindById	 			5000000	       460 ns/op
-BenchmarkSequentialFindById	 		5000000	       587 ns/op
-BenchmarkRandomFindById	 			2000000	       620 ns/op
-BenchmarkRepeatFindByIdNoCache	   	50000	     68513 ns/op
-BenchmarkSequentialFindByIdNoCache	20000	     72180 ns/op
-BenchmarkRandomFindByIdNoCache	   	20000	     71904 ns/op
-BenchmarkRepeatDeleteById	   		50000	     56375 ns/op
-BenchmarkSequentialDeleteById	   	20000	     61850 ns/op
-BenchmarkRandomDeleteById	   		20000	     62037 ns/op
-BenchmarkFindAll10	   				50000	     59085 ns/op
-BenchmarkFindAll100	   				10000	    181426 ns/op
-BenchmarkFindAll1000	    		1000	   1410810 ns/op
-BenchmarkFindAll10000	     		100	  	  16803423 ns/op
+BenchmarkConnection		20000000	  93.4 ns/op
+BenchmarkPing	   		50000	     39224 ns/op
+BenchmarkSet	   		50000	     45488 ns/op
+BenchmarkGet	   		50000	     40358 ns/op
+
+BenchmarkRepeatSave	   				50000	     66611 ns/op
+BenchmarkSequentialSave	   			50000	     65305 ns/op
+BenchmarkRepeatFindById	 			5000000	       482 ns/op
+BenchmarkSequentialFindById	 		5000000	       516 ns/op
+BenchmarkRandomFindById	 			5000000	       536 ns/op
+BenchmarkRepeatFindByIdNoCache	  	50000	     68655 ns/op
+BenchmarkSequentialFindByIdNoCache	50000	     68258 ns/op
+BenchmarkRandomFindByIdNoCache	   	50000	     68944 ns/op
+BenchmarkRepeatDeleteById	   		50000	     58557 ns/op
+BenchmarkSequentialDeleteById	   	50000	     59049 ns/op
+BenchmarkRandomDeleteById	   		50000	     58773 ns/op
+BenchmarkFindAll10	 				5000000	       642 ns/op
+BenchmarkFindAll100	 				5000000	       650 ns/op
+BenchmarkFindAll1000			 	5000000	       659 ns/op
+BenchmarkFindAll10000	 			5000000	       710 ns/op
+BenchmarkFindAllNoCache10	    	2000	    759905 ns/op
+BenchmarkFindAllNoCache100	     	500	  	   7176779 ns/op
+BenchmarkFindAllNoCache1000 		100	  	  70498624 ns/op
+BenchmarkFindAllNoCache10000 		100	 	 732820152 ns/op
+
+BenchmarkRepeatSaveOneToMany10  			10000	    235596 ns/op
+BenchmarkRepeatSaveOneToMany1000			100	  	  11252917 ns/op
+BenchmarkRandomFindOneToMany10	 			5000000	       569 ns/op
+BenchmarkRandomFindOneToMany1000	 		2000000	       714 ns/op
+BenchmarkRandomFindOneToManyNoCache10	    5000	    641972 ns/op
+BenchmarkRandomFindOneToManyNoCache1000		20	  	  61739641 ns/op
 
 ```
 
-Because Zoom features an LRU read-only cache, FindById calls for cached elements are incredibly fast
-(you can do about 1.5 million random reads per second). The SequentialFindById and RandomFindById benchmarks
-each create 10,000 person objects and save them to the database. All 10,000 persons fit inside the cache,
-so those benchmarks don't demonstrate cache miss times. The benchmarks with the NoCache suffix clear the cache
-on each iteration, so they reflect latency for finding a record not in the cache. Typically, you will have a
-mix of cache hits and misses and should experiment with cache size to get the best performance for your use
-case.
+Zoom features an LRU language-level read-only cache. Finds for cached elements are incredibly fast
+(you can do about 1.5 million random reads per second). The benchmarks with the NoCache suffix clear
+the cache on each iteration, so they reflect latency for finding a record not in the cache.
 
-The slowest benchmarks by far are FindAll. It's apparent that the calls have a latency on the order of
-O(n) where n is the number of records for the particular type. (TODO: improve FindAll benchmarks with
-concurrency and/or transactions).
-
-You should run your own benchmarks that are closer to your use case to get a real sense of how Zoom will
-perform for you. The speeds above are already pretty fast, but improving them is one of the top priorities
-for this project.
+You should run your own benchmarks that are closer to your use case to get a real sense of how Zoom
+will perform for you. The speeds above are already pretty fast, but improving them is one of the top
+priorities for this project.
     
 Example Usage
 -------------
 
-The [zoom_example repository](https://github.com/stephenalexbrowne/zoom_example) is an up-to-date example
-of how to use Zoom in a json/rest application. Use it as a reference if anything above is not clear. Formal
-documentation is on my todo list.
+The [zoom_example repository](https://github.com/stephenalexbrowne/zoom_example) is an up-to-date
+example of how to use Zoom in a json/rest application. Use it as a reference if anything above is
+not clear. Formal documentation is on my todo list.
 
 
 TODO
@@ -576,14 +584,14 @@ TODO
 In no particular order, here's what I'm working on:
 
 
-- Use transactions where possible to increase performance and robustness (a la multi/exec)
 - Implement sorting
 - Add CreatedAt and UpdatedAt attributes to zoom.Model
-- Be able to save arrays embedded in structs
 - Implement saving arbitrary embedded structs (even if not registered)
 - Write good, formal documentation
 - Re-implement low-level pub/sub (currently missing entirely)
 - Implement high-level watching for record changes
+- Add option to make relations reflexive
+- Add a dependent:delete struct tag
 
 
 LICENSE
