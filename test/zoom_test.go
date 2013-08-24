@@ -35,6 +35,13 @@ func (s *MainSuite) SetUpSuite(c *C) {
 	if err != nil {
 		c.Error(err)
 	}
+
+	// register the Pet model
+	err = zoom.Register(new(Pet), "pet")
+	if err != nil {
+		c.Error(err)
+	}
+
 }
 
 func (s *MainSuite) TearDownSuite(c *C) {
@@ -167,12 +174,6 @@ func (s *MainSuite) TestDeleteById(c *C) {
 
 func (s *MainSuite) TestFindAll(c *C) {
 
-	// register the Pet model
-	err := zoom.Register(new(Pet), "pet")
-	if err != nil {
-		c.Error(err)
-	}
-
 	// Create and save some Pets
 	// we can assume this works since
 	// Save() was tested previously
@@ -195,34 +196,71 @@ func (s *MainSuite) TestFindAll(c *C) {
 	// make sure each item in results is correct
 	// NOTE: this is tricky because the order can
 	// change in redis and we haven't asked for any sorting
-	expecteds := []*Pet{p1, p2, p3}
+	expectedNames := []string{p1.Name, p2.Name, p3.Name}
+	gotNames := []string{}
 	for i, result := range results {
-		// first, each item in results should be able to be casted to *Pet
+		// each item in results should be able to be casted to *Pet
 		pResult, ok := result.(*Pet)
 		if !ok {
 			c.Errorf("Couldn't cast results[%d] to *Pet", i)
 		}
-		// second, each item in results should have a valid Id
+		// each item in results should have a valid Id
 		if pResult.Id == "" {
 			c.Error("Id was not set for Pet: ", pResult)
 		}
-		// third, each item in results should correspond and be equal to
-		// one of the items in expecteds
-		foundIdMatch := false
-		for _, expected := range expecteds {
-			if pResult.Id == expected.Id {
-				c.Assert(pResult.Name, Equals, expected.Name)
-				c.Assert(pResult.Kind, Equals, expected.Kind)
-				foundIdMatch = true
-				break
-			}
-		}
-		// if we've reached here, the result.Id did not match any of the ids
-		// in expecteds.
-		if foundIdMatch == false {
-			c.Errorf("Couldn't find matching id in result set for: %s", pResult.Id)
-		}
+		gotNames = append(gotNames, pResult.Name)
 	}
+
+	equal, msg := compareAsStringSet(expectedNames, gotNames)
+	if !equal {
+		c.Errorf("expected: %v\ngot: %v\nmsg: %s\n", expectedNames, gotNames, msg)
+	}
+}
+
+func (s *MainSuite) TestIndexCache(c *C) {
+
+	conn := zoom.GetConn()
+	conn.Do("flushdb")
+	conn.Close()
+
+	// Create and save one Pet
+	p1 := NewPet("Elroy", "emu")
+	zoom.Save(p1)
+
+	// query to get a list of all the pets
+	results, err := zoom.FindAll("pet")
+	if err != nil {
+		c.Error(err)
+	}
+
+	// make sure there is one
+	c.Assert(len(results), Equals, 1)
+
+	// Create and save a second pet
+	p2 := NewPet("Fred", "ferret")
+	zoom.Save(p2)
+
+	// query to get a list of all the pets
+	results, err = zoom.FindAll("pet")
+	if err != nil {
+		c.Error(err)
+	}
+
+	// make sure there are two
+	c.Assert(len(results), Equals, 2)
+
+	// delete one of the pets
+	zoom.Delete(p2)
+
+	// query to get a list of all the pets
+	results, err = zoom.FindAll("pet")
+	if err != nil {
+		c.Error(err)
+	}
+
+	// make sure there is one
+	c.Assert(len(results), Equals, 1)
+
 }
 
 // NOTE:
