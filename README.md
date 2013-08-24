@@ -3,7 +3,7 @@ Zoom
 
 Version: X.X.X
 
-A blazing-fast, lightweight ORM-ish library for go and redis.
+A blazing-fast, lightweight ORM for Go built on Redis.
 
 **WARNING:** this isn't done yet and may change significantly before the official release. I do not
 advise using Zoom for production or mission-critical applications. Feedback and pull requests are welcome :)
@@ -12,22 +12,32 @@ advise using Zoom for production or mission-critical applications. Feedback and 
 Philosophy
 ----------
 
+If you want to build a high-performing, low latency application, but still want some of the ease
+of an ORM, Zoom is for you!
+
 Zoom allows you to:
 
 - Persistently save structs of any type
 - Retrieve structs from the database
 - Preserve relationships between structs
 
-Zoom, like the Go language, is intended to be minimal. It is a light-weight ORM with a clear set of goals.
-It does what it's supposed to and it also does it ***very fast***.
-[Check the benchmarks](#running-the-benchmarks).
+Zoom consciously makes the trade off of using more memory in order to increase performance. However,
+you can configure it to use less memory if you want. Zoom does not do sharding (but might in the future),
+so be aware that memory could be a hard constraint for larger applications.
+
+Zoom is a high-level library and abstracts away more complicated aspects of the Redis API. For example,
+it manages its own connection pool, performs transactions when possible, and automatically converts
+structs to and from a format suitable for the database. If needed, you can still execute redis commands
+directly.
+
+Most importantly, Zoom is ***fast***. [Check the benchmarks](#running-the-benchmarks).
 
 
 Installation
 ------------
 
-First, you must install redis on your system. [See installation instructions](http://redis.io/download).
-By default, Zoom will use a tcp/http connection on localhost:6379 (same as the redis default).
+First, you must install Redis on your system. [See installation instructions](http://redis.io/download).
+By default, Zoom will use a tcp/http connection on localhost:6379 (same as the Redis default).
 
 To install Zoom itself:
 
@@ -49,8 +59,8 @@ import (
 )
 ```
 
-Then, call Zoom.Init() somewhere in your app initialization code, e.g. in the main() method. You must
-also call Zoom.Close() when your application exits, so it's a good idea to use defer.
+Then, call Zoom.Init somewhere in your app initialization code, e.g. in the main method. You must
+also call Zoom.Close when your application exits, so it's a good idea to use defer.
 
 ``` go
 func main() {
@@ -63,7 +73,7 @@ func main() {
 }
 ```
 
-The Init() method takes a *zoom.Configuration struct as an argument. Here's a list of options and their
+The Init method takes a *zoom.Configuration struct as an argument. Here's a list of options and their
 defaults:
 
 ``` go
@@ -71,19 +81,19 @@ type Configuration struct {
 	Address       string // Address to connect to. Default: "localhost:6379"
 	Network       string // Network to use. Default: "tcp"
 	Database      int    // Database id to use (using SELECT). Default: 0
-	CacheCapacity uint64 // Size of the cache in bytes. Default: 100000 (100kB)
+	CacheCapacity uint64 // Size of the cache in bytes. Default: 67108864 (64 MB)
 	CacheDisabled bool   // If true, cache will be disabled. Default: false
 }
 ```
 
 If possible, it is ***strongly recommended*** that you use a unix socket connection instead of tcp.
 Redis is roughly [50% faster](http://redis.io/topics/benchmarks) this way. To connect with a unix
-socket, you must first configure redis to accept socket connections on /tmp/redis.sock (or somewhere else).
-If you are unsure how to do this, refer to the [official redis docs](http://redis.io/topics/config) for help.
-You might also find the [redis quickstart guide](http://redis.io/topics/quickstart) helpful, especially the bottom
-sections.
+socket, you must first configure redis to accept socket connections (typically on /tmp/redis.sock).
+If you are unsure how to do this, refer to the [official redis docs](http://redis.io/topics/config)
+for help. You might also find the [redis quickstart guide](http://redis.io/topics/quickstart) helpful,
+especially the bottom sections.
 
-Then, when you call Zoom.Init(), simply pass in "unix" as the Network and "/tmp/unix.sock" as the Address:
+To use unix sockets with Zoom, simply pass in "unix" as the Network and "/tmp/unix.sock" as the Address:
 
 
 ``` go
@@ -98,8 +108,8 @@ if err := zoom.Init(config); err != nil {
 
 ### Creating your models
 
-In order to save a struct using Zoom, you need to add an embedded struct attribute. Throughout the rest of
-this guide, we'll be using a Person struct as an example:
+In order to save a struct using Zoom, you need to embed an anonymous *zoom.Model field. Here's
+an example of a Person model:
 
 ``` go
 type Person struct {
@@ -108,10 +118,10 @@ type Person struct {
 }
 ```
 
-The *zoom.Model embedded attribute automatically gives you an Id field. You do not need to add an Id field
+*zoom.Model automatically gives you an Id field. You do not need to add an Id field
 to the struct.
 
-**Important:** In the constructor, you must initialize the embedded *zoom.Model attribute. Something like this:
+**Important:** In the constructor, you must initialize the Model field. Something like this:
 
 ``` go
 func NewPerson(name string) *Person {
@@ -122,8 +132,8 @@ func NewPerson(name string) *Person {
 }
 ```
 
-You must also call zoom.Register() so that Zoom knows what name to assign to the *Person type. You only
-need to do this once per type. For example, somewhere in your initialization sequence (e.g. in the main()
+You must also call zoom.Register so that Zoom knows what name to assign to the *Person type. You only
+need to do this once per type. For example, somewhere in your initialization sequence (e.g. in the main
 method) put the following:
 
 ``` go
@@ -133,9 +143,9 @@ if err := zoom.Register(&Person{}, "person"); err != nil {
 }
 ```
 
-### Saving to Redis
+### Saving Models
 
-To persistently save a Person model to the databse, you would simply call zoom.Save()
+To persistently save a Person model to the databse, simply call zoom.Save
 
 ``` go
 p := NewPerson("Alice")
@@ -144,7 +154,7 @@ if err := zoom.Save(p); err != nil {
 }
 ```
 
-### Retreiving from Redis
+### Retreiving Models
 
 Zoom will automatically assign a random, unique id to each saved model. To retrieve a model by id,
 you must use the same string name you used in zoom.Register. The return type
@@ -163,7 +173,7 @@ if !ok {
 }
 ```
 
-You also have the option of using the ScanById() function. Instead of taking a string name, it takes a
+You also have the option of using the ScanById function. Instead of taking a string name, it takes a
 pointer to a struct as an argument and fills in the fields of that struct. This can lead to slightly cleaner
 code because it removes the need for a type assertion.
 
@@ -174,10 +184,10 @@ if err := zoom.ScanById(p, "your-person-id"); err != nil {
 }
 ```
 
-Note that in the above code, we didn't need to use the NewPerson constructor or instantiate the zoom.Model
-anonymous field. Just pass in an empty struct of any registered type.
-    
-To retrieve a list of all persons use zoom.FindAll(). Like FindById() the return type is []interface{}.
+Note that in the above code, we didn't need to use the NewPerson constructor or instantiate the anonymous
+Model field. For ScanById, you can just pass in an empty struct of any registered type.
+
+To retrieve a list of all persons use zoom.FindAll. Like FindById the return type is []interface{}.
 If you want an array or slice of *Person, you need to type assert each element individually.
 
 ``` go
@@ -199,10 +209,32 @@ for i, result := range results {
 To avoid redundant type assertions, it might be helpful to wrap your own functions/methods around the Zoom API.
 Especially for FindAll methods.
 
-### One-to-One Relations
+### Deleting Models
+
+To delete a model you can just use the Delete method:
+
+``` go
+if err := zoom.Delete(person); err != nil {
+	// handle err
+}
+```
+
+Or use the DeleteById method:
+
+``` go
+if err := zoom.DeleteById("some_person_id"); err != nil {
+	// handle err
+}
+```
+
+## Relations
 
 Relations in Zoom are dead simple. There are no special return types or methods for using relations.
-What you put in is what you get out. For these examples we're going to introduce two new struct types:
+What you put in is what you get out.
+
+### One-to-One Relations
+
+For these examples we're going to introduce two new struct types:
 
 ``` go
 // The PetOwner struct
@@ -252,8 +284,8 @@ if err := zoom.Save(owner); err != nil {
 }
 ```
 
-Behind the scenes, Zoom creates a seperate database entry for Pet and assigns it an Id. Now if you retrieve
-the PetOwner by it's id, the Pet attribute will persist as well.
+Behind the scenes, Zoom creates a seperate database entry for the pet and assigns it an id. Now if you
+retrieve the pet owner by it's id, the pet attribute will persist as well.
 
 For now, Zoom does not support reflexivity of one-to-one relations. So if you want pet ownership to be
 bidirectional (i.e. if you want an owner to know about its pet **and** a pet to know about its owner),
@@ -278,7 +310,7 @@ fmt.Println(ownerCopy.Pet.Name)
 //	Spot
 ```
 
-The Pet is stored in its own database entry, so you could retreive the pet named "Spot" directly by 
+The pet is stored in its own database entry, so you could retreive the pet named "Spot" directly by 
 it's id (if you know it). You can also examine the list of pets to see that it is there.
 
 ``` go
@@ -327,7 +359,7 @@ func NewChild(name string) *Child {
 ```
 
 Assuming you register both the *Parent and *Child types, Zoom will automatically set up a relation
-for you when you save a Parent with non-nil Children. Here's an example:
+for you when you save a parent with non-nil children. Here's an example:
 
 ``` go
 // create a parent and two children
@@ -344,12 +376,12 @@ if err := zoom.Save(parent); err != nil {
 }
 ```
 
-When the above code is run, Zoom will create a database entry for each child, and give them a unique id.
+When the above code is run, Zoom will create a database entry for each child and give them a unique id.
 
-Again, Zoom does not support reflexivity. So if you wanted a Child to know about its Parent, you would have
+Again, Zoom does not support reflexivity. So if you wanted a child to know about its parent, you would have
 to set up and manage the relation manually. This might change in the future.
 
-Now when you retrieve a parent by id, it's Children attribute will automatically be populated. So getting
+Now when you retrieve a parent by id, it's children attribute will automatically be populated. So getting
 the children again is straight forward.
 
 ``` go
@@ -449,10 +481,11 @@ Recall that Zoom does not support reflexivity of relations. So if you want frien
 you would have to manually add each person to the list of the other's friends. This might change in the future.
 
 Also note that in the above example, Zoom will create separate database entries for Hellen, Ilene, and Jim
-because they are related to Fred and George, even though we did not call Save() explicitly.
+because they are related to Fred and George, even though we did not call Save explicitly.
 
-Retrieving many-to-many relations works exactly the same as one-to-many. When you get a Friend struct from
-the database using FindById or FindAll, the Friends array is auto-filled. You get out whatever you put in.
+Retrieving many-to-many relations works exactly the same as one-to-many. When you get a friend from
+the database using FindById or FindAll, the friend.Friends array is auto-filled. You get out whatever
+you put in.
 
 ``` go
 // retrieve fred from the database
@@ -562,8 +595,8 @@ BenchmarkRandomFindOneToManyNoCache1000		20	  	  61739641 ns/op
 
 ```
 
-Zoom features an LRU language-level read-only cache. Finds for cached elements are incredibly fast
-(you can do about 1.5 million random reads per second). The benchmarks with the NoCache suffix clear
+Zoom features an LRU, language-level, read-only cache. Finds for cached elements are incredibly fast
+(you can do about 1.5 million random finds per second). The benchmarks with the NoCache suffix clear
 the cache on each iteration, so they reflect latency for finding a record not in the cache.
 
 You should run your own benchmarks that are closer to your use case to get a real sense of how Zoom
