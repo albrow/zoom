@@ -130,6 +130,7 @@ func (s *RelateSuite) TestOneToOne(c *C) {
 }
 
 func (s *RelateSuite) TestOneToMany(c *C) {
+
 	// Create a Parent and two children
 	parent := NewParent("Christine")
 	child1 := NewChild("Derick")
@@ -159,9 +160,32 @@ func (s *RelateSuite) TestOneToMany(c *C) {
 	// make sure that the children match the original
 	// length should be 2
 	c.Assert(len(parent2.Children), Equals, 2)
+
+	// the ids of the two children should be as expected
+	expectedIds := []string{child1.Id, child2.Id}
+	for _, child := range parent2.Children {
+		// child.Id should not be blank
+		c.Assert(child.Id, Not(Equals), "")
+
+		index := indexOfStringSlice(child.Id, expectedIds)
+		if index == -1 {
+			c.Error("Unexpected child.Id: ", child.Id)
+			break
+		}
+		// remove from expected. makes sure we have one of each
+		expectedIds = removeFromStringSlice(expectedIds, index)
+	}
+	// now expectedIds should be empty. If it's not, there's a problem
+	if len(expectedIds) != 0 {
+		c.Errorf("At least one expected child.Id was not found: %v\n", expectedIds)
+	}
+
 	// the names of the two children should be "Derick" and "Elise"
 	expectedNames := []string{"Derick", "Elise"}
 	for _, child := range parent2.Children {
+		// child.Name should not be blank
+		c.Assert(child.Name, Not(Equals), "")
+
 		index := indexOfStringSlice(child.Name, expectedNames)
 		if index == -1 {
 			c.Error("Unexpected child.name: ", child.Name)
@@ -208,6 +232,25 @@ func (s *RelateSuite) TestManyToMany(c *C) {
 	}
 	c.Assert(len(results), Equals, 5)
 
+	// make sure all the Ids are correct
+	expectedIds := []string{fred.Id, george.Id, hellen.Id, ilene.Id, jim.Id}
+	gotIds := []string{}
+	for _, result := range results {
+		friend, ok := result.(*Person)
+		if !ok {
+			c.Errorf("Couldn't convert %+v to *Person\n", result)
+		}
+		// friend.Id should not be blank
+		c.Assert(friend.Id, Not(Equals), "")
+
+		gotIds = append(gotIds, friend.Id)
+	}
+	equal, msg := compareAsStringSet(expectedIds, gotIds)
+	if !equal {
+		c.Errorf(msg)
+	}
+
+	// make sure all the names are correct
 	expectedNames := []string{"Fred", "George", "Hellen", "Ilene", "Jim"}
 	gotNames := []string{}
 	for _, result := range results {
@@ -215,9 +258,12 @@ func (s *RelateSuite) TestManyToMany(c *C) {
 		if !ok {
 			c.Errorf("Couldn't convert %+v to *Person\n", result)
 		}
+		// friend.Name should not be blank
+		c.Assert(friend.Name, Not(Equals), "")
+
 		gotNames = append(gotNames, friend.Name)
 	}
-	equal, msg := compareAsStringSet(expectedNames, gotNames)
+	equal, msg = compareAsStringSet(expectedNames, gotNames)
 	if !equal {
 		c.Errorf(msg)
 	}
@@ -238,9 +284,27 @@ func (s *RelateSuite) TestManyToMany(c *C) {
 	c.Assert(fredCopy.Name, Equals, "Fred")
 
 	// make sure he remembers his friends
+	// check friend ids
+	expectedIds = []string{george.Id, hellen.Id, jim.Id}
+	gotIds = []string{}
+	for _, friend := range fredCopy.Friends {
+		// friend.Id should not be blank
+		c.Assert(friend.Id, Not(Equals), "")
+
+		gotIds = append(gotIds, friend.Id)
+	}
+	equal, msg = compareAsStringSet(expectedIds, gotIds)
+	if !equal {
+		c.Errorf(msg)
+	}
+
+	// check friend names
 	expectedNames = []string{"George", "Hellen", "Jim"}
 	gotNames = []string{}
-	for _, friend := range fred.Friends {
+	for _, friend := range fredCopy.Friends {
+		// friend.Name should not be blank
+		c.Assert(friend.Name, Not(Equals), "")
+
 		gotNames = append(gotNames, friend.Name)
 	}
 	equal, msg = compareAsStringSet(expectedNames, gotNames)
@@ -264,9 +328,27 @@ func (s *RelateSuite) TestManyToMany(c *C) {
 	c.Assert(georgeCopy.Name, Equals, "George")
 
 	// make sure he remembers his friends
+	// check friend ids
+	expectedIds = []string{fred.Id, hellen.Id, ilene.Id}
+	gotIds = []string{}
+	for _, friend := range georgeCopy.Friends {
+		// friend.Id should not be blank
+		c.Assert(friend.Id, Not(Equals), "")
+
+		gotIds = append(gotIds, friend.Id)
+	}
+	equal, msg = compareAsStringSet(expectedIds, gotIds)
+	if !equal {
+		c.Errorf(msg)
+	}
+
+	// check friend names
 	expectedNames = []string{"Fred", "Hellen", "Ilene"}
 	gotNames = []string{}
-	for _, friend := range george.Friends {
+	for _, friend := range georgeCopy.Friends {
+		// friend.Name should not be blank
+		c.Assert(friend.Name, Not(Equals), "")
+
 		gotNames = append(gotNames, friend.Name)
 	}
 	equal, msg = compareAsStringSet(expectedNames, gotNames)

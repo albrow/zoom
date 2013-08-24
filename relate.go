@@ -29,15 +29,17 @@ func saveRelations(in ModelInterface, val reflect.Value, ss *structSpec, name st
 		if r.typ == ONE_TO_ONE {
 
 			// commit to database
-			relModel, err := commitRelation(r, relVal, conn)
+			relModel, err := queueRelation(r, relVal, conn)
 			if err != nil {
 				return err
 			}
 
+			// add a command to the queue which will
 			// add a relation key to the parent interface (in)
 			key := name + ":" + in.GetId() + ":" + r.fieldName
-			_, err = conn.Do("set", key, relModel.GetId())
-			if err != nil {
+			if err := conn.Send("set", key, relModel.GetId()); err != nil {
+				// cancel transaction and return err
+				conn.Do("discard")
 				return err
 			}
 
@@ -47,15 +49,17 @@ func saveRelations(in ModelInterface, val reflect.Value, ss *structSpec, name st
 				relElem := relVal.Index(i)
 
 				// commit to database
-				relModel, err := commitRelation(r, relElem, conn)
+				relModel, err := queueRelation(r, relElem, conn)
 				if err != nil {
 					return err
 				}
 
+				// add a command to the queue which will
 				// add a relation key to the parent interface (in)
 				key := name + ":" + in.GetId() + ":" + r.fieldName
-				_, err = conn.Do("sadd", key, relModel.GetId())
-				if err != nil {
+				if err := conn.Send("sadd", key, relModel.GetId()); err != nil {
+					// cancel transaction and return err
+					conn.Do("discard")
 					return err
 				}
 			}
@@ -64,9 +68,9 @@ func saveRelations(in ModelInterface, val reflect.Value, ss *structSpec, name st
 	return nil
 }
 
-// commits the relational struct to database and returns a ModelInterface that can be used
-// to get the id
-func commitRelation(r *relation, relVal reflect.Value, conn redis.Conn) (ModelInterface, error) {
+// adds a command to the queue to add the relational struct to database and
+// returns a ModelInterface that can be used
+func queueRelation(r *relation, relVal reflect.Value, conn redis.Conn) (ModelInterface, error) {
 	// cast to a ModelInterface
 	relModel, ok := relVal.Interface().(ModelInterface)
 	if !ok {
@@ -84,15 +88,16 @@ func commitRelation(r *relation, relVal reflect.Value, conn redis.Conn) (ModelIn
 	args := Args{}.Add(key)
 	args = append(args, argsForSpec(relVal.Elem(), r.spec)...)
 
-	// invoke redis driver to commit to database
-	_, err := conn.Do("hmset", args...)
-	if err != nil {
+	// add a command to the queue which will
+	// add the struct to the database as a redis hash
+	if err := conn.Send("hmset", args...); err != nil {
+		// cancel transaction and return err
+		conn.Do("discard")
 		return nil, err
 	}
 
 	// add to the index for this model
-	err = addToIndex(r.redisName, relModel.GetId(), conn)
-	if err != nil {
+	if err := queueAddToIndex(r.redisName, relModel.GetId(), conn); err != nil {
 		return nil, err
 	}
 
@@ -142,39 +147,9 @@ func scanOneToOneRelation(r *relation, modelVal reflect.Value, key string, conn 
 		return errors.New(msg)
 	}
 
-	// invoke redis to find and scan the relation into the struct represented by modelVal
-	if err := scanRelation(r, relId, relField, conn); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func scanOneToManyRelation(r *relation, modelVal reflect.Value, key string, conn redis.Conn) error {
-	// invoke redis driver to get a set of keys
-	relIds, err := redis.Strings(conn.Do("smembers", key))
-	if err != nil {
-		return err
-	}
-
-	for _, relId := range relIds {
-
-		// create a settable slice element
-		relField := modelVal.Elem().FieldByName(r.fieldName)
-
-		// invoke redis to find and scan the relation into the struct represented by modelVal
-		if err := scanRelation(r, relId, relField, conn); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func scanRelation(r *relation, relId string, settable reflect.Value, conn redis.Conn) error {
-
 	// see if the relation has been saved in redis
 	// if not we should just leave it as nil
-	key := r.redisName + ":" + relId
+	key = r.redisName + ":" + relId
 	exists, err := KeyExists(key, conn)
 	if err != nil {
 		return err
@@ -192,11 +167,7 @@ func scanRelation(r *relation, relId string, settable reflect.Value, conn redis.
 	// create a new struct and instantiate its Model attribute
 	// this gives us the embedded methods and properties on Model
 	var relVal reflect.Value
-	if r.typ == ONE_TO_ONE {
-		relVal = reflect.New(settable.Type().Elem())
-	} else {
-		relVal = reflect.New(settable.Type().Elem().Elem())
-	}
+	relVal = reflect.New(relField.Type().Elem())
 	relVal.Elem().FieldByName("Model").Set(reflect.ValueOf(new(Model)))
 
 	// type assert to ModelInterface so we can use SetId()
@@ -211,14 +182,107 @@ func scanRelation(r *relation, relId string, settable reflect.Value, conn redis.
 	// set the id
 	relModel.SetId(relId)
 
-	// set settable to the value of the new struct we just created
-	if r.typ == ONE_TO_ONE {
-		settable.Set(relVal)
-	} else if r.typ == ONE_TO_MANY {
-		// for one-to-many, this means appending to the slice of related structs
+	// set relField to the value of the new struct we just created
+	relField.Set(relVal)
+
+	return nil
+}
+
+func scanOneToManyRelation(r *relation, modelVal reflect.Value, key string, conn redis.Conn) error {
+	// invoke redis driver to get a set of keys
+	relIds, err := redis.Strings(conn.Do("smembers", key))
+	if err != nil {
+		return err
+	}
+
+	// setup a transaction
+	if err := conn.Send("multi"); err != nil {
+		return err
+	}
+
+	validIds := make([]string, 0)
+
+	// We'll pipeline this by first executing all the redis queries,
+	// then dealing with each response.
+	for _, relId := range relIds {
+		validId, err := queueOneToManyRelation(r, relId, conn)
+		if err != nil {
+			return err
+		}
+		// if validId is not blank, we take it to mean that the command was added
+		// and the model with the id validId is going to be read and scanned
+		if validId != "" {
+			validIds = append(validIds, validId)
+		}
+	}
+
+	// call EXEC to execute all the commands in the transaction queue
+	replies, err := redis.MultiBulk(conn.Do("exec"))
+	if err != nil {
+		return err
+	}
+
+	// now iterate through each reply and create structs, then append them to the slice
+	for _, reply := range replies {
+
+		// convert each reply to a slice
+		bulk, err := redis.MultiBulk(reply, nil)
+		if err != nil {
+			return err
+		}
+
+		// create a settable slice
+		settable := modelVal.Elem().FieldByName(r.fieldName)
+
+		// create a new struct and instantiate its Model attribute
+		// this gives us the embedded methods and properties on Model
+		relVal := reflect.New(settable.Type().Elem().Elem())
+		relVal.Elem().FieldByName("Model").Set(reflect.ValueOf(new(Model)))
+
+		// type assert to ModelInterface so we can use SetId()
+		relModel := relVal.Interface().(ModelInterface)
+
+		// fill in the values of the struct
+		err = ScanStruct(bulk, relModel)
+		if err != nil {
+			return err
+		}
+
+		// set the id
+		id := validIds[0]
+		validIds = validIds[1:]
+		relModel.SetId(id)
+
+		// append to the slice of related structs
 		sliceVal := reflect.Append(settable, relVal)
 		settable.Set(sliceVal)
 	}
 
 	return nil
+}
+
+// returns an id if the command was successfully added to the queue. If the key didn't exist,
+// then it returns an empty string but not an error
+func queueOneToManyRelation(r *relation, relId string, conn redis.Conn) (string, error) {
+
+	// see if the relation has been saved in redis
+	// if not we should just leave it as nil
+	key := r.redisName + ":" + relId
+	// NOTE: here we're passing in nil, so the function will create
+	// and close a new connection for us. This prevents ruining the transaction
+	// going on in our current conn.
+	exists, err := KeyExists(key, nil)
+	if err != nil {
+		return "", err
+	}
+	if !exists {
+		return "", nil
+	}
+
+	// add the command to the queue
+	if err := conn.Send("hgetall", key); err != nil {
+		return "", err
+	}
+
+	return relId, nil
 }

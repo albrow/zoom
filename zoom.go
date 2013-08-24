@@ -51,14 +51,22 @@ func Save(in ModelInterface) error {
 	}
 	key := name + ":" + in.GetId()
 
-	// invoke redis driver to commit to database
-	_, err = conn.Do("hmset", Args{}.Add(key).AddFlat(in)...)
-	if err != nil {
+	// start a multi/exec command. i.e. create a command queue
+	if err := conn.Send("multi"); err != nil {
+		// cancel transaction and return err
+		conn.Do("discard")
+		return err
+	}
+
+	// add command to queue
+	if err := conn.Send("hmset", Args{}.Add(key).AddFlat(in)...); err != nil {
+		// cancel transaction and return err
+		conn.Do("discard")
 		return err
 	}
 
 	// add to the index for this model
-	err = addToIndex(name, in.GetId(), conn)
+	err = queueAddToIndex(name, in.GetId(), conn)
 	if err != nil {
 		return err
 	}
@@ -68,6 +76,20 @@ func Save(in ModelInterface) error {
 	if err != nil {
 		return err
 	}
+
+	// finally, commit the transaction
+	// they were all writes, so the return value isn't needed
+	if _, err := conn.Do("exec"); err != nil {
+		return err
+	}
+
+	// add to the cache
+	zoomCache.Set(key, newCacheValue(in))
+
+	// update the index cache
+	indexKey := name + ":index"
+	zoomCache.Delete(indexKey)
+	ScheduleIndexCacheUpdate(name)
 
 	return nil
 }
@@ -80,31 +102,13 @@ func Delete(in ModelInterface) error {
 	if err != nil {
 		return err
 	}
-	key := name + ":" + in.GetId()
 
 	// TODO: make sure it has an id
 
-	// get a connection
-	conn := pool.Get()
-	defer conn.Close()
-
-	// invoke redis driver to delete the key
-	_, err = conn.Do("del", key)
-	if err != nil {
-		return err
-	}
-
-	// remove from the index
-	key = name + ":index"
-	_, err = conn.Do("srem", key, in.GetId())
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return DeleteById(name, in.GetId())
 }
 
-// Find a model by its id and then delete it
+// Delete a record from the interface by its id only
 func DeleteById(modelName, id string) error {
 
 	key := modelName + ":" + id
@@ -113,17 +117,34 @@ func DeleteById(modelName, id string) error {
 	conn := pool.Get()
 	defer conn.Close()
 
-	_, err := conn.Do("del", key)
+	// start a transaction
+	conn.Send("multi")
+
+	// add a command to the queue which will
+	// delete the main key
+	if err := conn.Send("del", key); err != nil {
+		return err
+	}
+
+	// add a command to the queue which will
+	// remove it from the index
+	indexKey := modelName + ":index"
+	if err := conn.Send("srem", indexKey, id); err != nil {
+		return err
+	}
+
+	// execute the commands
+	_, err := conn.Do("exec")
 	if err != nil {
 		return err
 	}
 
-	// remove from the index
-	key = modelName + ":index"
-	_, err = conn.Do("srem", key, id)
-	if err != nil {
-		return err
-	}
+	// remove from the cache
+	zoomCache.Delete(key)
+
+	// update the index cache
+	zoomCache.Delete(indexKey)
+	ScheduleIndexCacheUpdate(modelName)
 
 	return nil
 }
@@ -140,6 +161,16 @@ func FindById(modelName, id string) (interface{}, error) {
 	// create the key based on the modelName and id
 	key := modelName + ":" + id
 
+	// check if the model is in the cache
+	val, found := zoomCache.Get(key)
+	if found {
+		cv, ok := val.(*cacheValue)
+		if !ok {
+			return nil, errors.New("zoom: Got from cache but couldn't convert to cacheValue")
+		}
+		return cv.value, nil
+	}
+
 	// open a connection
 	conn := pool.Get()
 	defer conn.Close()
@@ -154,13 +185,6 @@ func FindById(modelName, id string) (interface{}, error) {
 		return nil, NewKeyNotFoundError(msg)
 	}
 
-	// get the stuff from redis
-	reply, err := conn.Do("hgetall", key)
-	bulk, err := redis.MultiBulk(reply, err)
-	if err != nil {
-		return nil, err
-	}
-
 	// create a new struct and instantiate its Model attribute
 	// this gives us the embedded methods and properties on Model
 	modelVal := reflect.New(typ.Elem())
@@ -169,7 +193,14 @@ func FindById(modelName, id string) (interface{}, error) {
 	// type assert to ModelInterface so we can use SetId()
 	model := modelVal.Interface().(ModelInterface)
 
-	// invoke redis driver to fill in the values of the struct
+	// get the field values from redis
+	reply, err := conn.Do("hgetall", key)
+	bulk, err := redis.MultiBulk(reply, err)
+	if err != nil {
+		return nil, err
+	}
+
+	// fill in the values of the struct
 	err = ScanStruct(bulk, model)
 	if err != nil {
 		return nil, err
@@ -183,6 +214,9 @@ func FindById(modelName, id string) (interface{}, error) {
 	if err := scanRelations(ss, modelName, id, modelVal, conn); err != nil {
 		return nil, err
 	}
+
+	// add to the cache
+	zoomCache.Set(key, newCacheValue(model))
 
 	// return it
 	return model, nil
@@ -201,6 +235,18 @@ func ScanById(model ModelInterface, id string) error {
 
 	// create the key based on the modelName and id
 	key := modelName + ":" + id
+
+	// check if the model is in the cache
+	val, found := zoomCache.Get(key)
+	if found {
+		cv, ok := val.(*cacheValue)
+		if !ok {
+			return errors.New("zoom: Got from cache but couldn't convert to cacheValue")
+		}
+		modelVal := reflect.ValueOf(model).Elem()
+		modelVal.Set(reflect.ValueOf(cv.value).Elem())
+		return nil
+	}
 
 	// open a connection
 	conn := pool.Get()
@@ -243,6 +289,9 @@ func ScanById(model ModelInterface, id string) error {
 		return err
 	}
 
+	// add to the cache
+	zoomCache.Set(key, newCacheValue(model))
+
 	return nil
 }
 
@@ -254,6 +303,22 @@ func FindAll(modelName string) ([]interface{}, error) {
 
 	// invoke redis driver to get indexed keys and convert to []interface{}
 	key := modelName + ":index"
+
+	// check if the whole result is in the cache
+	val, found := zoomCache.Get(key)
+	if found {
+		cv, ok := val.(*cacheValue)
+		if !ok {
+			return nil, errors.New("zoom: Got from cache but couldn't convert to cacheValue")
+		}
+		results, ok := cv.value.([]interface{})
+		if !ok {
+			msg := fmt.Sprintf("zoom: couldn't convert %+v to []interface{}\n", cv.value)
+			return nil, errors.New(msg)
+		}
+		return results, nil
+	}
+
 	ids, err := redis.Strings(conn.Do("smembers", key))
 	if err != nil {
 		return nil, err
@@ -268,6 +333,8 @@ func FindAll(modelName string) ([]interface{}, error) {
 		}
 		results[i] = m
 	}
+
+	zoomCache.Set(key, newCacheValue(results))
 
 	return results, nil
 }
