@@ -4,7 +4,6 @@ package zoom
 // by the package and provides constructors for each one.
 
 import (
-	"fmt"
 	"reflect"
 )
 
@@ -77,48 +76,4 @@ func (e *KeyNotFoundError) Error() string {
 func NewKeyNotFoundError(msg string) *KeyNotFoundError {
 	e := KeyNotFoundError{msg}
 	return &e
-}
-
-// ---
-// MissingParamater
-type MissingParamaterError struct {
-	msg string
-}
-
-func (e *MissingParamaterError) Error() string {
-	return e.msg
-}
-
-func NewMissingParamaterError(msg string) *MissingParamaterError {
-	e := MissingParamaterError{msg}
-	return &e
-}
-
-// ---
-// InterfaceIsNotPointer
-type InterfaceIsNotPointerError struct {
-	in interface{}
-}
-
-func (e *InterfaceIsNotPointerError) Error() string {
-	return fmt.Sprintf("Interface of type %T is not a pointer. Try again with the 'address of' operator?", e.in)
-}
-
-func NewInterfaceIsNotPointerError(in interface{}) *InterfaceIsNotPointerError {
-	e := InterfaceIsNotPointerError{in}
-	return &e
-}
-
-// ---
-// RelationNotFound
-type RelationNotFoundError struct {
-	name string
-}
-
-func (e *RelationNotFoundError) Error() string {
-	return "The relation by the name '" + e.name + "' does not exist."
-}
-
-func NewRelationNotFoundError(name string) *RelationNotFoundError {
-	return &RelationNotFoundError{name}
 }
