@@ -1,27 +1,39 @@
 package zoom
 
-// File contains code strictly related to Model and ModelInterface.
+// File contains code strictly related to DefaultData and Model.
 // The Register() method and associated methods are also included here.
 
 import (
+	"errors"
+	"fmt"
+	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
 
-type Model struct {
-	Id string `redis:"-"`
+type DefaultData struct {
+	Id string
+	// TODO: add CreatedAt and UpdatedAt
 }
 
-type ModelInterface interface {
+type Model interface {
 	GetId() string
 	SetId(string)
+	// TODO: add getters and setters for CreatedAt and UpdatedAt
 }
 
-func (m *Model) GetId() string {
-	return m.Id
+type modelSpec struct {
+	sets  []*externalSet
+	lists []*externalList
 }
 
-func (m *Model) SetId(id string) {
-	m.Id = id
+type externalSet struct {
+	redisName string
+	fieldName string
+}
+
+type externalList struct {
+	redisName string
+	fieldName string
 }
 
 // maps a type to a string identifier. The string is used
@@ -32,25 +44,77 @@ var typeToName map[reflect.Type]string = make(map[reflect.Type]string)
 // pass in a string for the *ById methods
 var nameToType map[string]reflect.Type = make(map[string]reflect.Type)
 
+// maps a string identifier to a modelSpec
+var modelSpecs map[string]*modelSpec = make(map[string]*modelSpec)
+
+// methods so that DefaultData (and any struct with DefaultData embedded)
+// satisifies Model interface
+func (d *DefaultData) GetId() string {
+	return d.Id
+}
+
+func (d *DefaultData) SetId(id string) {
+	d.Id = id
+}
+
 // adds a model to the map of registered models
 // Both name and typeOf(m) must be unique, i.e.
 // not already registered
 func Register(in interface{}, name string) error {
 	typ := reflect.TypeOf(in)
+
+	// make sure the interface is the correct type
+	if typ.Kind() != reflect.Ptr {
+		return errors.New("zoom: schema must be a pointer to a struct")
+	} else if typ.Elem().Kind() != reflect.Struct {
+		return errors.New("zoom: schema must be a pointer to a struct")
+	}
+
+	// make sure the name and type have not been previously registered
 	if alreadyRegisteredType(typ) {
 		return NewTypeAlreadyRegisteredError(typ)
-	}
-	if typ.Kind() != reflect.Ptr {
-		return NewInterfaceIsNotPointerError(in)
 	}
 	if alreadyRegisteredName(name) {
 		return NewNameAlreadyRegisteredError(name)
 	}
+
+	// create a new model spec and register its lists and sets
+	ms := &modelSpec{}
+	if err := registerListsAndSets(typ, ms); err != nil {
+		return err
+	}
+
 	typeToName[typ] = name
 	nameToType[name] = typ
-	// ss := &structSpec{m: make(map[string]*fieldSpec), relations: make(map[string]*structSpec)}
-	// compileStructSpec(typ.Elem(), make(map[string]int), nil, ss)
-	// structSpecCache[typ.Elem()] = ss
+	return nil
+}
+
+func registerListsAndSets(typ reflect.Type, ms *modelSpec) error {
+	// iterate through fields to find slices and arrays
+	elem := typ.Elem()
+	numFields := elem.NumField()
+	for i := 0; i < numFields; i++ {
+		field := elem.Field(i)
+		if util.TypeIsSliceOrArray(field.Type) {
+			// we're dealing with a slice or an array, which should be converted to a redis list or set
+			tag := field.Tag
+			redisName := tag.Get("redis")
+			if redisName == "-" {
+				continue // skip field
+			} else if redisName == "" {
+				redisName = field.Name
+			}
+			redisType := tag.Get("redisType")
+			if redisType == "" || redisType == "list" {
+				ms.lists = append(ms.lists, &externalList{redisName: redisName, fieldName: field.Name})
+			} else if redisType == "set" {
+				ms.sets = append(ms.sets, &externalSet{redisName: redisName, fieldName: field.Name})
+			} else {
+				msg := fmt.Sprintf("zoom: invalid struct tag for redisType: %s. must be either 'set' or 'list'\n", redisType)
+				return errors.New(msg)
+			}
+		}
+	}
 	return nil
 }
 
