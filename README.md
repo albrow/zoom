@@ -59,8 +59,8 @@ import (
 )
 ```
 
-Then, call Zoom.Init somewhere in your app initialization code, e.g. in the main method. You must
-also call Zoom.Close when your application exits, so it's a good idea to use defer.
+Then, call zoom.Init somewhere in your app initialization code, e.g. in the main method. You must
+also call zoom.Close when your application exits, so it's a good idea to use defer.
 
 ``` go
 func main() {
@@ -73,7 +73,7 @@ func main() {
 }
 ```
 
-The Init method takes a *zoom.Configuration struct as an argument. Here's a list of options and their
+The Init function takes a *zoom.Configuration struct as an argument. Here's a list of options and their
 defaults:
 
 ``` go
@@ -145,7 +145,7 @@ if err := zoom.Register(&Person{}, "person"); err != nil {
 
 ### Saving Models
 
-To persistently save a Person model to the databse, simply call zoom.Save
+To persistently save a Person model to the databse, simply call zoom.Save.
 
 ``` go
 p := NewPerson("Alice")
