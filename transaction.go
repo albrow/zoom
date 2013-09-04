@@ -1,7 +1,8 @@
 package zoom
 
 import (
-	"github.com/stephenalexbrowne/redigo/redis"
+	"github.com/stephenalexbrowne/zoom/redis"
+	"reflect"
 )
 
 type transaction struct {
@@ -53,22 +54,43 @@ func (t *transaction) discard() error {
 }
 
 // useful handlers
-func newScanHandler(scannable interface{}) func(interface{}) error {
+func newScanStructHandler(scannable interface{}) func(interface{}) error {
 	return func(reply interface{}) error {
 		// invoke redis driver to scan values into the data struct
 		bulk, err := redis.MultiBulk(reply, nil)
 		if err != nil {
 			return err
 		}
-		if err := redis.ScanStruct(bulk, scannable); err != nil {
+		if err := ScanStruct(bulk, scannable); err != nil {
 			return err
 		}
 		return nil
 	}
 }
 
+func newScanSliceHandler(scanVal reflect.Value) func(interface{}) error {
+	return func(reply interface{}) error {
+
+		bulk, err := redis.MultiBulk(reply, nil)
+		if err != nil {
+			return err
+		}
+
+		scanType := scanVal.Type()
+		scanElem := scanType.Elem()
+
+		for _, el := range bulk {
+			srcElem := reflect.ValueOf(el)
+			converted := srcElem.Convert(scanElem)
+			scanVal.Set(reflect.Append(scanVal, converted))
+		}
+
+		return nil
+	}
+}
+
 // useful operations for transactions
-func (t *transaction) addModelSave(m ModelInterface) error {
+func (t *transaction) addModelSave(m Model) error {
 
 	name, err := getRegisteredNameFromInterface(m)
 	if err != nil {
@@ -96,7 +118,7 @@ func (t *transaction) addModelSave(m ModelInterface) error {
 }
 
 func (t *transaction) addStructSave(key string, in interface{}) error {
-	args := redis.Args{}.Add(key).AddFlat(in)
+	args := Args{}.Add(key).AddFlat(in)
 	if err := t.add("HMSET", args, nil); err != nil {
 		return err
 	}
@@ -105,7 +127,7 @@ func (t *transaction) addStructSave(key string, in interface{}) error {
 }
 
 func (t *transaction) addIndex(key, value string) error {
-	args := redis.Args{}.Add(key).Add(value)
+	args := Args{}.Add(key).Add(value)
 	if err := t.add("SADD", args, nil); err != nil {
 		return err
 	}
@@ -114,7 +136,7 @@ func (t *transaction) addIndex(key, value string) error {
 }
 
 func (t *transaction) addModelFind(key, scannable interface{}) error {
-	if err := t.add("HGETALL", redis.Args{}.Add(key), newScanHandler(scannable)); err != nil {
+	if err := t.add("HGETALL", Args{}.Add(key), newScanStructHandler(scannable)); err != nil {
 		return err
 	}
 
@@ -122,7 +144,7 @@ func (t *transaction) addModelFind(key, scannable interface{}) error {
 }
 
 func (t *transaction) addDelete(key string) error {
-	if err := t.add("DEL", redis.Args{}.Add(key), nil); err != nil {
+	if err := t.add("DEL", Args{}.Add(key), nil); err != nil {
 		return err
 	}
 
@@ -130,7 +152,7 @@ func (t *transaction) addDelete(key string) error {
 }
 
 func (t *transaction) addUnindex(key, value string) error {
-	args := redis.Args{}.Add(key).Add(value)
+	args := Args{}.Add(key).Add(value)
 	if err := t.add("SREM", args, nil); err != nil {
 		return err
 	}

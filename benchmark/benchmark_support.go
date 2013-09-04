@@ -20,32 +20,14 @@ var routinesChan chan int = make(chan int, MAX_GOROUTINES)
 type Person struct {
 	Name string
 	Age  int
-	*zoom.Model
-}
-
-// A convenient constructor for the Person struct
-func NewPerson(name string, age int) *Person {
-	return &Person{
-		Name:  name,
-		Age:   age,
-		Model: new(zoom.Model),
-	}
+	zoom.DefaultData
 }
 
 // The Parent struct, used for testing many-to-many performance
 type Parent struct {
 	Name     string
 	Children []*Person
-	*zoom.Model
-}
-
-// A convenient constructor for the Parent struct
-func NewParent(name string) *Parent {
-	return &Parent{
-		Name:     name,
-		Children: make([]*Person, 0),
-		Model:    new(zoom.Model),
-	}
+	zoom.DefaultData
 }
 
 // Database helper functions
@@ -101,7 +83,7 @@ func savePersons(num int) []string {
 	ids := make([]string, num)
 	for i := 0; i < num; i++ {
 		name := "person_" + strconv.Itoa(i)
-		p := NewPerson(name, i)
+		p := &Person{Name: name, Age: i}
 		zoom.Save(p)
 		ids[i] = p.Id
 	}
@@ -116,7 +98,7 @@ func createPersons(num int) []*Person {
 	persons := make([]*Person, num)
 	for i := 0; i < num; i++ {
 		name := "person_" + strconv.Itoa(i)
-		p := NewPerson(name, i)
+		p := &Person{Name: name, Age: i}
 		persons[i] = p
 	}
 
@@ -131,7 +113,7 @@ func saveParentsWithChildren(numParents, numChildren int) []string {
 	ids := make([]string, numParents)
 	for i := 0; i < numParents; i++ {
 		name := "parent_" + strconv.Itoa(i)
-		p := NewParent(name)
+		p := &Parent{Name: name}
 		p.Children = append(p.Children, createPersons(numChildren)...)
 		zoom.Save(p)
 		ids[i] = p.Id
@@ -276,7 +258,7 @@ func benchmarkRepeatSaveOneToMany(b *testing.B, numChildren int) {
 		defer tearDown()
 	}
 
-	p := NewParent("parent_0")
+	p := &Parent{Name: "parent_0"}
 	p.Children = append(p.Children, createPersons(numChildren)...)
 
 	b.ResetTimer()

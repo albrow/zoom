@@ -13,34 +13,14 @@ import (
 type Person struct {
 	Name string
 	Age  int
-	*zoom.Model
-}
-
-// A convenient constructor for the Person struct
-func NewPerson(name string, age int) *Person {
-	p := &Person{
-		Name:  name,
-		Age:   age,
-		Model: new(zoom.Model),
-	}
-	return p
+	zoom.DefaultData
 }
 
 // The Pet struct
 type Pet struct {
 	Name string
 	Kind string
-	*zoom.Model
-}
-
-// A convenient constructor for the Pet struct
-func NewPet(name, kind string) *Pet {
-	p := &Pet{
-		Name:  name,
-		Kind:  kind,
-		Model: new(zoom.Model),
-	}
-	return p
+	zoom.DefaultData
 }
 
 // The AllTypes struct
@@ -61,7 +41,7 @@ type AllTypes struct {
 	Byte    byte
 	Rune    rune
 	String  string
-	*zoom.Model
+	zoom.DefaultData
 }
 
 func indexOfStringSlice(a string, list []string) int {
