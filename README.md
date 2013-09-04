@@ -59,7 +59,7 @@ import (
 )
 ```
 
-Then, call zoom.Init somewhere in your app initialization code, e.g. in the main method. You must
+Then, call zoom.Init somewhere in your app initialization code, e.g. in the main function. You must
 also call zoom.Close when your application exits, so it's a good idea to use defer.
 
 ``` go
@@ -134,7 +134,7 @@ func NewPerson(name string) *Person {
 
 You must also call zoom.Register so that Zoom knows what name to assign to the *Person type. You only
 need to do this once per type. For example, somewhere in your initialization sequence (e.g. in the main
-method) put the following:
+function) put the following:
 
 ``` go
 // register the *Person type as "person"
@@ -207,11 +207,10 @@ for i, result := range results {
 ```
 
 To avoid redundant type assertions, it might be helpful to wrap your own functions/methods around the Zoom API.
-Especially for FindAll methods.
 
 ### Deleting Models
 
-To delete a model you can just use the Delete method:
+To delete a model you can just use the Delete function:
 
 ``` go
 if err := zoom.Delete(person); err != nil {
@@ -219,7 +218,7 @@ if err := zoom.Delete(person); err != nil {
 }
 ```
 
-Or use the DeleteById method:
+Or use the DeleteById function:
 
 ``` go
 if err := zoom.DeleteById("some_person_id"); err != nil {
@@ -229,7 +228,7 @@ if err := zoom.DeleteById("some_person_id"); err != nil {
 
 ## Relations
 
-Relations in Zoom are dead simple. There are no special return types or methods for using relations.
+Relations in Zoom are dead simple. There are no special return types or functions for using relations.
 What you put in is what you get out.
 
 ### One-to-One Relations
