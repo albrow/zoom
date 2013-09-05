@@ -61,7 +61,7 @@ func newScanStructHandler(scannable interface{}) func(interface{}) error {
 		if err != nil {
 			return err
 		}
-		if err := ScanStruct(bulk, scannable); err != nil {
+		if err := redis.ScanStruct(bulk, scannable); err != nil {
 			return err
 		}
 		return nil
@@ -118,7 +118,7 @@ func (t *transaction) addModelSave(m Model) error {
 }
 
 func (t *transaction) addStructSave(key string, in interface{}) error {
-	args := Args{}.Add(key).AddFlat(in)
+	args := redis.Args{}.Add(key).AddFlat(in)
 	if err := t.add("HMSET", args, nil); err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func (t *transaction) addStructSave(key string, in interface{}) error {
 }
 
 func (t *transaction) addIndex(key, value string) error {
-	args := Args{}.Add(key).Add(value)
+	args := redis.Args{}.Add(key).Add(value)
 	if err := t.add("SADD", args, nil); err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func (t *transaction) addIndex(key, value string) error {
 }
 
 func (t *transaction) addModelFind(key, scannable interface{}) error {
-	if err := t.add("HGETALL", Args{}.Add(key), newScanStructHandler(scannable)); err != nil {
+	if err := t.add("HGETALL", redis.Args{}.Add(key), newScanStructHandler(scannable)); err != nil {
 		return err
 	}
 
@@ -144,7 +144,7 @@ func (t *transaction) addModelFind(key, scannable interface{}) error {
 }
 
 func (t *transaction) addDelete(key string) error {
-	if err := t.add("DEL", Args{}.Add(key), nil); err != nil {
+	if err := t.add("DEL", redis.Args{}.Add(key), nil); err != nil {
 		return err
 	}
 
@@ -152,7 +152,7 @@ func (t *transaction) addDelete(key string) error {
 }
 
 func (t *transaction) addUnindex(key, value string) error {
-	args := Args{}.Add(key).Add(value)
+	args := redis.Args{}.Add(key).Add(value)
 	if err := t.add("SREM", args, nil); err != nil {
 		return err
 	}
