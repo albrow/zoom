@@ -56,6 +56,7 @@ func (t *transaction) discard() error {
 // useful handlers
 func newScanStructHandler(scannable interface{}) func(interface{}) error {
 	return func(reply interface{}) error {
+
 		// invoke redis driver to scan values into the data struct
 		bulk, err := redis.MultiBulk(reply, nil)
 		if err != nil {
@@ -64,6 +65,7 @@ func newScanStructHandler(scannable interface{}) func(interface{}) error {
 		if err := redis.ScanStruct(bulk, scannable); err != nil {
 			return err
 		}
+
 		return nil
 	}
 }
@@ -102,13 +104,13 @@ func (t *transaction) addModelSave(m Model) error {
 		m.SetId(generateRandomId())
 	}
 
-	// add a command to write data to database
+	// add an operation to write data to database
 	key := name + ":" + m.GetId()
 	if err := t.addStructSave(key, m); err != nil {
 		return err
 	}
 
-	// add a command to add to index for this model
+	// add an operation to add to index for this model
 	indexKey := name + ":index"
 	if err := t.addIndex(indexKey, m.GetId()); err != nil {
 		return err
@@ -135,8 +137,25 @@ func (t *transaction) addIndex(key, value string) error {
 	return nil
 }
 
-func (t *transaction) addModelFind(key, scannable interface{}) error {
+func (t *transaction) addModelFind(key string, scannable Model) error {
 	if err := t.add("HGETALL", redis.Args{}.Add(key), newScanStructHandler(scannable)); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (t *transaction) addModelDelete(modelName, id string) error {
+
+	// add an operation to delete the model itself
+	key := modelName + ":" + id
+	if err := t.addDelete(key); err != nil {
+		return err
+	}
+
+	// add an operation to remove the model id from the index
+	indexKey := modelName + ":index"
+	if err := t.addUnindex(indexKey, id); err != nil {
 		return err
 	}
 
