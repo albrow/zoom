@@ -14,7 +14,7 @@ type NameAlreadyRegisteredError struct {
 }
 
 func (e *NameAlreadyRegisteredError) Error() string {
-	return "The name '" + e.name + "' has already been registered."
+	return "zoom: the name '" + e.name + "' has already been registered"
 }
 
 func NewNameAlreadyRegisteredError(name string) *NameAlreadyRegisteredError {
@@ -28,7 +28,7 @@ type TypeAlreadyRegisteredError struct {
 }
 
 func (e *TypeAlreadyRegisteredError) Error() string {
-	return "The type '" + e.typ.String() + "' has already been registered."
+	return "zoom: the type '" + e.typ.String() + "' has already been registered"
 }
 
 func NewTypeAlreadyRegisteredError(typ reflect.Type) *TypeAlreadyRegisteredError {
@@ -42,7 +42,7 @@ type ModelTypeNotRegisteredError struct {
 }
 
 func (e *ModelTypeNotRegisteredError) Error() string {
-	return "The type '" + e.typ.String() + "' has not been registered."
+	return "zoom: the type '" + e.typ.String() + "' has not been registered"
 }
 
 func NewModelTypeNotRegisteredError(typ reflect.Type) *ModelTypeNotRegisteredError {
@@ -56,24 +56,9 @@ type ModelNameNotRegisteredError struct {
 }
 
 func (e *ModelNameNotRegisteredError) Error() string {
-	return "The model name '" + e.name + "' has not been registered."
+	return "zoom: the model name '" + e.name + "' has not been registered"
 }
 
 func NewModelNameNotRegisteredError(name string) *ModelNameNotRegisteredError {
 	return &ModelNameNotRegisteredError{name}
-}
-
-// ---
-// KeyNotFound
-type KeyNotFoundError struct {
-	msg string
-}
-
-func (e *KeyNotFoundError) Error() string {
-	return e.msg
-}
-
-func NewKeyNotFoundError(msg string) *KeyNotFoundError {
-	e := KeyNotFoundError{msg}
-	return &e
 }
