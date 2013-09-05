@@ -12,7 +12,9 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-// NOTE: this file has been modified by stephenalexbrowne
+// NOTE: this file has been modified slightly by stephenalexbrowne.
+// The flattenStruct and compileStructSpec functions were changed to
+// ignore slice and array values inside of structs.
 
 package redis
 
