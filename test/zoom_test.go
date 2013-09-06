@@ -5,6 +5,7 @@ import (
 	"github.com/stephenalexbrowne/zoom/redis"
 	"github.com/stephenalexbrowne/zoom/support"
 	"github.com/stephenalexbrowne/zoom/util"
+	"reflect"
 	"testing"
 )
 
@@ -238,5 +239,111 @@ func TestFindAll(t *testing.T) {
 	equal, msg := util.CompareAsStringSet(expectedNames, gotNames)
 	if !equal {
 		t.Errorf("\nexpected: %v\ngot: %v\nmsg: %s\n", expectedNames, gotNames, msg)
+	}
+}
+
+func TestSaveWithList(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create a modelWithList model
+	m := &support.ModelWithList{
+		List: []string{"one", "two", "three"},
+	}
+
+	// save it
+	if err := zoom.Save(m); err != nil {
+		t.Error(err)
+	}
+
+	// get a connection
+	conn := zoom.GetConn()
+	defer conn.Close()
+
+	// make sure the list was saved properly
+	listKey := "modelWithList:" + m.Id + ":List"
+	listCopy, err := redis.Strings(conn.Do("LRANGE", listKey, 0, -1))
+	if err != nil {
+		t.Error(err)
+	}
+	if !reflect.DeepEqual(m.List, listCopy) {
+		t.Errorf("List was not the same.\nExpected: %v\nGot: %v\n", m.List, listCopy)
+	}
+}
+
+func TestFindByIdWithList(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save a modelWithList model
+	m := &support.ModelWithList{
+		List: []string{"one", "two", "three"},
+	}
+	zoom.Save(m)
+
+	// retrieve using FindById
+	mCopy := &support.ModelWithList{}
+	if err := zoom.ScanById(mCopy, m.Id); err != nil {
+		t.Error(err)
+	}
+
+	// make sure the list is the same
+	if !reflect.DeepEqual(m.List, mCopy.List) {
+		t.Errorf("List was not the same.\nExpected: %v\nGot: %v\n", m.List, mCopy.List)
+	}
+}
+
+func TestSaveWithSet(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create a modelWithSet model
+	m := &support.ModelWithSet{
+		Set: []string{"one", "two", "three", "three"},
+	}
+
+	// save it
+	if err := zoom.Save(m); err != nil {
+		t.Error(err)
+	}
+
+	// get a connection
+	conn := zoom.GetConn()
+	defer conn.Close()
+
+	// make sure the set was saved properly
+	setKey := "modelWithSet:" + m.Id + ":Set"
+	setCopy, err := redis.Strings(conn.Do("SMEMBERS", setKey))
+	if err != nil {
+		t.Error(err)
+	}
+	set := []string{"one", "two", "three"}
+	equal, msg := util.CompareAsStringSet(set, setCopy)
+	if !equal {
+		t.Error(msg)
+	}
+}
+
+func TestFindByIdWithSet(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save a modelWithSet model
+	m := &support.ModelWithSet{
+		Set: []string{"one", "two", "three", "three"},
+	}
+	zoom.Save(m)
+
+	// retrieve using FindById
+	mCopy := &support.ModelWithSet{}
+	if err := zoom.ScanById(mCopy, m.Id); err != nil {
+		t.Error(err)
+	}
+
+	// make sure the set is what we expect
+	set := []string{"one", "two", "three"}
+	equal, msg := util.CompareAsStringSet(set, mCopy.Set)
+	if !equal {
+		t.Error(msg)
 	}
 }

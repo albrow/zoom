@@ -34,12 +34,20 @@ func SetUp() {
 	if err := zoom.Register(&Person{}, "person"); err != nil {
 		panic(err.Error())
 	}
+	if err := zoom.Register(&ModelWithList{}, "modelWithList"); err != nil {
+		panic(err.Error())
+	}
+	if err := zoom.Register(&ModelWithSet{}, "modelWithSet"); err != nil {
+		panic(err.Error())
+	}
 }
 
 func TearDown() {
 
 	// unregister types in types.go
 	zoom.UnregisterName("person")
+	zoom.UnregisterName("modelWithList")
+	zoom.UnregisterName("modelWithSet")
 
 	// flush and close the database
 	conn := zoom.GetConn()

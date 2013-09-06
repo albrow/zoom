@@ -86,6 +86,8 @@ func Register(in interface{}, name string) error {
 
 	typeToName[typ] = name
 	nameToType[name] = typ
+	modelSpecs[name] = ms
+
 	return nil
 }
 

@@ -29,7 +29,9 @@ func Save(m Model) error {
 	t := newTransaction()
 
 	// add a model save operation to the transaction
-	t.addModelSave(m)
+	if err := t.addModelSave(m); err != nil {
+		return err
+	}
 
 	// execute the transaction
 	if err := t.exec(); err != nil {
@@ -98,8 +100,7 @@ func FindById(modelName, id string) (Model, error) {
 	t := newTransaction()
 
 	// add a model find operation to the transaction
-	key := modelName + ":" + id
-	if err := t.addModelFind(key, m); err != nil {
+	if err := t.addModelFind(modelName, id, m); err != nil {
 		return nil, err
 	}
 
@@ -125,8 +126,7 @@ func ScanById(m Model, id string) error {
 	t := newTransaction()
 
 	// add a model find operation to the transaction
-	key := modelName + ":" + id
-	if err := t.addModelFind(key, m); err != nil {
+	if err := t.addModelFind(modelName, id, m); err != nil {
 		return err
 	}
 
@@ -178,8 +178,7 @@ func FindAll(modelName string) ([]Model, error) {
 		models[i] = m
 
 		// add a find operation for the model m
-		key := modelName + ":" + id
-		if err := t.addModelFind(key, m); err != nil {
+		if err := t.addModelFind(modelName, id, m); err != nil {
 			return nil, err
 		}
 	}
