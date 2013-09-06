@@ -8,28 +8,23 @@ package zoom
 
 import (
 	"github.com/dchest/uniuri"
-	"github.com/stephenalexbrowne/zoom/cache"
 	"github.com/stephenalexbrowne/zoom/redis"
 	"strconv"
 	"time"
 )
 
 type Configuration struct {
-	Address       string // Address to connect to. Default: "localhost:6379"
-	Network       string // Network to use. Default: "tcp"
-	Database      int    // Database id to use (using SELECT). Default: 0
-	CacheCapacity uint64 // Size of the cache in bytes. Default: 67108864 (64 MB)
-	CacheDisabled bool   // If true, cache will be disabled. Default: false
+	Address  string // Address to connect to. Default: "localhost:6379"
+	Network  string // Network to use. Default: "tcp"
+	Database int    // Database id to use (using SELECT). Default: 0
 }
 
 var pool *redis.Pool
 
 var defaultConfiguration = Configuration{
-	Address:       "localhost:6379",
-	Network:       "tcp",
-	Database:      0,
-	CacheCapacity: 67108864,
-	CacheDisabled: false,
+	Address:  "localhost:6379",
+	Network:  "tcp",
+	Database: 0,
 }
 
 func GetConn() redis.Conn {
@@ -61,8 +56,6 @@ func Init(passedConfig *Configuration) {
 			return err
 		},
 	}
-
-	zoomCache = cache.NewLRUCache(config.CacheCapacity)
 }
 
 // closes the connection pool
@@ -135,13 +128,6 @@ func getConfiguration(passedConfig *Configuration) Configuration {
 	}
 	if newConfig.Network == "" {
 		newConfig.Network = defaultConfiguration.Network
-	}
-	if newConfig.CacheCapacity == 0 {
-		newConfig.CacheCapacity = defaultConfiguration.CacheCapacity
-	}
-	// if cache is disabled, force cache capacity to 0
-	if newConfig.CacheDisabled == true {
-		newConfig.CacheCapacity = 0
 	}
 	// since the zero value for int is 0, we can skip config.Database
 

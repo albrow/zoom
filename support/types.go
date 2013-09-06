@@ -1,4 +1,4 @@
-// file contains type declarations that are used in various places, especially in testspackage test
+// file contains type declarations that are used in various places, especially in test package
 
 package support
 
@@ -31,5 +31,15 @@ type AllTypes struct {
 	Byte    byte
 	Rune    rune
 	String  string
+	zoom.DefaultData
+}
+
+type ModelWithList struct {
+	List []string `redisType:"list"`
+	zoom.DefaultData
+}
+
+type ModelWithSet struct {
+	Set []string `redisType:"set"`
 	zoom.DefaultData
 }

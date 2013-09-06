@@ -1,6 +1,8 @@
 package zoom
 
 import (
+	"errors"
+	"fmt"
 	"github.com/stephenalexbrowne/zoom/redis"
 	"reflect"
 )
@@ -116,6 +118,25 @@ func (t *transaction) addModelSave(m Model) error {
 		return err
 	}
 
+	// get the modelSpec
+	ms, found := modelSpecs[name]
+	if !found {
+		msg := fmt.Sprintf("zoom: no spec found for model of type %T and registered name %s\n", m, name)
+		return errors.New(msg)
+	}
+
+	// add operations to save external lists and sets
+	if len(ms.lists) != 0 {
+		if err := t.addModelListsSave(m, name, ms); err != nil {
+			return err
+		}
+	}
+	if len(ms.sets) != 0 {
+		if err := t.addModelSetsSave(m, name, ms); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -137,11 +158,97 @@ func (t *transaction) addIndex(key, value string) error {
 	return nil
 }
 
-func (t *transaction) addModelFind(key string, scannable Model) error {
+func (t *transaction) addModelListsSave(m Model, modelName string, ms *modelSpec) error {
+	mVal := reflect.ValueOf(m).Elem()
+	for _, list := range ms.lists {
+		// use reflection to get the value of field
+		field := mVal.FieldByName(list.fieldName)
+		if field.IsNil() {
+			continue // skip empty lists
+		}
+		listKey := modelName + ":" + m.GetId() + ":" + list.redisName
+		args := redis.Args{}.Add(listKey).AddFlat(field.Interface())
+		if err := t.add("RPUSH", args, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *transaction) addModelSetsSave(m Model, modelName string, ms *modelSpec) error {
+	mVal := reflect.ValueOf(m).Elem()
+	for _, set := range ms.sets {
+		// use reflection to get the value of field
+		field := mVal.FieldByName(set.fieldName)
+		if field.IsNil() {
+			continue // skip empty sets
+		}
+		setKey := modelName + ":" + m.GetId() + ":" + set.redisName
+		args := redis.Args{}.Add(setKey).AddFlat(field.Interface())
+		if err := t.add("SADD", args, nil); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *transaction) addModelFind(name, id string, scannable Model) error {
+
+	// use HGETALL to get all the fields for the model
+	key := name + ":" + id
 	if err := t.add("HGETALL", redis.Args{}.Add(key), newScanStructHandler(scannable)); err != nil {
 		return err
 	}
 
+	// get the modelSpec
+	ms, found := modelSpecs[name]
+	if !found {
+		msg := fmt.Sprintf("zoom: no spec found for model of type %T and registered name %s\n", scannable, name)
+		return errors.New(msg)
+	}
+
+	// find all the external sets and lists for the model
+	if len(ms.lists) != 0 {
+		if err := t.addModelListsFind(key, scannable, ms); err != nil {
+			return err
+		}
+	}
+	if len(ms.sets) != 0 {
+		if err := t.addModelSetsFind(key, scannable, ms); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (t *transaction) addModelListsFind(key string, scannable Model, ms *modelSpec) error {
+	for _, list := range ms.lists {
+		// use reflection to get a scannable value for the field
+		scanVal := reflect.ValueOf(scannable).Elem()
+		field := scanVal.FieldByName(list.fieldName)
+		// use LRANGE to get all the members of the list
+		listKey := key + ":" + list.redisName
+		args := redis.Args{listKey, 0, -1}
+		if err := t.add("LRANGE", args, newScanSliceHandler(field)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *transaction) addModelSetsFind(key string, scannable Model, ms *modelSpec) error {
+	for _, set := range ms.sets {
+		// use reflection to get a scannable value for the field
+		scanVal := reflect.ValueOf(scannable).Elem()
+		field := scanVal.FieldByName(set.fieldName)
+		// use SMEMBERS to get all the members of the set
+		setKey := key + ":" + set.redisName
+		args := redis.Args{setKey}
+		if err := t.add("SMEMBERS", args, newScanSliceHandler(field)); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
