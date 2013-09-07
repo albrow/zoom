@@ -70,7 +70,7 @@ func TestFindById(t *testing.T) {
 	zoom.Save(p)
 
 	// find the model using FindById
-	result, err := zoom.FindById("person", p.Id)
+	result, err := zoom.FindById("person", p.Id).Exec()
 	if err != nil {
 		t.Error(err)
 	}
@@ -106,7 +106,7 @@ func TestScanById(t *testing.T) {
 	pCopy := &support.Person{}
 
 	// find the model using ScanById
-	err := zoom.ScanById(pCopy, p.Id)
+	_, err := zoom.ScanById(pCopy, p.Id).Exec()
 	if err != nil {
 		t.Error(err)
 	}
@@ -283,7 +283,7 @@ func TestFindByIdWithList(t *testing.T) {
 
 	// retrieve using FindById
 	mCopy := &support.ModelWithList{}
-	if err := zoom.ScanById(mCopy, m.Id); err != nil {
+	if _, err := zoom.ScanById(mCopy, m.Id).Exec(); err != nil {
 		t.Error(err)
 	}
 
@@ -336,7 +336,7 @@ func TestFindByIdWithSet(t *testing.T) {
 
 	// retrieve using FindById
 	mCopy := &support.ModelWithSet{}
-	if err := zoom.ScanById(mCopy, m.Id); err != nil {
+	if _, err := zoom.ScanById(mCopy, m.Id).Exec(); err != nil {
 		t.Error(err)
 	}
 
