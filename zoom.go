@@ -78,66 +78,6 @@ func DeleteById(modelName, id string) error {
 	return nil
 }
 
-// Find a model by modelName and id. modelName must be the
-// same name that was used in the Register() call
-func FindById(modelName, id string) (Model, error) {
-
-	// get the type corresponding to the modelName
-	typ, err := getRegisteredTypeFromName(modelName)
-	if err != nil {
-		return nil, err
-	}
-
-	// create a new struct of type typ
-	val := reflect.New(typ.Elem())
-	m, ok := val.Interface().(Model)
-	if !ok {
-		msg := fmt.Sprintf("zoom: could not convert val of type %T to Model", val.Interface())
-		return nil, errors.New(msg)
-	}
-
-	// start a transaction
-	t := newTransaction()
-
-	// add a model find operation to the transaction
-	if err := t.addModelFind(modelName, id, m); err != nil {
-		return nil, err
-	}
-
-	// execute the transaction
-	if err := t.exec(); err != nil {
-		return nil, err
-	}
-
-	return m, nil
-}
-
-// ScanById is like FindById, but it will scan the results from the database
-// into model, avoiding the need for typecasting after the find.
-func ScanById(m Model, id string) error {
-
-	// get the name corresponding to the type of m
-	modelName, err := getRegisteredNameFromInterface(m)
-	if err != nil {
-		return err
-	}
-
-	// start a transaction
-	t := newTransaction()
-
-	// add a model find operation to the transaction
-	if err := t.addModelFind(modelName, id, m); err != nil {
-		return err
-	}
-
-	// execute the transaction
-	if err := t.exec(); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func FindAll(modelName string) ([]Model, error) {
 
 	// get the type corresponding to the modelName
