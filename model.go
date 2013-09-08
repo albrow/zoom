@@ -11,7 +11,7 @@ import (
 )
 
 type DefaultData struct {
-	Id string
+	Id string `redis:"-"`
 	// TODO: add CreatedAt and UpdatedAt
 }
 
@@ -22,8 +22,9 @@ type Model interface {
 }
 
 type modelSpec struct {
-	sets  []*externalSet
-	lists []*externalList
+	sets       []*externalSet
+	lists      []*externalList
+	fieldNames []string
 }
 
 type externalSet struct {
@@ -80,7 +81,7 @@ func Register(in interface{}, name string) error {
 
 	// create a new model spec and register its lists and sets
 	ms := &modelSpec{}
-	if err := registerListsAndSets(typ, ms); err != nil {
+	if err := compileModelSpec(typ, ms); err != nil {
 		return err
 	}
 
@@ -91,12 +92,15 @@ func Register(in interface{}, name string) error {
 	return nil
 }
 
-func registerListsAndSets(typ reflect.Type, ms *modelSpec) error {
+func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 	// iterate through fields to find slices and arrays
 	elem := typ.Elem()
 	numFields := elem.NumField()
 	for i := 0; i < numFields; i++ {
 		field := elem.Field(i)
+		if field.Name != "DefaultData" {
+			ms.fieldNames = append(ms.fieldNames, field.Name)
+		}
 		if util.TypeIsSliceOrArray(field.Type) {
 			// we're dealing with a slice or an array, which should be converted to a redis list or set
 			tag := field.Tag

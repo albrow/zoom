@@ -6,6 +6,7 @@ package zoom
 import (
 	"errors"
 	"fmt"
+	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
 
@@ -100,9 +101,30 @@ func (q *Query) Exec() (Model, error) {
 	// start a transaction
 	t := newTransaction()
 
-	// add a model find operation to the transaction
-	if err := t.findModel(q.modelName, q.id, q.scannable); err != nil {
-		return q.scannable, err
+	// set up includes
+	ms := modelSpecs[q.modelName]
+	includes := ms.fieldNames
+	if len(q.includes) != 0 {
+		includes = q.includes
+		fmt.Println("includes: ", includes)
+		// add a model find operation to the transaction
+		if err := t.findModelWithIncludes(q.modelName, q.id, q.scannable, includes); err != nil {
+			return q.scannable, err
+		}
+	} else if len(q.excludes) != 0 {
+		for _, name := range q.excludes {
+			includes = util.RemoveElementFromStringSlice(includes, name)
+		}
+		fmt.Println("includes: ", includes)
+		// add a model find operation to the transaction
+		if err := t.findModelWithIncludes(q.modelName, q.id, q.scannable, includes); err != nil {
+			return q.scannable, err
+		}
+	} else {
+		// add a model find operation to the transaction
+		if err := t.findModel(q.modelName, q.id, q.scannable); err != nil {
+			return q.scannable, err
+		}
 	}
 
 	// execute the transaction

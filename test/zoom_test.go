@@ -347,3 +347,69 @@ func TestFindByIdWithSet(t *testing.T) {
 		t.Error(msg)
 	}
 }
+
+func TestFindByIdInclude(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save a new model
+	p := &support.Person{Name: "Bob", Age: 25}
+	zoom.Save(p)
+
+	// find the model using FindById and Include Name
+	result, err := zoom.FindById("person", p.Id).Include("Name").Exec()
+	if err != nil {
+		t.Error(err)
+	}
+	if result == nil {
+		t.Error("result of FindById was nil")
+	}
+	pCopy, ok := result.(*support.Person)
+	if !ok {
+		t.Error("could not type assert result to *Person")
+	}
+
+	// make sure the found model is the same as original
+	if pCopy.Id != p.Id {
+		t.Errorf("Id was incorrect. Expected: %s. Got: %s.\n", p.Id, pCopy.Id)
+	}
+	if pCopy.Name != p.Name {
+		t.Errorf("Name was incorrect. Expected: %s. Got: %s.\n", p.Name, pCopy.Name)
+	}
+	if pCopy.Age != 0 {
+		t.Errorf("Age was incorrect. Expected: %d. Got: %d.\n", 0, pCopy.Age)
+	}
+}
+
+func TestFindByIdExclude(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save a new model
+	p := &support.Person{Name: "Bob", Age: 25}
+	zoom.Save(p)
+
+	// find the model using FindById and Exclude Name
+	result, err := zoom.FindById("person", p.Id).Exclude("Name").Exec()
+	if err != nil {
+		t.Error(err)
+	}
+	if result == nil {
+		t.Error("result of FindById was nil")
+	}
+	pCopy, ok := result.(*support.Person)
+	if !ok {
+		t.Error("could not type assert result to *Person")
+	}
+
+	// make sure the found model is the same as original
+	if pCopy.Id != p.Id {
+		t.Errorf("Id was incorrect. Expected: %s. Got: %s.\n", p.Id, pCopy.Id)
+	}
+	if pCopy.Name != "" {
+		t.Errorf("Name was incorrect. Expected: %s. Got: %s.\n", "", pCopy.Name)
+	}
+	if pCopy.Age != p.Age {
+		t.Errorf("Age was incorrect. Expected: %d. Got: %d.\n", p.Age, pCopy.Age)
+	}
+}
