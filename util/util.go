@@ -16,8 +16,21 @@ func IndexOfStringSlice(a string, list []string) int {
 	return -1
 }
 
+func StringSliceContains(a string, list []string) bool {
+	return IndexOfStringSlice(a, list) != -1
+}
+
 func RemoveFromStringSlice(list []string, i int) []string {
 	return append(list[:i], list[i+1:]...)
+}
+
+func RemoveElementFromStringSlice(list []string, elem string) []string {
+	for i, e := range list {
+		if e == elem {
+			return append(list[:i], list[i+1:]...)
+		}
+	}
+	return list
 }
 
 func CompareAsStringSet(expecteds, gots []string) (bool, string) {
