@@ -101,7 +101,7 @@ func (q *Query) Exec() (Model, error) {
 	t := newTransaction()
 
 	// add a model find operation to the transaction
-	if err := t.addModelFind(q.modelName, q.id, q.scannable); err != nil {
+	if err := t.findModel(q.modelName, q.id, q.scannable); err != nil {
 		return q.scannable, err
 	}
 

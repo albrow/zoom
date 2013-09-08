@@ -29,7 +29,7 @@ func Save(m Model) error {
 	t := newTransaction()
 
 	// add a model save operation to the transaction
-	if err := t.addModelSave(m); err != nil {
+	if err := t.saveModel(m); err != nil {
 		return err
 	}
 
@@ -66,7 +66,7 @@ func DeleteById(modelName, id string) error {
 	t := newTransaction()
 
 	// add a model delete operation to the transaction
-	if err := t.addModelDelete(modelName, id); err != nil {
+	if err := t.deleteModel(modelName, id); err != nil {
 		return err
 	}
 
@@ -118,7 +118,7 @@ func FindAll(modelName string) ([]Model, error) {
 		models[i] = m
 
 		// add a find operation for the model m
-		if err := t.addModelFind(modelName, id, m); err != nil {
+		if err := t.findModel(modelName, id, m); err != nil {
 			return nil, err
 		}
 	}
