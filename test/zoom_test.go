@@ -66,32 +66,11 @@ func TestFindById(t *testing.T) {
 	defer support.TearDown()
 
 	// create and save a new model
-	p := &support.Person{Name: "Bob", Age: 25}
-	zoom.Save(p)
+	persons, _ := support.CreatePersons(1)
+	p := persons[0]
 
-	// find the model using FindById
-	result, err := zoom.FindById("person", p.Id).Exec()
-	if err != nil {
-		t.Error(err)
-	}
-	if result == nil {
-		t.Error("result of FindById was nil")
-	}
-	pCopy, ok := result.(*support.Person)
-	if !ok {
-		t.Error("could not type assert result to *Person")
-	}
-
-	// make sure the found model is the same as original
-	if pCopy.Id != p.Id {
-		t.Errorf("Id was incorrect. Expected: %s. Got: %s.\n", p.Id, pCopy.Id)
-	}
-	if pCopy.Name != p.Name {
-		t.Errorf("Name was incorrect. Expected: %s. Got: %s.\n", p.Name, pCopy.Name)
-	}
-	if pCopy.Age != p.Age {
-		t.Errorf("Age was incorrect. Expected: %d. Got: %d.\n", p.Age, pCopy.Age)
-	}
+	// execute a test query and compare against the expected person
+	testFindWithExpectedPerson(t, zoom.FindById("person", p.Id), p)
 }
 
 func TestScanById(t *testing.T) {
@@ -99,28 +78,13 @@ func TestScanById(t *testing.T) {
 	defer support.TearDown()
 
 	// create and save a new model
-	p := &support.Person{Name: "Bob", Age: 25}
-	zoom.Save(p)
+	persons, _ := support.CreatePersons(1)
+	p := persons[0]
 
-	// create a new model for to scan into
 	pCopy := &support.Person{}
 
-	// find the model using ScanById
-	_, err := zoom.ScanById(pCopy, p.Id).Exec()
-	if err != nil {
-		t.Error(err)
-	}
-
-	// make sure the found model is the same as original
-	if pCopy.Id != p.Id {
-		t.Errorf("Id was incorrect. Expected: %s. Got: %s.\n", p.Id, pCopy.Id)
-	}
-	if pCopy.Name != p.Name {
-		t.Errorf("Name was incorrect. Expected: %s. Got: %s.\n", p.Name, pCopy.Name)
-	}
-	if pCopy.Age != p.Age {
-		t.Errorf("Age was incorrect. Expected: %d. Got: %d.\n", p.Age, pCopy.Age)
-	}
+	// execute a test query and compare against the expected person
+	testScanWithExpectedPersonAndScannable(t, zoom.ScanById(pCopy, p.Id), p, pCopy)
 }
 
 func TestDelete(t *testing.T) {
@@ -408,32 +372,13 @@ func TestFindByIdInclude(t *testing.T) {
 	defer support.TearDown()
 
 	// create and save a new model
-	p := &support.Person{Name: "Bob", Age: 25}
-	zoom.Save(p)
+	persons, _ := support.CreatePersons(1)
+	p := persons[0]
 
-	// find the model using FindById and Include Name
-	result, err := zoom.FindById("person", p.Id).Include("Name").Exec()
-	if err != nil {
-		t.Error(err)
-	}
-	if result == nil {
-		t.Error("result of FindById was nil")
-	}
-	pCopy, ok := result.(*support.Person)
-	if !ok {
-		t.Error("could not type assert result to *Person")
-	}
-
-	// make sure the found model is the same as original
-	if pCopy.Id != p.Id {
-		t.Errorf("Id was incorrect. Expected: %s. Got: %s.\n", p.Id, pCopy.Id)
-	}
-	if pCopy.Name != p.Name {
-		t.Errorf("Name was incorrect. Expected: %s. Got: %s.\n", p.Name, pCopy.Name)
-	}
-	if pCopy.Age != 0 {
-		t.Errorf("Age was incorrect. Expected: %d. Got: %d.\n", 0, pCopy.Age)
-	}
+	// execute a test query and compare against the expected person
+	noName := &support.Person{Age: p.Age}
+	noName.Id = p.Id
+	testFindWithExpectedPerson(t, zoom.FindById("person", p.Id).Exclude("Name"), noName)
 }
 
 func TestFindByIdExclude(t *testing.T) {
@@ -441,35 +386,47 @@ func TestFindByIdExclude(t *testing.T) {
 	defer support.TearDown()
 
 	// create and save a new model
-	p := &support.Person{Name: "Bob", Age: 25}
-	zoom.Save(p)
+	persons, _ := support.CreatePersons(1)
+	p := persons[0]
 
-	// find the model using FindById and Exclude Name
-	result, err := zoom.FindById("person", p.Id).Exclude("Name").Exec()
+	// execute a test query and compare against the expected person
+	justName := &support.Person{Name: p.Name}
+	justName.Id = p.Id
+	testFindWithExpectedPerson(t, zoom.FindById("person", p.Id).Include("Name"), justName)
+}
+
+func findTester(t *testing.T, query *zoom.Query, checker func(*testing.T, zoom.Model)) {
+	// execute the query
+	result, err := query.Exec()
 	if err != nil {
 		t.Error(err)
 	}
-	if result == nil {
-		t.Error("result of FindById was nil")
-	}
-	pCopy, ok := result.(*support.Person)
-	if !ok {
-		t.Error("could not type assert result to *Person")
-	}
 
-	// make sure the found model is the same as original
-	if pCopy.Id != p.Id {
-		t.Errorf("Id was incorrect. Expected: %s. Got: %s.\n", p.Id, pCopy.Id)
-	}
-	if pCopy.Name != "" {
-		t.Errorf("Name was incorrect. Expected: %s. Got: %s.\n", "", pCopy.Name)
-	}
-	if pCopy.Age != p.Age {
-		t.Errorf("Age was incorrect. Expected: %d. Got: %d.\n", p.Age, pCopy.Age)
-	}
+	// run the checker function
+	checker(t, result)
 }
 
-func findAllTester(t *testing.T, query *zoom.MultiQuery, checker func([]zoom.Model, *testing.T)) {
+func testFindWithExpectedPerson(t *testing.T, query *zoom.Query, expectedPerson *support.Person) {
+	findTester(t, query, func(t *testing.T, result zoom.Model) {
+		if result == nil {
+			t.Error("result of query was nil")
+		}
+		pCopy, ok := result.(*support.Person)
+		if !ok {
+			t.Error("could not type assert result to *Person")
+		}
+
+		// make sure the found model is the same as original
+		checkPersonsEqual(t, expectedPerson, pCopy)
+	})
+}
+
+func testScanWithExpectedPersonAndScannable(t *testing.T, query *zoom.Query, expectedPerson *support.Person, scannable *support.Person) {
+	testFindWithExpectedPerson(t, query, expectedPerson)
+	checkPersonsEqual(t, expectedPerson, scannable)
+}
+
+func findAllTester(t *testing.T, query *zoom.MultiQuery, checker func(*testing.T, []zoom.Model)) {
 	// execute the query
 	results, err := query.Exec()
 	if err != nil {
@@ -477,11 +434,11 @@ func findAllTester(t *testing.T, query *zoom.MultiQuery, checker func([]zoom.Mod
 	}
 
 	// run the checker function
-	checker(results, t)
+	checker(t, results)
 }
 
 func testFindAllWithExpectedIds(t *testing.T, query *zoom.MultiQuery, expectedIds []string, orderMatters bool) {
-	findAllTester(t, query, func(results []zoom.Model, t *testing.T) {
+	findAllTester(t, query, func(t *testing.T, results []zoom.Model) {
 		// make sure results is the right length
 		if len(results) != len(expectedIds) {
 			t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", len(results), len(expectedIds))
@@ -513,4 +470,17 @@ func testFindAllWithExpectedIds(t *testing.T, query *zoom.MultiQuery, expectedId
 			}
 		}
 	})
+}
+
+func checkPersonsEqual(t *testing.T, expected, got *support.Person) {
+	// make sure the found model is the same as original
+	if got.Id != expected.Id {
+		t.Errorf("Id was incorrect. Expected: %s. Got: %s.\n", expected.Id, got.Id)
+	}
+	if got.Name != expected.Name {
+		t.Errorf("Name was incorrect. Expected: %s. Got: %s.\n", expected.Name, got.Name)
+	}
+	if got.Age != expected.Age {
+		t.Errorf("Age was incorrect. Expected: %d. Got: %d.\n", expected.Age, got.Age)
+	}
 }
