@@ -197,49 +197,104 @@ func TestFindAll(t *testing.T) {
 	support.SetUp()
 	defer support.TearDown()
 
-	// Create and save some Pets
-	// we can assume this works since
-	// Save() was tested previously
-	p1 := &support.Person{Name: "Elroy", Age: 26}
-	p2 := &support.Person{Name: "Fred", Age: 27}
-	p3 := &support.Person{Name: "Gus", Age: 28}
-	zoom.Save(p1)
-	zoom.Save(p2)
-	zoom.Save(p3)
-
-	// query to get a list of all the pets
-	results, err := zoom.FindAll("person")
+	// create and save some persons
+	persons, err := support.CreatePersons(3)
 	if err != nil {
 		t.Error(err)
 	}
 
-	// make sure results is the right length
-	if len(results) != 3 {
-		t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", 3, len(results))
+	// execute a test query and check the results
+	testFindAllWithExpectedIds(t, zoom.FindAll("person"), []string{persons[0].Id, persons[1].Id, persons[2].Id}, false)
+}
+
+func TestFindAllSortAlpha(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save some persons
+	persons, err := support.CreatePersons(3)
+	if err != nil {
+		t.Error(err)
 	}
 
-	// make sure each item in results is correct
-	// NOTE: this is tricky because the order can
-	// change in redis and we haven't asked for any sorting
-	expectedNames := []string{p1.Name, p2.Name, p3.Name}
-	gotNames := []string{}
-	for i, result := range results {
-		// each item in results should be able to be casted to *Person
-		pResult, ok := result.(*support.Person)
-		if !ok {
-			t.Errorf("Couldn't cast results[%d] to *Person", i)
-		}
-		// each item in results should have a valid Id
-		if pResult.Id == "" {
-			t.Error("Id was not set for Person: ", pResult)
-		}
-		gotNames = append(gotNames, pResult.Name)
+	// execute a test query and check the results
+	q := zoom.FindAll("person").SortBy("Name")
+	testFindAllWithExpectedIds(t, q, []string{persons[0].Id, persons[1].Id, persons[2].Id}, true)
+}
+
+func TestFindAllSortNumeric(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save some persons
+	persons, err := support.CreatePersons(3)
+	if err != nil {
+		t.Error(err)
 	}
 
-	equal, msg := util.CompareAsStringSet(expectedNames, gotNames)
-	if !equal {
-		t.Errorf("\nexpected: %v\ngot: %v\nmsg: %s\n", expectedNames, gotNames, msg)
+	// execute a test query and check the results
+	q := zoom.FindAll("person").SortBy("Age")
+	testFindAllWithExpectedIds(t, q, []string{persons[0].Id, persons[1].Id, persons[2].Id}, true)
+}
+
+func TestFindAllSortAlphaDesc(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save some persons
+	persons, err := support.CreatePersons(3)
+	if err != nil {
+		t.Error(err)
 	}
+
+	// execute a test query and check the results
+	q := zoom.FindAll("person").SortBy("Name").Order("DESC")
+	testFindAllWithExpectedIds(t, q, []string{persons[2].Id, persons[1].Id, persons[0].Id}, true)
+}
+
+func TestFindAllSortNumericDesc(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save some persons
+	persons, err := support.CreatePersons(3)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// execute a test query and check the results
+	q := zoom.FindAll("person").SortBy("Age").Order("DESC")
+	testFindAllWithExpectedIds(t, q, []string{persons[2].Id, persons[1].Id, persons[0].Id}, true)
+}
+
+func TestFindAllLimit(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save some persons
+	persons, err := support.CreatePersons(3)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// execute a test query and check the results
+	q := zoom.FindAll("person").SortBy("Name").Limit(2)
+	testFindAllWithExpectedIds(t, q, []string{persons[0].Id, persons[1].Id}, true)
+}
+
+func TestFindAllOffset(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save some persons
+	persons, err := support.CreatePersons(3)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// execute a test query and check the results
+	q := zoom.FindAll("person").SortBy("Name").Limit(2).Offset(1)
+	testFindAllWithExpectedIds(t, q, []string{persons[1].Id, persons[2].Id}, true)
 }
 
 func TestSaveWithList(t *testing.T) {
@@ -412,4 +467,50 @@ func TestFindByIdExclude(t *testing.T) {
 	if pCopy.Age != p.Age {
 		t.Errorf("Age was incorrect. Expected: %d. Got: %d.\n", p.Age, pCopy.Age)
 	}
+}
+
+func findAllTester(t *testing.T, query *zoom.MultiQuery, checker func([]zoom.Model, *testing.T)) {
+	// execute the query
+	results, err := query.Exec()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// run the checker function
+	checker(results, t)
+}
+
+func testFindAllWithExpectedIds(t *testing.T, query *zoom.MultiQuery, expectedIds []string, orderMatters bool) {
+	findAllTester(t, query, func(results []zoom.Model, t *testing.T) {
+		// make sure results is the right length
+		if len(results) != len(expectedIds) {
+			t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", len(results), len(expectedIds))
+		}
+
+		// make sure the ids of the results match what we expected
+		gotIds := []string{}
+		for i, result := range results {
+			// each item in results should be able to be casted to *Person
+			pResult, ok := result.(*support.Person)
+			if !ok {
+				t.Errorf("Couldn't cast results[%d] to *Person", i)
+			}
+			// each item in results should have a valid Id
+			if pResult.Id == "" {
+				t.Error("Id was not set for Person: ", pResult)
+			}
+			gotIds = append(gotIds, pResult.Id)
+		}
+
+		if orderMatters {
+			if !reflect.DeepEqual(expectedIds, gotIds) {
+				t.Errorf("Person ids were incorrect.\nExpected: %v\nGot: %v\n", expectedIds, gotIds)
+			}
+		} else {
+			equal, msg := util.CompareAsStringSet(expectedIds, gotIds)
+			if !equal {
+				t.Errorf("Person ids were incorrect\n%s\nExpected: %v\nGot: %v\n", msg, expectedIds, gotIds)
+			}
+		}
+	})
 }

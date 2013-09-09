@@ -3,7 +3,6 @@ package zoom
 import (
 	"errors"
 	"fmt"
-	"github.com/stephenalexbrowne/zoom/redis"
 	"reflect"
 )
 
@@ -76,57 +75,4 @@ func DeleteById(modelName, id string) error {
 	}
 
 	return nil
-}
-
-func FindAll(modelName string) ([]Model, error) {
-
-	// get the type corresponding to the modelName
-	typ, err := getRegisteredTypeFromName(modelName)
-	if err != nil {
-		return nil, err
-	}
-
-	// get a connection
-	conn := GetConn()
-	defer conn.Close()
-
-	// get all the ids for the models
-	indexKey := modelName + ":index"
-	ids, err := redis.Strings(conn.Do("SMEMBERS", indexKey))
-	if err != nil {
-		return nil, err
-	}
-
-	// start a transaction
-	t := newTransaction()
-
-	// allocate a slice of Model
-	models := make([]Model, len(ids))
-
-	// iterate through the ids and add a find operation for each model
-	for i, id := range ids {
-
-		// instantiate a model using reflection
-		modelVal := reflect.New(typ.Elem())
-		m, ok := modelVal.Interface().(Model)
-		if !ok {
-			msg := fmt.Sprintf("zoom: could not convert val of type %T to Model", modelVal.Interface())
-			return nil, errors.New(msg)
-		}
-
-		// set the ith element of models
-		models[i] = m
-
-		// add a find operation for the model m
-		if err := t.findModel(modelName, id, m); err != nil {
-			return nil, err
-		}
-	}
-
-	// execute the transaction
-	if err := t.exec(); err != nil {
-		return nil, err
-	}
-
-	return models, nil
 }
