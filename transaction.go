@@ -364,11 +364,13 @@ func (t *transaction) findModelWithIncludes(name, id string, scannable Model, in
 		fields = append(fields, modelVal.FieldByName(fieldName).Addr().Interface())
 	}
 
-	// use HGETALL to get all the fields for the model
 	key := name + ":" + id
-	args := redis.Args{}.Add(key).AddFlat(includes)
-	if err := t.command("HMGET", args, newScanHandler(fields)); err != nil {
-		return err
+	if len(fields) != 0 {
+		// use HGETALL to get all the fields for the model
+		args := redis.Args{}.Add(key).AddFlat(includes)
+		if err := t.command("HMGET", args, newScanHandler(fields)); err != nil {
+			return err
+		}
 	}
 
 	// set the model's id

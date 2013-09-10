@@ -395,6 +395,50 @@ func TestFindByIdExclude(t *testing.T) {
 	testFindWithExpectedPerson(t, zoom.FindById("person", p.Id).Include("Name"), justName)
 }
 
+func TestFindByIdWithListExclude(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save a modelWithList model
+	m := &support.ModelWithList{
+		List: []string{"one", "two", "three"},
+	}
+	zoom.Save(m)
+
+	// retrieve using FindById
+	mCopy := &support.ModelWithList{}
+	if _, err := zoom.ScanById(mCopy, m.Id).Exclude("List").Exec(); err != nil {
+		t.Error(err)
+	}
+
+	// make sure the list is empty
+	if len(mCopy.List) != 0 {
+		t.Errorf("list was not empty. was: %v\n", mCopy.List)
+	}
+}
+
+func TestFindByIdWithSetExclude(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save a modelWithSet model
+	m := &support.ModelWithSet{
+		Set: []string{"one", "two", "three", "three"},
+	}
+	zoom.Save(m)
+
+	// retrieve using FindById
+	mCopy := &support.ModelWithSet{}
+	if _, err := zoom.ScanById(mCopy, m.Id).Exclude("Set").Exec(); err != nil {
+		t.Error(err)
+	}
+
+	// make sure the set is empty
+	if len(mCopy.Set) != 0 {
+		t.Errorf("set was not empty. was: %v\n", mCopy.Set)
+	}
+}
+
 func findTester(t *testing.T, query *zoom.Query, checker func(*testing.T, zoom.Model)) {
 	// execute the query
 	result, err := query.Exec()
