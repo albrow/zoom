@@ -43,3 +43,16 @@ type ModelWithSet struct {
 	Set []string `redisType:"set"`
 	zoom.DefaultData
 }
+
+type Artist struct {
+	Name          string
+	FavoriteColor *Color
+	zoom.DefaultData
+}
+
+type Color struct {
+	R int
+	G int
+	B int
+	zoom.DefaultData
+}

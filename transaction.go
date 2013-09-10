@@ -66,7 +66,6 @@ func newScanHandler(scannables []interface{}) func(interface{}) error {
 			return err
 		}
 		if _, err := redis.Scan(replies, scannables...); err != nil {
-			fmt.Println(err)
 			return err
 		}
 
@@ -155,6 +154,13 @@ func (t *transaction) saveModel(m Model) error {
 		}
 	}
 
+	// add operations to save model relations
+	if len(ms.relations) != 0 {
+		if err := t.saveModelRelations(m, name, ms); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -212,6 +218,47 @@ func (t *transaction) saveModelSets(m Model, modelName string, ms *modelSpec) er
 	return nil
 }
 
+func (t *transaction) saveModelRelations(m Model, modelName string, ms *modelSpec) error {
+	for _, relation := range ms.relations {
+		if relation.typ == ONE_TO_ONE {
+			if err := t.saveModelOneToOneRelation(m, modelName, relation); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (t *transaction) saveModelOneToOneRelation(m Model, modelName string, r relation) error {
+
+	// use reflect get the field
+	mVal := reflect.ValueOf(m).Elem()
+	field := mVal.FieldByName(r.fieldName)
+
+	// make sure its type is registered
+	if _, found := typeToName[field.Type()]; !found {
+		msg := fmt.Sprintf("zoom: cannot save pointer to a struct of unregistered type %s\n", field.Type().String())
+		return errors.New(msg)
+	}
+
+	// convert field to a model
+	rModel, ok := field.Interface().(Model)
+	if !ok {
+		msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", field.Type().String())
+		return errors.New(msg)
+	}
+
+	// add a command to the transaction to set the relation key
+	relationKey := modelName + ":" + m.GetId() + ":" + r.redisName
+	args := redis.Args{relationKey, rModel.GetId()}
+	if err := t.command("SET", args, nil); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (t *transaction) findModel(name, id string, scannable Model) error {
 
 	// use HGETALL to get all the fields for the model
@@ -238,6 +285,13 @@ func (t *transaction) findModel(name, id string, scannable Model) error {
 	}
 	if len(ms.sets) != 0 {
 		if err := t.findModelSets(key, scannable, ms); err != nil {
+			return err
+		}
+	}
+
+	// find the relations for the model
+	if len(ms.relations) != 0 {
+		if err := t.findModelRelations(key, scannable, ms); err != nil {
 			return err
 		}
 	}
@@ -278,7 +332,7 @@ func (t *transaction) findModelWithIncludes(name, id string, scannable Model, in
 		}
 	}
 	if len(ms.sets) != 0 {
-		if err := t.findModelSets(key, scannable, ms); err != nil {
+		if err := t.findModelSetsWithIncludes(key, scannable, ms, includes); err != nil {
 			return err
 		}
 	}
@@ -313,6 +367,51 @@ func (t *transaction) findModelSets(key string, scannable Model, ms *modelSpec) 
 			return err
 		}
 	}
+	return nil
+}
+
+func (t *transaction) findModelRelations(key string, scannable Model, ms *modelSpec) error {
+	for _, r := range ms.relations {
+		if err := t.findModelOneToOneRelation(key, reflect.ValueOf(scannable).Elem(), ms, r); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (t *transaction) findModelOneToOneRelation(key string, modelVal reflect.Value, ms *modelSpec, r relation) error {
+
+	// instantiate the field using reflection
+	field := modelVal.FieldByName(r.fieldName)
+	field.Set(reflect.New(field.Type().Elem()))
+
+	// get the registered name
+	rName, found := typeToName[field.Type()]
+	if !found {
+		return NewModelTypeNotRegisteredError(field.Type())
+	}
+
+	// convert field to a model
+	rModel, ok := field.Interface().(Model)
+	if !ok {
+		msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", field.Type().String())
+		return errors.New(msg)
+	}
+
+	// invoke redis driver to get the id
+	conn := GetConn()
+	defer conn.Close()
+	relationKey := key + ":" + r.redisName
+	id, err := redis.String(conn.Do("GET", relationKey))
+	if err != nil {
+		return err
+	}
+
+	// add a command to get the model and scan it into the field
+	if err := t.findModel(rName, id, rModel); err != nil {
+		return err
+	}
+
 	return nil
 }
 

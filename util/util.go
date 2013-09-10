@@ -54,3 +54,7 @@ func CompareAsStringSet(expecteds, gots []string) (bool, string) {
 func TypeIsSliceOrArray(typ reflect.Type) bool {
 	return (typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array) && typ.Elem().Kind() != reflect.Uint8
 }
+
+func TypeIsPointerToStruct(typ reflect.Type) bool {
+	return typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct
+}
