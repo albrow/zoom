@@ -14,7 +14,7 @@
 
 // NOTE: this file has been modified slightly by stephenalexbrowne.
 // The flattenStruct and compileStructSpec functions were changed to
-// ignore slice and array values inside of structs.
+// ignore certain types of values inside of structs.
 
 package redis
 
@@ -244,6 +244,8 @@ func compileStructSpec(t reflect.Type, depth map[string]int, index []int, ss *st
 			}
 		case typeIsSliceOrArray(f.Type):
 			continue // ignore slices and arrays
+		case typeIsPointerToStruct(f.Type):
+			continue // ignore pointers to structs
 		default:
 			fs := &fieldSpec{name: f.Name}
 			tag := f.Tag.Get("redis")
@@ -437,4 +439,8 @@ func flattenStruct(args Args, v reflect.Value) Args {
 
 func typeIsSliceOrArray(typ reflect.Type) bool {
 	return (typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array) && typ.Elem().Kind() != reflect.Uint8
+}
+
+func typeIsPointerToStruct(typ reflect.Type) bool {
+	return typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct
 }

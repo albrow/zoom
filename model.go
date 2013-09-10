@@ -22,9 +22,10 @@ type Model interface {
 }
 
 type modelSpec struct {
+	fieldNames []string
 	sets       []*externalSet
 	lists      []*externalList
-	fieldNames []string
+	relations  map[string]relation
 }
 
 type externalSet struct {
@@ -36,6 +37,19 @@ type externalList struct {
 	redisName string
 	fieldName string
 }
+
+type relation struct {
+	redisName string
+	fieldName string
+	typ       relationType
+}
+
+type relationType int
+
+const (
+	ONE_TO_ONE = iota
+	ONE_TO_MANY
+)
 
 // maps a type to a string identifier. The string is used
 // as a key in the redis database.
@@ -80,7 +94,7 @@ func Register(in interface{}, name string) error {
 	}
 
 	// create a new model spec and register its lists and sets
-	ms := &modelSpec{}
+	ms := &modelSpec{relations: make(map[string]relation)}
 	if err := compileModelSpec(typ, ms); err != nil {
 		return err
 	}
@@ -101,14 +115,38 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 		if field.Name != "DefaultData" {
 			ms.fieldNames = append(ms.fieldNames, field.Name)
 		}
-		if util.TypeIsSliceOrArray(field.Type) {
-			// we're dealing with a slice or an array, which should be converted to a redis list or set
+		if util.TypeIsPointerToStruct(field.Type) {
+			// assume we're dealing with a one-to-one relation
+			// get the redisName
 			tag := field.Tag
 			redisName := tag.Get("redis")
 			if redisName == "-" {
 				continue // skip field
 			} else if redisName == "" {
 				redisName = field.Name
+			}
+			ms.relations[field.Name] = relation{
+				redisName: redisName,
+				fieldName: field.Name,
+				typ:       ONE_TO_ONE,
+			}
+		}
+		if util.TypeIsSliceOrArray(field.Type) {
+			// we're dealing with a slice or an array, which should be converted to a list, set, or one-to-many relation
+			tag := field.Tag
+			redisName := tag.Get("redis")
+			if redisName == "-" {
+				continue // skip field
+			} else if redisName == "" {
+				redisName = field.Name
+			}
+			if util.TypeIsPointerToStruct(field.Type.Elem()) {
+				// assume we're dealing with a one-to-many relation
+				ms.relations[field.Name] = relation{
+					redisName: redisName,
+					fieldName: field.Name,
+					typ:       ONE_TO_MANY,
+				}
 			}
 			redisType := tag.Get("redisType")
 			if redisType == "" || redisType == "list" {
