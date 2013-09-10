@@ -46,6 +46,12 @@ func SetUp() {
 	if err := zoom.Register(&Color{}, "color"); err != nil {
 		panic(err.Error())
 	}
+	if err := zoom.Register(&PetOwner{}, "petOwner"); err != nil {
+		panic(err.Error())
+	}
+	if err := zoom.Register(&Pet{}, "pet"); err != nil {
+		panic(err.Error())
+	}
 }
 
 func TearDown() {
@@ -56,6 +62,8 @@ func TearDown() {
 	zoom.UnregisterName("modelWithSet")
 	zoom.UnregisterName("artist")
 	zoom.UnregisterName("color")
+	zoom.UnregisterName("petOwner")
+	zoom.UnregisterName("pet")
 
 	// flush and close the database
 	conn := zoom.GetConn()

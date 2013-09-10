@@ -56,3 +56,14 @@ type Color struct {
 	B int
 	zoom.DefaultData
 }
+
+type PetOwner struct {
+	Name string
+	Pets []*Pet
+	zoom.DefaultData
+}
+
+type Pet struct {
+	Name string
+	zoom.DefaultData
+}

@@ -130,8 +130,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 				fieldName: field.Name,
 				typ:       ONE_TO_ONE,
 			}
-		}
-		if util.TypeIsSliceOrArray(field.Type) {
+		} else if util.TypeIsSliceOrArray(field.Type) {
 			// we're dealing with a slice or an array, which should be converted to a list, set, or one-to-many relation
 			tag := field.Tag
 			redisName := tag.Get("redis")
@@ -147,6 +146,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 					fieldName: field.Name,
 					typ:       ONE_TO_MANY,
 				}
+				continue
 			}
 			redisType := tag.Get("redisType")
 			if redisType == "" || redisType == "list" {

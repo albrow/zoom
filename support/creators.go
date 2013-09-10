@@ -50,3 +50,31 @@ func CreateColors(num int) ([]*Color, error) {
 	}
 	return results, nil
 }
+
+func CreatePetOwners(num int) ([]*PetOwner, error) {
+	results := make([]*PetOwner, num)
+	for i := 0; i < num; i++ {
+		p := &PetOwner{
+			Name: "petOwner_" + strconv.Itoa(i),
+		}
+		if err := zoom.Save(p); err != nil {
+			return results, err
+		}
+		results[i] = p
+	}
+	return results, nil
+}
+
+func CreatePets(num int) ([]*Pet, error) {
+	results := make([]*Pet, num)
+	for i := 0; i < num; i++ {
+		p := &Pet{
+			Name: "pet_" + strconv.Itoa(i),
+		}
+		if err := zoom.Save(p); err != nil {
+			return results, err
+		}
+		results[i] = p
+	}
+	return results, nil
+}
