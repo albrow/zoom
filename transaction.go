@@ -315,12 +315,31 @@ func (t *transaction) saveModelOneToManyRelation(m Model, modelName string, r re
 	return nil
 }
 
-func (t *transaction) findModel(name, id string, scannable Model) error {
+func (t *transaction) findModel(name, id string, scannable Model, includes []string) error {
 
-	// use HGETALL to get all the fields for the model
+	// we'll use the same key for either HGETALL or HMGET
 	key := name + ":" + id
-	if err := t.command("HGETALL", redis.Args{}.Add(key), newScanStructHandler(scannable)); err != nil {
-		return err
+
+	if includes == nil {
+		// use HGETALL to get all the fields for the model
+		if err := t.command("HGETALL", redis.Args{}.Add(key), newScanStructHandler(scannable)); err != nil {
+			return err
+		}
+	} else {
+		// get the appropriate scannable fields
+		fields := make([]interface{}, 0)
+		modelVal := reflect.ValueOf(scannable).Elem()
+		for _, fieldName := range includes {
+			fields = append(fields, modelVal.FieldByName(fieldName).Addr().Interface())
+		}
+
+		// use HMGET to get only certain fields for the model
+		if len(fields) != 0 {
+			args := redis.Args{}.Add(key).AddFlat(includes)
+			if err := t.command("HMGET", args, newScanHandler(fields)); err != nil {
+				return err
+			}
+		}
 	}
 
 	// set the model's id
@@ -335,19 +354,19 @@ func (t *transaction) findModel(name, id string, scannable Model) error {
 
 	// find all the external sets and lists for the model
 	if len(ms.lists) != 0 {
-		if err := t.findModelLists(key, scannable, ms); err != nil {
+		if err := t.findModelLists(key, scannable, ms, includes); err != nil {
 			return err
 		}
 	}
 	if len(ms.sets) != 0 {
-		if err := t.findModelSets(key, scannable, ms); err != nil {
+		if err := t.findModelSets(key, scannable, ms, includes); err != nil {
 			return err
 		}
 	}
 
 	// find the relations for the model
 	if len(ms.relations) != 0 {
-		if err := t.findModelRelations(key, scannable, ms); err != nil {
+		if err := t.findModelRelations(key, scannable, ms, includes); err != nil {
 			return err
 		}
 	}
@@ -355,51 +374,13 @@ func (t *transaction) findModel(name, id string, scannable Model) error {
 	return nil
 }
 
-func (t *transaction) findModelWithIncludes(name, id string, scannable Model, includes []string) error {
-
-	// get the appropriate scannable fields
-	fields := make([]interface{}, 0)
-	modelVal := reflect.ValueOf(scannable).Elem()
-	for _, fieldName := range includes {
-		fields = append(fields, modelVal.FieldByName(fieldName).Addr().Interface())
-	}
-
-	key := name + ":" + id
-	if len(fields) != 0 {
-		// use HGETALL to get all the fields for the model
-		args := redis.Args{}.Add(key).AddFlat(includes)
-		if err := t.command("HMGET", args, newScanHandler(fields)); err != nil {
-			return err
-		}
-	}
-
-	// set the model's id
-	scannable.SetId(id)
-
-	// get the modelSpec
-	ms, found := modelSpecs[name]
-	if !found {
-		msg := fmt.Sprintf("zoom: no spec found for model of type %T and registered name %s\n", scannable, name)
-		return errors.New(msg)
-	}
-
-	// find all the external sets and lists for the model
-	if len(ms.lists) != 0 {
-		if err := t.findModelListsWithIncludes(key, scannable, ms, includes); err != nil {
-			return err
-		}
-	}
-	if len(ms.sets) != 0 {
-		if err := t.findModelSetsWithIncludes(key, scannable, ms, includes); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (t *transaction) findModelLists(key string, scannable Model, ms *modelSpec) error {
+func (t *transaction) findModelLists(key string, scannable Model, ms *modelSpec, includes []string) error {
 	for _, list := range ms.lists {
+		if includes != nil {
+			if !util.StringSliceContains(list.fieldName, includes) {
+				continue // skip field names that are not in includes
+			}
+		}
 		// use reflection to get a scannable value for the field
 		scanVal := reflect.ValueOf(scannable).Elem()
 		field := scanVal.FieldByName(list.fieldName)
@@ -413,8 +394,13 @@ func (t *transaction) findModelLists(key string, scannable Model, ms *modelSpec)
 	return nil
 }
 
-func (t *transaction) findModelSets(key string, scannable Model, ms *modelSpec) error {
+func (t *transaction) findModelSets(key string, scannable Model, ms *modelSpec, includes []string) error {
 	for _, set := range ms.sets {
+		if includes != nil {
+			if !util.StringSliceContains(set.fieldName, includes) {
+				continue // skip field names that are not in includes
+			}
+		}
 		// use reflection to get a scannable value for the field
 		scanVal := reflect.ValueOf(scannable).Elem()
 		field := scanVal.FieldByName(set.fieldName)
@@ -428,8 +414,13 @@ func (t *transaction) findModelSets(key string, scannable Model, ms *modelSpec) 
 	return nil
 }
 
-func (t *transaction) findModelRelations(key string, scannable Model, ms *modelSpec) error {
+func (t *transaction) findModelRelations(key string, scannable Model, ms *modelSpec, includes []string) error {
 	for _, r := range ms.relations {
+		if includes != nil {
+			if !util.StringSliceContains(r.fieldName, includes) {
+				continue // skip field names that are not in includes
+			}
+		}
 		if r.typ == ONE_TO_ONE {
 			if err := t.findModelOneToOneRelation(key, reflect.ValueOf(scannable).Elem(), ms, r); err != nil {
 				return err
@@ -472,7 +463,7 @@ func (t *transaction) findModelOneToOneRelation(key string, modelVal reflect.Val
 	}
 
 	// add a command to get the model and scan it into the field
-	if err := t.findModel(rName, id, rModel); err != nil {
+	if err := t.findModel(rName, id, rModel, nil); err != nil {
 		return err
 	}
 
@@ -510,49 +501,13 @@ func (t *transaction) findModelOneToManyRelation(key string, modelVal reflect.Va
 			msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", rType.String())
 			return errors.New(msg)
 		}
-		t.findModel(rName, id, rModel)
+		t.findModel(rName, id, rModel, nil)
 
 		// append to the field slice
 		sliceVal := reflect.Append(field, rVal)
 		field.Set(sliceVal)
 	}
 
-	return nil
-}
-
-func (t *transaction) findModelListsWithIncludes(key string, scannable Model, ms *modelSpec, includes []string) error {
-	for _, list := range ms.lists {
-		if !util.StringSliceContains(list.fieldName, includes) {
-			continue // skip field names that are not in includes
-		}
-		// use reflection to get a scannable value for the field
-		scanVal := reflect.ValueOf(scannable).Elem()
-		field := scanVal.FieldByName(list.fieldName)
-		// use LRANGE to get all the members of the list
-		listKey := key + ":" + list.redisName
-		args := redis.Args{listKey, 0, -1}
-		if err := t.command("LRANGE", args, newScanSliceHandler(field)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (t *transaction) findModelSetsWithIncludes(key string, scannable Model, ms *modelSpec, includes []string) error {
-	for _, set := range ms.sets {
-		if !util.StringSliceContains(set.fieldName, includes) {
-			continue // skip field names that are not in includes
-		}
-		// use reflection to get a scannable value for the field
-		scanVal := reflect.ValueOf(scannable).Elem()
-		field := scanVal.FieldByName(set.fieldName)
-		// use SMEMBERS to get all the members of the set
-		setKey := key + ":" + set.redisName
-		args := redis.Args{setKey}
-		if err := t.command("SMEMBERS", args, newScanSliceHandler(field)); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
