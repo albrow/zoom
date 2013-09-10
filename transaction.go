@@ -219,9 +219,13 @@ func (t *transaction) saveModelSets(m Model, modelName string, ms *modelSpec) er
 }
 
 func (t *transaction) saveModelRelations(m Model, modelName string, ms *modelSpec) error {
-	for _, relation := range ms.relations {
-		if relation.typ == ONE_TO_ONE {
-			if err := t.saveModelOneToOneRelation(m, modelName, relation); err != nil {
+	for _, r := range ms.relations {
+		if r.typ == ONE_TO_ONE {
+			if err := t.saveModelOneToOneRelation(m, modelName, r); err != nil {
+				return err
+			}
+		} else if r.typ == ONE_TO_MANY {
+			if err := t.saveModelOneToManyRelation(m, modelName, r); err != nil {
 				return err
 			}
 		}
@@ -249,11 +253,63 @@ func (t *transaction) saveModelOneToOneRelation(m Model, modelName string, r rel
 		return errors.New(msg)
 	}
 
+	// make sure the id is not nil
+	if rModel.GetId() == "" {
+		msg := fmt.Sprintf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
+		return errors.New(msg)
+	}
+
 	// add a command to the transaction to set the relation key
 	relationKey := modelName + ":" + m.GetId() + ":" + r.redisName
 	args := redis.Args{relationKey, rModel.GetId()}
 	if err := t.command("SET", args, nil); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (t *transaction) saveModelOneToManyRelation(m Model, modelName string, r relation) error {
+
+	// use reflect get the field
+	mVal := reflect.ValueOf(m).Elem()
+	field := mVal.FieldByName(r.fieldName)
+
+	// make sure its type is registered
+	if _, found := typeToName[field.Type().Elem()]; !found {
+		msg := fmt.Sprintf("zoom: cannot save slice of pointer to a struct of unregistered type %s\n", field.Type().String())
+		return errors.New(msg)
+	}
+
+	// get a slice of ids from the elements of the field
+	ids := make([]string, 0)
+	for i := 0; i < field.Len(); i++ {
+		rElem := field.Index(i)
+
+		// convert the individual element to a model
+		rModel, ok := rElem.Interface().(Model)
+		if !ok {
+			msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", field.Type().String())
+			return errors.New(msg)
+		}
+
+		// make sure the id is not nil
+		if rModel.GetId() == "" {
+			msg := fmt.Sprintf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
+			return errors.New(msg)
+		}
+
+		// add its id to the slice
+		ids = append(ids, rModel.GetId())
+	}
+
+	if len(ids) > 0 {
+		// add a command to the transaction to save the ids
+		relationKey := modelName + ":" + m.GetId() + ":" + r.redisName
+		args := redis.Args{}.Add(relationKey).AddFlat(ids)
+		if err := t.command("SADD", args, nil); err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -372,8 +428,14 @@ func (t *transaction) findModelSets(key string, scannable Model, ms *modelSpec) 
 
 func (t *transaction) findModelRelations(key string, scannable Model, ms *modelSpec) error {
 	for _, r := range ms.relations {
-		if err := t.findModelOneToOneRelation(key, reflect.ValueOf(scannable).Elem(), ms, r); err != nil {
-			return err
+		if r.typ == ONE_TO_ONE {
+			if err := t.findModelOneToOneRelation(key, reflect.ValueOf(scannable).Elem(), ms, r); err != nil {
+				return err
+			}
+		} else if r.typ == ONE_TO_MANY {
+			if err := t.findModelOneToManyRelation(key, reflect.ValueOf(scannable).Elem(), ms, r); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -410,6 +472,47 @@ func (t *transaction) findModelOneToOneRelation(key string, modelVal reflect.Val
 	// add a command to get the model and scan it into the field
 	if err := t.findModel(rName, id, rModel); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (t *transaction) findModelOneToManyRelation(key string, modelVal reflect.Value, ms *modelSpec, r relation) error {
+
+	// get a connection
+	conn := GetConn()
+	defer conn.Close()
+
+	// invoke redis driver to get a set of keys
+	relationKey := key + ":" + r.redisName
+	ids, err := redis.Strings(conn.Do("SMEMBERS", relationKey))
+	if err != nil {
+		return err
+	}
+
+	// get the field
+	field := modelVal.FieldByName(r.fieldName)
+
+	// get the registered name
+	rType := field.Type().Elem()
+	rName, found := typeToName[rType]
+	if !found {
+		return NewModelTypeNotRegisteredError(rType)
+	}
+
+	// iterate through the ids and set up a scan command in the transaction for each
+	for _, id := range ids {
+		rVal := reflect.New(rType.Elem())
+		rModel, ok := rVal.Interface().(Model)
+		if !ok {
+			msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", rType.String())
+			return errors.New(msg)
+		}
+		t.findModel(rName, id, rModel)
+
+		// append to the field slice
+		sliceVal := reflect.Append(field, rVal)
+		field.Set(sliceVal)
 	}
 
 	return nil
