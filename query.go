@@ -171,7 +171,7 @@ func executeModelFindWithIncludes(id string, scannable Model, q namedIncluderExc
 	includes := ms.fieldNames
 	if len(q.getIncludes()) != 0 {
 		// add a model find operation to the transaction
-		if err := t.findModelWithIncludes(q.name(), id, scannable, q.getIncludes()); err != nil {
+		if err := t.findModel(q.name(), id, scannable, q.getIncludes()); err != nil {
 			return err
 		}
 	} else if len(q.getExcludes()) != 0 {
@@ -179,12 +179,12 @@ func executeModelFindWithIncludes(id string, scannable Model, q namedIncluderExc
 			includes = util.RemoveElementFromStringSlice(includes, name)
 		}
 		// add a model find operation to the transaction
-		if err := t.findModelWithIncludes(q.name(), id, scannable, includes); err != nil {
+		if err := t.findModel(q.name(), id, scannable, includes); err != nil {
 			return err
 		}
 	} else {
 		// add a model find operation to the transaction
-		if err := t.findModel(q.name(), id, scannable); err != nil {
+		if err := t.findModel(q.name(), id, scannable, nil); err != nil {
 			return err
 		}
 	}
