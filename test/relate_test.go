@@ -153,3 +153,64 @@ func TestFindOneToMany(t *testing.T) {
 		t.Errorf("pet ids were not correct.\n%s\n", msg)
 	}
 }
+
+func TestFindOneToOneExclude(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save a new color
+	c := &support.Color{R: 25, G: 152, B: 166}
+	zoom.Save(c)
+
+	// create and save a new artist, assigning favoriteColor to above
+	a := &support.Artist{Name: "Alex", FavoriteColor: c}
+	zoom.Save(a)
+
+	// find the saved person
+	aCopy := &support.Artist{}
+	if _, err := zoom.ScanById(aCopy, a.Id).Exclude("FavoriteColor").Exec(); err != nil {
+		t.Error(err)
+	}
+
+	// make sure favorite color is nil
+	if aCopy.FavoriteColor != nil {
+		t.Errorf("excluded relation was not empty. aCopy.FavoriteColor was: ", aCopy.FavoriteColor)
+	}
+
+	// make sure Name was still set
+	if aCopy.Name != "Alex" {
+		t.Errorf("artist Name was incorrect.\nExpected: %s\nWas: %s\n", "Alex", aCopy.Name)
+	}
+}
+
+func TestFindOneToManyExclude(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save a new petOwner
+	owners, _ := support.CreatePetOwners(1)
+	o := owners[0]
+
+	// create and save some pets
+	pets, _ := support.CreatePets(3)
+
+	// assign the pets to the owner
+	o.Pets = pets
+	zoom.Save(o)
+
+	// get a copy of the owner from the database
+	oCopy := &support.PetOwner{}
+	if _, err := zoom.ScanById(oCopy, o.Id).Exclude("Pets").Exec(); err != nil {
+		t.Error(err)
+	}
+
+	// make sure pets is nil
+	if oCopy.Pets != nil {
+		t.Errorf("excluded relation was not empty. oCopy.Pets was: ", oCopy.Pets)
+	}
+
+	// make sure name was still set
+	if oCopy.Name != o.Name {
+		t.Errorf("artist Name was incorrect.\nExpected: %s\nWas: %s\n", o.Name, oCopy.Name)
+	}
+}
