@@ -11,11 +11,14 @@ import (
 type transaction struct {
 	conn     redis.Conn
 	handlers []func(interface{}) error
+	// references is a sort of per transaction cache. used to prevent duplicate queries and infinite recursion
+	references map[string]interface{}
 }
 
 func newTransaction() *transaction {
 	t := &transaction{
-		conn: GetConn(),
+		conn:       GetConn(),
+		references: make(map[string]interface{}),
 	}
 	t.conn.Send("MULTI")
 	return t
@@ -319,6 +322,13 @@ func (t *transaction) findModel(name, id string, scannable Model, includes []str
 
 	// we'll use the same key for either HGETALL or HMGET
 	key := name + ":" + id
+
+	// check prior references
+	if prior, found := t.references[key]; found {
+		reflect.ValueOf(scannable).Elem().Set(reflect.ValueOf(prior).Elem())
+		return nil
+	}
+	t.references[key] = scannable
 
 	if includes == nil {
 		// use HGETALL to get all the fields for the model

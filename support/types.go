@@ -67,3 +67,9 @@ type Pet struct {
 	Name string
 	zoom.DefaultData
 }
+
+type Friend struct {
+	Name    string
+	Friends []*Friend
+	zoom.DefaultData
+}
