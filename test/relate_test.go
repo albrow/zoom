@@ -154,6 +154,84 @@ func TestFindOneToMany(t *testing.T) {
 	}
 }
 
+func TestSaveManyToMany(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save some friends
+	friends, err := support.CreateConnectedFriends(5)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// get a connection
+	conn := zoom.GetConn()
+	defer conn.Close()
+
+	for i, f := range friends {
+		// invoke redis driver to check if the value was set appropriately
+		friendsKey := "friend:" + f.Id + ":Friends"
+		gotIds, err := redis.Strings(conn.Do("SMEMBERS", friendsKey))
+		if err != nil {
+			t.Error(err)
+		}
+
+		// compare expected ids to got ids
+		expectedIds := make([]string, 0)
+		for _, f2 := range f.Friends {
+			if f2.Id == "" {
+				t.Errorf("friend id was empty for %+v\n", f2)
+			}
+			expectedIds = append(expectedIds, f2.Id)
+		}
+		equal, msg := util.CompareAsStringSet(expectedIds, gotIds)
+		if !equal {
+			t.Errorf("friend ids for friend[%d] were not correct.\n%s\n", i, msg)
+		}
+	}
+
+}
+
+func TestFindManyToMany(t *testing.T) {
+	support.SetUp()
+	defer support.TearDown()
+
+	// create and save some friends
+	friends, err := support.CreateConnectedFriends(5)
+	if err != nil {
+		t.Error(err)
+	}
+
+	for i, f := range friends {
+
+		// get a copy of the friend from the database
+		fCopy := &support.Friend{}
+		if _, err := zoom.ScanById(fCopy, f.Id).Exec(); err != nil {
+			t.Error(err)
+		}
+
+		// compare expected ids to got ids
+		expectedIds := make([]string, 0)
+		for _, f2 := range f.Friends {
+			if f2.Id == "" {
+				t.Errorf("iteration %d: friend:%s - id was empty for %+v\n", i, f.Id, f2)
+			}
+			expectedIds = append(expectedIds, f2.Id)
+		}
+		gotIds := make([]string, 0)
+		for _, f2 := range fCopy.Friends {
+			if f2.Id == "" {
+				t.Errorf("fCopy on iteration %d: friend:%s - id was empty for %+v\n", i, fCopy.Id, f2)
+			}
+			gotIds = append(gotIds, f2.Id)
+		}
+		equal, msg := util.CompareAsStringSet(expectedIds, gotIds)
+		if !equal {
+			t.Errorf("on iteration %d.\nfriend:%s friend ids were not correct.\nExpected: %v\nGot: %v\n%s\n", i, fCopy.Id, expectedIds, gotIds, msg)
+		}
+	}
+}
+
 func TestFindOneToOneExclude(t *testing.T) {
 	support.SetUp()
 	defer support.TearDown()

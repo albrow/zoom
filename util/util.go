@@ -4,6 +4,7 @@ package util
 
 import (
 	"fmt"
+	"math/rand"
 	"reflect"
 )
 
@@ -57,4 +58,13 @@ func TypeIsSliceOrArray(typ reflect.Type) bool {
 
 func TypeIsPointerToStruct(typ reflect.Type) bool {
 	return typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct
+}
+
+// generate a random int from min to max (inclusively).
+// I.e. to get either 1 or 0, use randInt(0,1)
+func RandInt(min int, max int) int {
+	if !(max-min >= 1) {
+		panic("invalid args. max must be at least one more than min")
+	}
+	return min + rand.Intn(max-min+1)
 }

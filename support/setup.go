@@ -5,6 +5,8 @@ package support
 import (
 	"github.com/stephenalexbrowne/zoom"
 	"github.com/stephenalexbrowne/zoom/redis"
+	"math/rand"
+	"time"
 )
 
 func SetUp() {
@@ -52,6 +54,12 @@ func SetUp() {
 	if err := zoom.Register(&Pet{}, "pet"); err != nil {
 		panic(err.Error())
 	}
+	if err := zoom.Register(&Friend{}, "friend"); err != nil {
+		panic(err.Error())
+	}
+
+	// generate a new seed for rand
+	rand.Seed(time.Now().UTC().UnixNano())
 }
 
 func TearDown() {
@@ -64,6 +72,7 @@ func TearDown() {
 	zoom.UnregisterName("color")
 	zoom.UnregisterName("petOwner")
 	zoom.UnregisterName("pet")
+	zoom.UnregisterName("friend")
 
 	// flush and close the database
 	conn := zoom.GetConn()
