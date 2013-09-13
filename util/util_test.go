@@ -87,15 +87,6 @@ func TestSliceContains(t *testing.T) {
 	}
 }
 
-func TestRemoveFromSlice(t *testing.T) {
-	start := []string{"one", "two", "three", "four"}
-	got := (RemoveFromSlice(start, 2)).([]string)
-	expected := []string{"one", "two", "four"}
-	if !reflect.DeepEqual(expected, got) {
-		t.Errorf("result was incorrect.\nExpected: %v\nGot: %v\n", expected, got)
-	}
-}
-
 func TestCompareAsSet(t *testing.T) {
 	a := []string{"one", "two", "three"}
 	b := []string{"two", "three", "one"}
