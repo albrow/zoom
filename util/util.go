@@ -41,17 +41,6 @@ func RemoveFromStringSlice(list []string, i int) []string {
 	return append(list[:i], list[i+1:]...)
 }
 
-func RemoveFromSlice(list interface{}, i int) interface{} {
-	lVal := reflect.ValueOf(list)
-	size := lVal.Len()
-	newVal := reflect.New(lVal.Type()).Elem()
-	newVal.Set(lVal.Slice(0, i))
-	for j := i + 1; j < size; j++ {
-		newVal.Set(reflect.Append(newVal, lVal.Index(j)))
-	}
-	return newVal.Interface()
-}
-
 func RemoveElementFromStringSlice(list []string, elem string) []string {
 	for i, e := range list {
 		if e == elem {
@@ -82,6 +71,18 @@ func CompareAsStringSet(expecteds, gots []string) (bool, string) {
 func CompareAsSet(expecteds, gots interface{}) (bool, string) {
 	eVal := reflect.ValueOf(expecteds)
 	gVal := reflect.ValueOf(gots)
+
+	// make sure everything in expecteds is also in gots
+	for i := 0; i < eVal.Len(); i++ {
+		expected := eVal.Index(i).Interface()
+		index := IndexOfSlice(expected, gots)
+		if index == -1 {
+			msg := fmt.Sprintf("Missing expected element: %v", expected)
+			return false, msg
+		}
+	}
+
+	// make sure everything in gots is also in expecteds
 	for i := 0; i < gVal.Len(); i++ {
 		got := gVal.Index(i).Interface()
 		index := IndexOfSlice(got, expecteds)
@@ -89,13 +90,6 @@ func CompareAsSet(expecteds, gots interface{}) (bool, string) {
 			msg := fmt.Sprintf("Found unexpected element: %v", got)
 			return false, msg
 		}
-		// remove from expecteds. makes sure we have one of each
-		eVal = reflect.ValueOf(RemoveFromSlice(eVal.Interface(), index))
-	}
-	// now expecteds should be empty. If it's not, there's a problem
-	if eVal.Len() != 0 {
-		msg := fmt.Sprintf("The following expected elements were not found: %v\n", eVal.Interface())
-		return false, msg
 	}
 	return true, "ok"
 }

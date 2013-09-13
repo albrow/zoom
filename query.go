@@ -11,7 +11,11 @@ import (
 	"reflect"
 )
 
-type Query struct {
+type Query interface {
+	Run() (interface{}, error)
+}
+
+type FindQuery struct {
 	scannable Model
 	includes  []string
 	excludes  []string
@@ -20,11 +24,12 @@ type Query struct {
 	err       error
 }
 
-type MultiQuery struct {
-	scannables []Model
+type FindAllQuery struct {
+	scannables interface{}
 	includes   []string
 	excludes   []string
 	modelName  string
+	modelType  reflect.Type
 	sort       sort
 	limit      uint
 	offset     uint
@@ -47,34 +52,34 @@ type namedIncluderExcluder interface {
 	name() string
 }
 
-func (q *Query) getIncludes() []string {
+func (q *FindQuery) getIncludes() []string {
 	return q.includes
 }
 
-func (q *Query) getExcludes() []string {
+func (q *FindQuery) getExcludes() []string {
 	return q.excludes
 }
 
-func (q *MultiQuery) getIncludes() []string {
+func (q *FindAllQuery) getIncludes() []string {
 	return q.includes
 }
 
-func (q *MultiQuery) getExcludes() []string {
+func (q *FindAllQuery) getExcludes() []string {
 	return q.excludes
 }
 
-func (q *Query) name() string {
+func (q *FindQuery) name() string {
 	return q.modelName
 }
 
-func (q *MultiQuery) name() string {
+func (q *FindAllQuery) name() string {
 	return q.modelName
 }
 
-func FindById(modelName, id string) *Query {
+func FindById(modelName, id string) *FindQuery {
 
 	// create a query object
-	q := &Query{
+	q := &FindQuery{
 		modelName: modelName,
 		id:        id,
 	}
@@ -100,10 +105,10 @@ func FindById(modelName, id string) *Query {
 	return q
 }
 
-func ScanById(m Model, id string) *Query {
+func ScanById(m Model, id string) *FindQuery {
 
 	// create a query object
-	q := &Query{
+	q := &FindQuery{
 		id:        id,
 		scannable: m,
 	}
@@ -120,7 +125,7 @@ func ScanById(m Model, id string) *Query {
 	return q
 }
 
-func (q *Query) Include(fields ...string) *Query {
+func (q *FindQuery) Include(fields ...string) *FindQuery {
 	if len(q.excludes) > 0 {
 		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
 		return q
@@ -129,7 +134,7 @@ func (q *Query) Include(fields ...string) *Query {
 	return q
 }
 
-func (q *Query) Exclude(fields ...string) *Query {
+func (q *FindQuery) Exclude(fields ...string) *FindQuery {
 	if len(q.includes) > 0 {
 		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
 		return q
@@ -138,13 +143,13 @@ func (q *Query) Exclude(fields ...string) *Query {
 	return q
 }
 
-func (q *Query) setErrorIfNone(e error) {
+func (q *FindQuery) setErrorIfNone(e error) {
 	if q.err == nil {
 		q.err = e
 	}
 }
 
-func (q *Query) Exec() (Model, error) {
+func (q *FindQuery) Run() (interface{}, error) {
 	// check if the query had any prior errors
 	if q.err != nil {
 		return q.scannable, q.err
@@ -154,7 +159,7 @@ func (q *Query) Exec() (Model, error) {
 	t := newTransaction()
 
 	// set up includes
-	if err := executeModelFindWithIncludes(q.id, q.scannable, q, t); err != nil {
+	if err := findModelWithIncludes(q.id, q.scannable, q, t); err != nil {
 		return q.scannable, err
 	}
 
@@ -166,7 +171,152 @@ func (q *Query) Exec() (Model, error) {
 	return q.scannable, nil
 }
 
-func executeModelFindWithIncludes(id string, scannable Model, q namedIncluderExcluder, t *transaction) error {
+func FindAll(modelName string) *FindAllQuery {
+
+	q := &FindAllQuery{
+		modelName: modelName,
+	}
+
+	typ, err := getRegisteredTypeFromName(modelName)
+	if err != nil {
+		q.setErrorIfNone(err)
+		return q
+	}
+
+	q.modelType = typ
+	newVal := reflect.New(reflect.SliceOf(typ))
+	newVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(typ), 0, 0))
+	q.scannables = newVal.Interface()
+
+	return q
+}
+
+func ScanAll(models interface{}) *FindAllQuery {
+
+	// create a query object
+	q := new(FindAllQuery)
+
+	// get the name corresponding to the type of m
+	typ := reflect.TypeOf(models).Elem()
+	if !util.TypeIsSliceOrArray(typ) {
+		msg := fmt.Sprintf("zoom: ScanAll requires a pointer to a slice slice or array as an argument. Got: %T", models)
+		q.setErrorIfNone(errors.New(msg))
+		return q
+	}
+	elemType := typ.Elem()
+	if !util.TypeIsPointerToStruct(elemType) {
+		msg := fmt.Sprintf("zoom: ScanAll requires a pointer to a slice of pointers to structs. Got: %T", models)
+		q.setErrorIfNone(errors.New(msg))
+		return q
+	}
+	q.modelType = elemType
+
+	modelName, found := typeToName[elemType]
+	if !found {
+		q.setErrorIfNone(NewModelTypeNotRegisteredError(elemType))
+		return q
+	}
+	q.modelName = modelName
+	q.scannables = models
+
+	return q
+}
+
+func (q *FindAllQuery) Include(fields ...string) *FindAllQuery {
+	if len(q.excludes) > 0 {
+		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
+		return q
+	}
+	q.includes = append(q.includes, fields...)
+	return q
+}
+
+func (q *FindAllQuery) Exclude(fields ...string) *FindAllQuery {
+	if len(q.includes) > 0 {
+		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
+		return q
+	}
+	q.excludes = append(q.excludes, fields...)
+	return q
+}
+
+func (q *FindAllQuery) SortBy(field string) *FindAllQuery {
+	q.sort.fieldName = field
+	return q
+}
+
+func (q *FindAllQuery) Order(order string) *FindAllQuery {
+	if order == "ASC" {
+		q.sort.desc = false
+	} else if order == "DESC" {
+		q.sort.desc = true
+	} else {
+		q.setErrorIfNone(errors.New("zoom: order must be either ASC or DESC"))
+	}
+	return q
+}
+
+func (q *FindAllQuery) Limit(amount uint) *FindAllQuery {
+	q.limit = amount
+	return q
+}
+
+func (q *FindAllQuery) Offset(amount uint) *FindAllQuery {
+	q.offset = amount
+	return q
+}
+
+func (q *FindAllQuery) setErrorIfNone(e error) {
+	if q.err == nil {
+		q.err = e
+	}
+}
+
+func (q *FindAllQuery) Run() (interface{}, error) {
+
+	// check if the query had any prior errors
+	if q.err != nil {
+		return nil, q.err
+	}
+
+	// use reflection to get a value for scannables
+	scannablesVal := reflect.ValueOf(q.scannables).Elem()
+
+	// get the ids for the models
+	ids, err := q.getIds()
+	if err != nil {
+		return scannablesVal.Interface(), err
+	}
+
+	// start a transaction
+	t := newTransaction()
+
+	// iterate through the ids and add a find operation for each model
+	for _, id := range ids {
+
+		// instantiate a new scannable element and append it to q.scannables
+		scannable := reflect.New(q.modelType.Elem())
+		scannablesVal.Set(reflect.Append(scannablesVal, scannable))
+
+		model, ok := scannable.Interface().(Model)
+		if !ok {
+			msg := fmt.Sprintf("zoom: could not convert val of type %s to Model\n", scannable.Type().String())
+			return scannablesVal.Interface(), errors.New(msg)
+		}
+
+		// add a find operation for the model m
+		findModelWithIncludes(id, model, q, t)
+	}
+
+	// execute the transaction
+	if err := t.exec(); err != nil {
+		return scannablesVal.Interface(), err
+	}
+
+	return scannablesVal.Interface(), nil
+}
+
+func findModelWithIncludes(id string, scannable Model, q namedIncluderExcluder, t *transaction) error {
 	ms := modelSpecs[q.name()]
 	includes := ms.fieldNames
 	if len(q.getIncludes()) != 0 {
@@ -191,114 +341,7 @@ func executeModelFindWithIncludes(id string, scannable Model, q namedIncluderExc
 	return nil
 }
 
-func FindAll(modelName string) *MultiQuery {
-	// create and return a query object
-	return &MultiQuery{
-		modelName: modelName,
-	}
-}
-
-func (q *MultiQuery) Include(fields ...string) *MultiQuery {
-	if len(q.excludes) > 0 {
-		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
-		return q
-	}
-	q.includes = append(q.includes, fields...)
-	return q
-}
-
-func (q *MultiQuery) Exclude(fields ...string) *MultiQuery {
-	if len(q.includes) > 0 {
-		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
-		return q
-	}
-	q.excludes = append(q.excludes, fields...)
-	return q
-}
-
-func (q *MultiQuery) SortBy(field string) *MultiQuery {
-	q.sort.fieldName = field
-	return q
-}
-
-func (q *MultiQuery) Order(order string) *MultiQuery {
-	if order == "ASC" {
-		q.sort.desc = false
-	} else if order == "DESC" {
-		q.sort.desc = true
-	} else {
-		q.setErrorIfNone(errors.New("zoom: order must be either ASC or DESC"))
-	}
-	return q
-}
-
-func (q *MultiQuery) Limit(amount uint) *MultiQuery {
-	q.limit = amount
-	return q
-}
-
-func (q *MultiQuery) Offset(amount uint) *MultiQuery {
-	q.offset = amount
-	return q
-}
-
-func (q *MultiQuery) setErrorIfNone(e error) {
-	if q.err == nil {
-		q.err = e
-	}
-}
-
-func (q *MultiQuery) Exec() ([]Model, error) {
-	// check if the query had any prior errors
-	if q.err != nil {
-		return q.scannables, q.err
-	}
-
-	// get the type corresponding to the modelName
-	typ, err := getRegisteredTypeFromName(q.modelName)
-	if err != nil {
-		return nil, err
-	}
-
-	// get the ids for the models
-	ids, err := q.getIds(typ)
-	if err != nil {
-		return nil, err
-	}
-
-	// start a transaction
-	t := newTransaction()
-
-	// allocate a slice of Model
-	q.scannables = make([]Model, len(ids))
-
-	// iterate through the ids and add a find operation for each model
-	for i, id := range ids {
-
-		// instantiate a model using reflection
-		modelVal := reflect.New(typ.Elem())
-		m, ok := modelVal.Interface().(Model)
-		if !ok {
-			msg := fmt.Sprintf("zoom: could not convert val of type %T to Model", modelVal.Interface())
-			return nil, errors.New(msg)
-		}
-
-		// set the ith element of scannables
-		q.scannables[i] = m
-
-		// add a find operation for the model m
-		executeModelFindWithIncludes(id, q.scannables[i], q, t)
-	}
-
-	// execute the transaction
-	if err := t.exec(); err != nil {
-		return nil, err
-	}
-
-	return q.scannables, nil
-}
-
-func (q *MultiQuery) getIds(typ reflect.Type) ([]string, error) {
+func (q *FindAllQuery) getIds() ([]string, error) {
 
 	// get a connection
 	conn := GetConn()
@@ -319,9 +362,9 @@ func (q *MultiQuery) getIds(typ reflect.Type) ([]string, error) {
 		args = args.Add(indexKey).Add("BY").Add(weight)
 
 		// figure out if we need the alpha option
-		field, found := typ.Elem().FieldByName(q.sort.fieldName)
+		field, found := q.modelType.Elem().FieldByName(q.sort.fieldName)
 		if !found {
-			msg := fmt.Sprintf("zoom: invalid SortBy modifier. model of type %s has no field %s\n.", typ.String(), q.sort.fieldName)
+			msg := fmt.Sprintf("zoom: invalid SortBy modifier. model of type %s has no field %s\n.", q.modelType.String(), q.sort.fieldName)
 			return nil, errors.New(msg)
 		}
 		if field.Type.Kind() == reflect.String {
