@@ -38,7 +38,7 @@ func TestVariadicSave(t *testing.T) {
 		t.Error(err)
 	}
 
-	if err := zoom.Save(persons[0], persons[1], persons[2]); err != nil {
+	if err := zoom.Save(zoom.Models(persons)...); err != nil {
 		t.Error(err)
 	}
 
@@ -110,7 +110,7 @@ func TestVariadicDelete(t *testing.T) {
 	}
 
 	// delete it
-	if err := zoom.Delete(persons[0], persons[1], persons[2]); err != nil {
+	if err := zoom.Delete(zoom.Models(persons)...); err != nil {
 		t.Error(err)
 	}
 
