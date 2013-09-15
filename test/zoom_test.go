@@ -6,6 +6,7 @@ import (
 	"github.com/stephenalexbrowne/zoom/test_support"
 	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -20,44 +21,34 @@ func TestSave(t *testing.T) {
 		t.Error(err)
 	}
 
-	// make sure it was assigned an id
-	if p.Id == "" {
-		t.Error("model was not assigned an id")
+	// get a connection
+	conn := zoom.GetConn()
+	defer conn.Close()
+
+	checkPersonSaved(t, p, conn)
+}
+
+func TestVariadicSave(t *testing.T) {
+	test_support.SetUp()
+	defer test_support.TearDown()
+
+	// create some new persons, but don't save them yet
+	persons, err := test_support.NewPersons(3)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if err := zoom.Save(persons[0], persons[1], persons[2]); err != nil {
+		t.Error(err)
 	}
 
 	// get a connection
 	conn := zoom.GetConn()
 	defer conn.Close()
 
-	// make sure the key exists
-	key := "person:" + p.Id
-	exists, err := zoom.KeyExists(key, conn)
-	if err != nil {
-		t.Error(err)
-	}
-	if exists == false {
-		t.Error("model was not saved in redis")
-	}
-
-	// make sure the values are correct for the person
-	results, err := redis.Strings(conn.Do("HMGET", key, "Name", "Age"))
-	if err != nil {
-		t.Error(err)
-	}
-	if results[0] != "Bob" {
-		t.Errorf("Name of saved model was incorrect. Expected: %s. Got: %s.\n", "Bob", results[0])
-	}
-	if results[1] != "25" {
-		t.Errorf("Age of saved model was incorrect. Expected: %s. Got: %s.\n", "25", results[1])
-	}
-
-	// make sure it was added to the index
-	indexed, err := zoom.SetContains("person:index", p.Id, conn)
-	if err != nil {
-		t.Error(err)
-	}
-	if indexed == false {
-		t.Error("model was not added to person:index")
+	// for each person...
+	for _, p := range persons {
+		checkPersonSaved(t, p, conn)
 	}
 }
 
@@ -96,29 +87,41 @@ func TestDelete(t *testing.T) {
 	zoom.Save(p)
 
 	// delete it
-	zoom.Delete(p)
+	if err := zoom.Delete(p); err != nil {
+		t.Error(err)
+	}
 
 	// get a connection
 	conn := zoom.GetConn()
 	defer conn.Close()
 
-	// Make sure it's gone
-	key := "person:" + p.Id
-	exists, err := zoom.KeyExists(key, conn)
+	// make sure it's gone
+	checkPersonDeleted(t, p.Id, conn)
+}
+
+func TestVariadicDelete(t *testing.T) {
+	test_support.SetUp()
+	defer test_support.TearDown()
+
+	// create and save some new models
+	persons, err := test_support.CreatePersons(3)
 	if err != nil {
 		t.Error(err)
-	}
-	if exists {
-		t.Error("model key still exists")
 	}
 
-	// Make sure it was removed from index
-	indexed, err := zoom.SetContains("person:index", p.Id, conn)
-	if err != nil {
+	// delete it
+	if err := zoom.Delete(persons[0], persons[1], persons[2]); err != nil {
 		t.Error(err)
 	}
-	if indexed {
-		t.Error("model id is still in person:index")
+
+	// get a connection
+	conn := zoom.GetConn()
+	defer conn.Close()
+
+	// for each person...
+	for _, p := range persons {
+		// make sure it's gone
+		checkPersonDeleted(t, p.Id, conn)
 	}
 }
 
@@ -137,23 +140,31 @@ func TestDeleteById(t *testing.T) {
 	conn := zoom.GetConn()
 	defer conn.Close()
 
-	// Make sure it's gone
-	key := "person:" + p.Id
-	exists, err := zoom.KeyExists(key, conn)
+	// make sure it's gone
+	checkPersonDeleted(t, p.Id, conn)
+}
+
+func TestVariadicDeleteById(t *testing.T) {
+	test_support.SetUp()
+	defer test_support.TearDown()
+
+	// create and save some new models
+	persons, err := test_support.CreatePersons(3)
 	if err != nil {
 		t.Error(err)
-	}
-	if exists {
-		t.Error("model key still exists")
 	}
 
-	// Make sure it was removed from index
-	indexed, err := zoom.SetContains("person:index", p.Id, conn)
-	if err != nil {
-		t.Error(err)
-	}
-	if indexed {
-		t.Error("model id is still in person:index")
+	// delete it
+	zoom.DeleteById("person", persons[0].Id, persons[1].Id, persons[2].Id)
+
+	// get a connection
+	conn := zoom.GetConn()
+	defer conn.Close()
+
+	// for each person...
+	for _, p := range persons {
+		// make sure it's gone
+		checkPersonDeleted(t, p.Id, conn)
 	}
 }
 
@@ -543,5 +554,63 @@ func testFindAllWithExpectedPersonsAndScannable(t *testing.T, query zoom.Query, 
 func checkPersonsEqual(t *testing.T, expected, got *test_support.Person) {
 	if !reflect.DeepEqual(expected, got) {
 		t.Error("person was not equal.\nExpected: %+v\nGot: %+v\n", expected, got)
+	}
+}
+
+func checkPersonSaved(t *testing.T, p *test_support.Person, conn redis.Conn) {
+	// make sure it was assigned an id
+	if p.Id == "" {
+		t.Error("model was not assigned an id")
+	}
+
+	// make sure the key exists
+	key := "person:" + p.Id
+	exists, err := zoom.KeyExists(key, conn)
+	if err != nil {
+		t.Error(err)
+	}
+	if exists == false {
+		t.Error("model was not saved in redis")
+	}
+
+	// make sure the values are correct for the person
+	results, err := redis.Strings(conn.Do("HMGET", key, "Name", "Age"))
+	if err != nil {
+		t.Error(err)
+	}
+	if results[0] != p.Name {
+		t.Errorf("Name of saved model was incorrect. Expected: %s. Got: %s.\n", p.Name, results[0])
+	}
+	if results[1] != strconv.Itoa(p.Age) {
+		t.Errorf("Age of saved model was incorrect. Expected: %d. Got: %s.\n", p.Age, results[1])
+	}
+
+	// make sure it was added to the index
+	indexed, err := zoom.SetContains("person:index", p.Id, conn)
+	if err != nil {
+		t.Error(err)
+	}
+	if indexed == false {
+		t.Error("model was not added to person:index")
+	}
+}
+
+func checkPersonDeleted(t *testing.T, id string, conn redis.Conn) {
+	key := "person:" + id
+	exists, err := zoom.KeyExists(key, conn)
+	if err != nil {
+		t.Error(err)
+	}
+	if exists {
+		t.Error("model key still exists")
+	}
+
+	// Make sure it was removed from index
+	indexed, err := zoom.SetContains("person:index", id, conn)
+	if err != nil {
+		t.Error(err)
+	}
+	if indexed {
+		t.Error("model id is still in person:index")
 	}
 }
