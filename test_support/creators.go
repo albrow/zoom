@@ -1,4 +1,6 @@
-package support
+// File contains convenient constructors for the types in types.go
+
+package test_support
 
 import (
 	"github.com/stephenalexbrowne/zoom"
