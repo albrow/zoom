@@ -3,21 +3,21 @@ package test
 import (
 	"github.com/stephenalexbrowne/zoom"
 	"github.com/stephenalexbrowne/zoom/redis"
-	"github.com/stephenalexbrowne/zoom/support"
+	"github.com/stephenalexbrowne/zoom/test_support"
 	"github.com/stephenalexbrowne/zoom/util"
 	"testing"
 )
 
 func TestSaveOneToOne(t *testing.T) {
-	support.SetUp()
-	defer support.TearDown()
+	test_support.SetUp()
+	defer test_support.TearDown()
 
 	// create and save a new color
-	c := &support.Color{R: 25, G: 152, B: 166}
+	c := &test_support.Color{R: 25, G: 152, B: 166}
 	zoom.Save(c)
 
 	// create and save a new artist, assigning favoriteColor to above
-	a := &support.Artist{Name: "Alex", FavoriteColor: c}
+	a := &test_support.Artist{Name: "Alex", FavoriteColor: c}
 	if err := zoom.Save(a); err != nil {
 		t.Error(err)
 	}
@@ -38,19 +38,19 @@ func TestSaveOneToOne(t *testing.T) {
 }
 
 func TestFindOneToOne(t *testing.T) {
-	support.SetUp()
-	defer support.TearDown()
+	test_support.SetUp()
+	defer test_support.TearDown()
 
 	// create and save a new color
-	c := &support.Color{R: 25, G: 152, B: 166}
+	c := &test_support.Color{R: 25, G: 152, B: 166}
 	zoom.Save(c)
 
 	// create and save a new artist, assigning favoriteColor to above
-	a := &support.Artist{Name: "Alex", FavoriteColor: c}
+	a := &test_support.Artist{Name: "Alex", FavoriteColor: c}
 	zoom.Save(a)
 
 	// find the saved person
-	aCopy := &support.Artist{}
+	aCopy := &test_support.Artist{}
 	if _, err := zoom.ScanById(aCopy, a.Id).Run(); err != nil {
 		t.Error(err)
 	}
@@ -65,18 +65,18 @@ func TestFindOneToOne(t *testing.T) {
 }
 
 func TestSaveOneToMany(t *testing.T) {
-	support.SetUp()
-	defer support.TearDown()
+	test_support.SetUp()
+	defer test_support.TearDown()
 
 	// create and save a new petOwner
-	owners, err := support.CreatePetOwners(1)
+	owners, err := test_support.CreatePetOwners(1)
 	if err != nil {
 		t.Error(err)
 	}
 	o := owners[0]
 
 	// create and save some pets
-	pets, err := support.CreatePets(3)
+	pets, err := test_support.CreatePets(3)
 	if err != nil {
 		t.Error(err)
 	}
@@ -113,22 +113,22 @@ func TestSaveOneToMany(t *testing.T) {
 }
 
 func TestFindOneToMany(t *testing.T) {
-	support.SetUp()
-	defer support.TearDown()
+	test_support.SetUp()
+	defer test_support.TearDown()
 
 	// create and save a new petOwner
-	owners, _ := support.CreatePetOwners(1)
+	owners, _ := test_support.CreatePetOwners(1)
 	o := owners[0]
 
 	// create and save some pets
-	pets, _ := support.CreatePets(3)
+	pets, _ := test_support.CreatePets(3)
 
 	// assign the pets to the owner
 	o.Pets = pets
 	zoom.Save(o)
 
 	// get a copy of the owner from the database
-	oCopy := &support.PetOwner{}
+	oCopy := &test_support.PetOwner{}
 	if _, err := zoom.ScanById(oCopy, o.Id).Run(); err != nil {
 		t.Error(err)
 	}
@@ -155,11 +155,11 @@ func TestFindOneToMany(t *testing.T) {
 }
 
 func TestSaveManyToMany(t *testing.T) {
-	support.SetUp()
-	defer support.TearDown()
+	test_support.SetUp()
+	defer test_support.TearDown()
 
 	// create and save some friends
-	friends, err := support.CreateConnectedFriends(5)
+	friends, err := test_support.CreateConnectedFriends(5)
 	if err != nil {
 		t.Error(err)
 	}
@@ -193,11 +193,11 @@ func TestSaveManyToMany(t *testing.T) {
 }
 
 func TestFindManyToMany(t *testing.T) {
-	support.SetUp()
-	defer support.TearDown()
+	test_support.SetUp()
+	defer test_support.TearDown()
 
 	// create and save some friends
-	friends, err := support.CreateConnectedFriends(5)
+	friends, err := test_support.CreateConnectedFriends(5)
 	if err != nil {
 		t.Error(err)
 	}
@@ -205,7 +205,7 @@ func TestFindManyToMany(t *testing.T) {
 	for i, f := range friends {
 
 		// get a copy of the friend from the database
-		fCopy := &support.Friend{}
+		fCopy := &test_support.Friend{}
 		if _, err := zoom.ScanById(fCopy, f.Id).Run(); err != nil {
 			t.Error(err)
 		}
@@ -233,19 +233,19 @@ func TestFindManyToMany(t *testing.T) {
 }
 
 func TestFindOneToOneExclude(t *testing.T) {
-	support.SetUp()
-	defer support.TearDown()
+	test_support.SetUp()
+	defer test_support.TearDown()
 
 	// create and save a new color
-	c := &support.Color{R: 25, G: 152, B: 166}
+	c := &test_support.Color{R: 25, G: 152, B: 166}
 	zoom.Save(c)
 
 	// create and save a new artist, assigning favoriteColor to above
-	a := &support.Artist{Name: "Alex", FavoriteColor: c}
+	a := &test_support.Artist{Name: "Alex", FavoriteColor: c}
 	zoom.Save(a)
 
 	// find the saved person
-	aCopy := &support.Artist{}
+	aCopy := &test_support.Artist{}
 	if _, err := zoom.ScanById(aCopy, a.Id).Exclude("FavoriteColor").Run(); err != nil {
 		t.Error(err)
 	}
@@ -262,22 +262,22 @@ func TestFindOneToOneExclude(t *testing.T) {
 }
 
 func TestFindOneToManyExclude(t *testing.T) {
-	support.SetUp()
-	defer support.TearDown()
+	test_support.SetUp()
+	defer test_support.TearDown()
 
 	// create and save a new petOwner
-	owners, _ := support.CreatePetOwners(1)
+	owners, _ := test_support.CreatePetOwners(1)
 	o := owners[0]
 
 	// create and save some pets
-	pets, _ := support.CreatePets(3)
+	pets, _ := test_support.CreatePets(3)
 
 	// assign the pets to the owner
 	o.Pets = pets
 	zoom.Save(o)
 
 	// get a copy of the owner from the database
-	oCopy := &support.PetOwner{}
+	oCopy := &test_support.PetOwner{}
 	if _, err := zoom.ScanById(oCopy, o.Id).Exclude("Pets").Run(); err != nil {
 		t.Error(err)
 	}

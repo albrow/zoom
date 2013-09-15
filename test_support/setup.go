@@ -1,8 +1,9 @@
-// Files contains helper functions SetUp() and TearDown()
+// File contains helper functions SetUp() and TearDown()
 
-package support
+package test_support
 
 import (
+	"fmt"
 	"github.com/stephenalexbrowne/zoom"
 	"github.com/stephenalexbrowne/zoom/redis"
 	"math/rand"
@@ -10,17 +11,8 @@ import (
 )
 
 func SetUp() {
-	// TODO: add a tcp fallback if sockets doesn't work
 
-	// initialize zoom
-	zoom.Init(&zoom.Configuration{
-		Address:  "/tmp/redis.sock",
-		Network:  "unix",
-		Database: 9,
-	})
-
-	// get a connection
-	conn := zoom.GetConn()
+	conn := connect()
 	defer conn.Close()
 
 	// make sure database #9 is empty
@@ -60,6 +52,50 @@ func SetUp() {
 
 	// generate a new seed for rand
 	rand.Seed(time.Now().UTC().UnixNano())
+}
+
+func connect() redis.Conn {
+
+	// initialize zoom
+	dialUNIX()
+
+	// if dialUNIX failed, try using a tcp connection
+	conn := zoom.GetConn()
+	if err := testConn(conn); err != nil {
+		fmt.Println("WARNING: falling back to tcp connection. For maximum performance use a socket connection on /tmp/redis.sock")
+		dialTCP()
+		conn = zoom.GetConn()
+		if err := testConn(conn); err != nil {
+			// if dialTCP failed, panic.
+			panic(err)
+		}
+	}
+
+	// get a connection
+	return conn
+}
+
+func dialUNIX() {
+	zoom.Init(&zoom.Configuration{
+		Address:  "/tmp/redis.sock",
+		Network:  "unix",
+		Database: 9,
+	})
+}
+
+func dialTCP() {
+	zoom.Init(&zoom.Configuration{
+		Address:  "localhost:6379",
+		Network:  "tcp",
+		Database: 9,
+	})
+}
+
+func testConn(conn redis.Conn) error {
+	if _, err := conn.Do("PING"); err != nil {
+		return err
+	}
+	return nil
 }
 
 func TearDown() {

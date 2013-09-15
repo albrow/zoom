@@ -1,6 +1,6 @@
 // file contains type declarations that are used in various places, especially in test package
 
-package support
+package test_support
 
 import (
 	"github.com/stephenalexbrowne/zoom"
