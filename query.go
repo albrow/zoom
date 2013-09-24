@@ -367,7 +367,12 @@ func (q *FindAllQuery) getIds() ([]string, error) {
 			msg := fmt.Sprintf("zoom: invalid SortBy modifier. model of type %s has no field %s\n.", q.modelType.String(), q.sort.fieldName)
 			return nil, errors.New(msg)
 		}
-		if field.Type.Kind() == reflect.String {
+		fieldType := field.Type
+		if !typeIsSortable(fieldType) {
+			msg := fmt.Sprintf("zoom: invalid SortBy modifier. field of type %s is not sortable.\nmust be string, int, uint, float, byte, or bool.", fieldType.String())
+			return nil, errors.New(msg)
+		}
+		if util.TypeIsString(fieldType) {
 			args = args.Add("ALPHA")
 		}
 
@@ -384,4 +389,8 @@ func (q *FindAllQuery) getIds() ([]string, error) {
 		}
 	}
 	return redis.Strings(conn.Do(command, args...))
+}
+
+func typeIsSortable(typ reflect.Type) bool {
+	return util.TypeIsString(typ) || util.TypeIsNumeric(typ) || util.TypeIsBool(typ)
 }
