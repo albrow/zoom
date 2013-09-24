@@ -1,13 +1,14 @@
-package zoom
-
-// File declares all the different errors that might be thrown
+// File errors.go declares all the different errors that might be thrown
 // by the package and provides constructors for each one.
+
+package zoom
 
 import (
 	"reflect"
 )
 
-// ---
+// TODO: add more custom error types based on common use cases throughout the package
+
 // NameAlreadyRegistered
 type NameAlreadyRegisteredError struct {
 	name string
@@ -21,7 +22,6 @@ func NewNameAlreadyRegisteredError(name string) *NameAlreadyRegisteredError {
 	return &NameAlreadyRegisteredError{name}
 }
 
-// ---
 // TypeAlreadyRegistered
 type TypeAlreadyRegisteredError struct {
 	typ reflect.Type
@@ -35,7 +35,6 @@ func NewTypeAlreadyRegisteredError(typ reflect.Type) *TypeAlreadyRegisteredError
 	return &TypeAlreadyRegisteredError{typ}
 }
 
-// ---
 // ModelTypeNotRegistered
 type ModelTypeNotRegisteredError struct {
 	typ reflect.Type
@@ -49,7 +48,6 @@ func NewModelTypeNotRegisteredError(typ reflect.Type) *ModelTypeNotRegisteredErr
 	return &ModelTypeNotRegisteredError{typ}
 }
 
-// ---
 // ModelNameNotRegistered
 type ModelNameNotRegisteredError struct {
 	name string

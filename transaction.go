@@ -1,3 +1,7 @@
+// File transaction.go contains all code dealing with the
+// transactions abstraction, including construction, adding
+// commands, and execution of the transaction.
+
 package zoom
 
 import (
@@ -35,11 +39,16 @@ func (t *transaction) command(cmd string, args []interface{}, handler func(inter
 
 func (t *transaction) exec() error {
 	defer t.conn.Close()
+
+	// invoke redis driver to execute the transaction
 	replies, err := redis.MultiBulk(t.conn.Do("EXEC"))
 	if err != nil {
 		t.discard()
 		return err
 	}
+
+	// call the handler functions sequentially, passing in
+	// the corresponding replies.
 	for i, handler := range t.handlers {
 		if handler != nil {
 			if err := handler(replies[i]); err != nil {
@@ -59,11 +68,11 @@ func (t *transaction) discard() error {
 	return nil
 }
 
-// useful handlers
+// Useful Handlers
+
+// newScanHandler invokes redis driver to scan single values into the corresponding scannable
 func newScanHandler(scannables []interface{}) func(interface{}) error {
 	return func(reply interface{}) error {
-
-		// invoke redis driver to scan values into the appropriate scannable
 		replies, err := redis.Values(reply, nil)
 		if err != nil {
 			return err
@@ -71,15 +80,13 @@ func newScanHandler(scannables []interface{}) func(interface{}) error {
 		if _, err := redis.Scan(replies, scannables...); err != nil {
 			return err
 		}
-
 		return nil
 	}
 }
 
+// newScanStructHandler invokes redis driver to scan multiple values into scannable (a struct)
 func newScanStructHandler(scannable interface{}) func(interface{}) error {
 	return func(reply interface{}) error {
-
-		// invoke redis driver to scan values into the data struct
 		bulk, err := redis.MultiBulk(reply, nil)
 		if err != nil {
 			return err
@@ -87,22 +94,20 @@ func newScanStructHandler(scannable interface{}) func(interface{}) error {
 		if err := redis.ScanStruct(bulk, scannable); err != nil {
 			return err
 		}
-
 		return nil
 	}
 }
 
+// newScanSliceHandler invokes redis driver to scan multiple values into a single
+// slice or array. The reflect.Value of the slice or array should be passed as an argument.
 func newScanSliceHandler(scanVal reflect.Value) func(interface{}) error {
 	return func(reply interface{}) error {
-
 		bulk, err := redis.MultiBulk(reply, nil)
 		if err != nil {
 			return err
 		}
-
 		scanType := scanVal.Type()
 		scanElem := scanType.Elem()
-
 		for _, el := range bulk {
 			srcElem := reflect.ValueOf(el)
 			converted := srcElem.Convert(scanElem)
@@ -113,9 +118,11 @@ func newScanSliceHandler(scanVal reflect.Value) func(interface{}) error {
 	}
 }
 
-// useful operations for transactions
-func (t *transaction) saveModel(m Model) error {
+// Useful Operations for Transactions
 
+// saveModel adds all the necessary commands to save a given model to the redis database
+// this includes indeces and external sets/lists
+func (t *transaction) saveModel(m Model) error {
 	name, err := getRegisteredNameFromInterface(m)
 	if err != nil {
 		return err
@@ -163,7 +170,6 @@ func (t *transaction) saveModel(m Model) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -174,7 +180,6 @@ func (t *transaction) saveStruct(key string, in interface{}) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -183,14 +188,12 @@ func (t *transaction) index(key, value string) error {
 	if err := t.command("SADD", args, nil); err != nil {
 		return err
 	}
-
 	return nil
 }
 
 func (t *transaction) saveModelLists(m Model, modelName string, ms *modelSpec) error {
 	mVal := reflect.ValueOf(m).Elem()
 	for _, list := range ms.lists {
-		// use reflection to get the value of field
 		field := mVal.FieldByName(list.fieldName)
 		if field.IsNil() {
 			continue // skip empty lists
@@ -207,7 +210,6 @@ func (t *transaction) saveModelLists(m Model, modelName string, ms *modelSpec) e
 func (t *transaction) saveModelSets(m Model, modelName string, ms *modelSpec) error {
 	mVal := reflect.ValueOf(m).Elem()
 	for _, set := range ms.sets {
-		// use reflection to get the value of field
 		field := mVal.FieldByName(set.fieldName)
 		if field.IsNil() {
 			continue // skip empty sets
@@ -233,30 +235,21 @@ func (t *transaction) saveModelRelations(m Model, modelName string, ms *modelSpe
 			}
 		}
 	}
-
 	return nil
 }
 
 func (t *transaction) saveModelOneToOneRelation(m Model, modelName string, r relation) error {
-
-	// use reflect get the field
 	mVal := reflect.ValueOf(m).Elem()
 	field := mVal.FieldByName(r.fieldName)
-
-	// make sure its type is registered
 	if _, found := typeToName[field.Type()]; !found {
 		msg := fmt.Sprintf("zoom: cannot save pointer to a struct of unregistered type %s\n", field.Type().String())
 		return errors.New(msg)
 	}
-
-	// convert field to a model
 	rModel, ok := field.Interface().(Model)
 	if !ok {
 		msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", field.Type().String())
 		return errors.New(msg)
 	}
-
-	// make sure the id is not nil
 	if rModel.GetId() == "" {
 		msg := fmt.Sprintf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
 		return errors.New(msg)
@@ -268,17 +261,12 @@ func (t *transaction) saveModelOneToOneRelation(m Model, modelName string, r rel
 	if err := t.command("SET", args, nil); err != nil {
 		return err
 	}
-
 	return nil
 }
 
 func (t *transaction) saveModelOneToManyRelation(m Model, modelName string, r relation) error {
-
-	// use reflect get the field
 	mVal := reflect.ValueOf(m).Elem()
 	field := mVal.FieldByName(r.fieldName)
-
-	// make sure its type is registered
 	if _, found := typeToName[field.Type().Elem()]; !found {
 		msg := fmt.Sprintf("zoom: cannot save slice of pointer to a struct of unregistered type %s\n", field.Type().String())
 		return errors.New(msg)
@@ -307,6 +295,7 @@ func (t *transaction) saveModelOneToManyRelation(m Model, modelName string, r re
 	}
 
 	if len(ids) > 0 {
+
 		// add a command to the transaction to save the ids
 		relationKey := modelName + ":" + m.GetId() + ":" + r.redisName
 		args := redis.Args{}.Add(relationKey).AddFlat(ids)
@@ -314,7 +303,6 @@ func (t *transaction) saveModelOneToManyRelation(m Model, modelName string, r re
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -323,7 +311,7 @@ func (t *transaction) findModel(name, id string, scannable Model, includes []str
 	// we'll use the same key for either HGETALL or HMGET
 	key := name + ":" + id
 
-	// check prior references
+	// check prior references to prevent infinite recursion or unnecessary queries
 	if prior, found := t.references[key]; found {
 		reflect.ValueOf(scannable).Elem().Set(reflect.ValueOf(prior).Elem())
 		return nil
@@ -331,11 +319,13 @@ func (t *transaction) findModel(name, id string, scannable Model, includes []str
 	t.references[key] = scannable
 
 	if includes == nil {
+
 		// use HGETALL to get all the fields for the model
 		if err := t.command("HGETALL", redis.Args{}.Add(key), newScanStructHandler(scannable)); err != nil {
 			return err
 		}
 	} else {
+
 		// get the appropriate scannable fields
 		fields := make([]interface{}, 0)
 		modelVal := reflect.ValueOf(scannable).Elem()
@@ -352,10 +342,7 @@ func (t *transaction) findModel(name, id string, scannable Model, includes []str
 		}
 	}
 
-	// set the model's id
 	scannable.SetId(id)
-
-	// get the modelSpec
 	ms, found := modelSpecs[name]
 	if !found {
 		msg := fmt.Sprintf("zoom: no spec found for model of type %T and registered name %s\n", scannable, name)
@@ -380,7 +367,6 @@ func (t *transaction) findModel(name, id string, scannable Model, includes []str
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -391,9 +377,9 @@ func (t *transaction) findModelLists(key string, scannable Model, ms *modelSpec,
 				continue // skip field names that are not in includes
 			}
 		}
-		// use reflection to get a scannable value for the field
 		scanVal := reflect.ValueOf(scannable).Elem()
 		field := scanVal.FieldByName(list.fieldName)
+
 		// use LRANGE to get all the members of the list
 		listKey := key + ":" + list.redisName
 		args := redis.Args{listKey, 0, -1}
@@ -411,9 +397,9 @@ func (t *transaction) findModelSets(key string, scannable Model, ms *modelSpec, 
 				continue // skip field names that are not in includes
 			}
 		}
-		// use reflection to get a scannable value for the field
 		scanVal := reflect.ValueOf(scannable).Elem()
 		field := scanVal.FieldByName(set.fieldName)
+
 		// use SMEMBERS to get all the members of the set
 		setKey := key + ":" + set.redisName
 		args := redis.Args{setKey}
@@ -482,7 +468,8 @@ func (t *transaction) findModelOneToOneRelation(key string, modelVal reflect.Val
 
 func (t *transaction) findModelOneToManyRelation(key string, modelVal reflect.Value, ms *modelSpec, r relation) error {
 
-	// get a connection
+	// TODO: use scripting to retain integrity of the transaction
+	// this is performing a separate query (outside of the transaction)
 	conn := GetConn()
 	defer conn.Close()
 
@@ -493,10 +480,7 @@ func (t *transaction) findModelOneToManyRelation(key string, modelVal reflect.Va
 		return err
 	}
 
-	// get the field
 	field := modelVal.FieldByName(r.fieldName)
-
-	// get the registered name
 	rType := field.Type().Elem()
 	rName, found := typeToName[rType]
 	if !found {
@@ -534,7 +518,6 @@ func (t *transaction) deleteModel(modelName, id string) error {
 	if err := t.unindex(indexKey, id); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -542,7 +525,6 @@ func (t *transaction) delete(key string) error {
 	if err := t.command("DEL", redis.Args{}.Add(key), nil); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -551,6 +533,5 @@ func (t *transaction) unindex(key, value string) error {
 	if err := t.command("SREM", args, nil); err != nil {
 		return err
 	}
-
 	return nil
 }

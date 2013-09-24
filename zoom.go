@@ -1,34 +1,37 @@
+// Package zoom provides the top-level API for the zoom library. Zoom is lightweight,
+// blazing-fast ORM powered by redis. It allows you to persist any arbitrary struct,
+// preserve relationships between structs, retrieve structs by their id, and perform
+// limited SQL-like queries.
+
+// File zoom.go contains glue code that connects the Model
+// interface to the database. The most basic
+// public-facing methods are here.
+
 package zoom
 
 import (
 	"errors"
 	"fmt"
+	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
 
-// File contains glue code that connects the Model
-// abstraction to the database. In other words,
-// this is where the magic happens. The most important
-// public-facing methods are here.
-
-// writes the interface to the redis database
-// throws an error if the type has not yet been
-// registered. If m.Id is nil, will mutate m
-// by setting the Id.
+// Save writes an arbitrary struct or structs to the redis database.
+// Structs which are savable (i.e. that implement the Model interface)
+// will often be referred to as "models". Save throws an error if the type
+// of the struct has not yet been registered. If the Id field of the struct
+// is nil, Save will mutate the struct by setting the Id. To make a struct
+// satisfy the Model interface, you can embed zoom.DefaultData.
 func Save(models ...Model) error {
-
-	// start a transaction
 	t := newTransaction()
-
 	for _, m := range models {
-		// make sure we'll dealing with a pointer
-		typ := reflect.TypeOf(m)
-		if typ.Kind() != reflect.Ptr {
-			msg := fmt.Sprintf("zoom: Save() requires a pointer as an argument. The type %T is not a pointer.", m)
+
+		// make sure we'll dealing with a pointer to a struct
+		if !util.TypeIsPointerToStruct(reflect.TypeOf(m)) {
+			msg := fmt.Sprintf("zoom: Save() requires a pointer to a struct as an argument.\nThe type %T is not a pointer to a struct.", m)
 			return errors.New(msg)
 		}
 
-		// add a model save operation to the transaction
 		if err := t.saveModel(m); err != nil {
 			return err
 		}
@@ -38,27 +41,22 @@ func Save(models ...Model) error {
 	if err := t.exec(); err != nil {
 		return err
 	}
-
 	return nil
-
 }
 
-// Delete a model from the database
+// Delete removes a struct (or structs) from the database. Will
+// throw an error if the type of the struct has not yet been
+// registered, or if the Id field of the struct is empty.
 func Delete(models ...Model) error {
 	t := newTransaction()
 	for _, m := range models {
-		// get the registered name
+		if m.GetId() == "" {
+			return errors.New("zoom: cannot delete because model Id field is empty")
+		}
 		modelName, err := getRegisteredNameFromInterface(m)
 		if err != nil {
 			return err
 		}
-
-		// make sure it has an id
-		if m.GetId() == "" {
-			return errors.New("zoom: cannot delete because model Id is blank")
-		}
-
-		// add a model delete operation to the transaction
 		if err := t.deleteModel(modelName, m.GetId()); err != nil {
 			return err
 		}
@@ -68,18 +66,16 @@ func Delete(models ...Model) error {
 	if err := t.exec(); err != nil {
 		return err
 	}
-
 	return nil
 }
 
-// Delete a model from the database by its name and id
+// DeleteById removes a struct (or structs) from the database by its
+// registered name and id. The modelName argument should be the same
+// string name that was used in the Register function. If using variadic
+// paramaters, you can only delete models of the same registered name and type.
 func DeleteById(modelName string, ids ...string) error {
-
-	// start a transaction
 	t := newTransaction()
-
 	for _, id := range ids {
-		// add a model delete operation to the transaction
 		if err := t.deleteModel(modelName, id); err != nil {
 			return err
 		}
@@ -89,6 +85,5 @@ func DeleteById(modelName string, ids ...string) error {
 	if err := t.exec(); err != nil {
 		return err
 	}
-
 	return nil
 }

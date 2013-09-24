@@ -1,10 +1,10 @@
-package zoom
-
-// File contains code strictly related to the database, including
+// File database.go contains code strictly related to the database, including
 // setting up the database with given config, generating unique,
 // random ids, and creating and managing a connection pool. There
 // are also convenience functions for (e.g.) checking if a key exists
 // in redis.
+
+package zoom
 
 import (
 	"github.com/dchest/uniuri"
@@ -13,6 +13,8 @@ import (
 	"time"
 )
 
+// Configuration contains various options for the Zoom library.
+// It should be created and used once during application startup.
 type Configuration struct {
 	Address  string // Address to connect to. Default: "localhost:6379"
 	Network  string // Network to use. Default: "tcp"
@@ -27,12 +29,18 @@ var defaultConfiguration = Configuration{
 	Database: 0,
 }
 
+// GetConn gets a connection from the connection pool and returns it.
+// It can be used for directly interacting with the database. Check out
+// http://godoc.org/github.com/garyburd/redigo/redis for full documentation
+// on the redis.Conn type.
 func GetConn() redis.Conn {
 	return pool.Get()
 }
 
-// initializes a connection pool to be used to conect to database
-// TODO: add some config options
+// Init starts the Zoom library and creates a connection pool. It accepts
+// a Configuration struct as an argument. Any zero values in the configuration
+// struct will fallback to their default values. Init should be called once
+// during application startup.
 func Init(passedConfig *Configuration) {
 	config := getConfiguration(passedConfig)
 
@@ -58,15 +66,15 @@ func Init(passedConfig *Configuration) {
 	}
 }
 
-// closes the connection pool
-// Should be run when application exits
+// Closes the connection pool and shuts down the Zoom library.
+// It should be run when application exits, e.g. using defer.
 func Close() {
 	pool.Close()
 }
 
-// Returns true iff a given key exists in redis
-// If conn is nil, a connection will be created for you
-// said connection will be closed before the end of the function
+// KeyExists returns true iff a given key exists in redis
+// If conn is nil, a new connection will be created and
+// closed before the end of the function.
 func KeyExists(key string, conn redis.Conn) (bool, error) {
 	if conn == nil {
 		conn = pool.Get()
@@ -75,9 +83,9 @@ func KeyExists(key string, conn redis.Conn) (bool, error) {
 	return redis.Bool(conn.Do("exists", key))
 }
 
-// Returns true iff the redis set identified by key contains member.
-// If conn is nil, a connection will be created for you.
-// said connection will be closed before the end of the function.
+// SetContains returns true iff the redis set identified by key contains
+// member.  If conn is nil, a new connection will be created and
+// closed before the end of the function.
 func SetContains(key, member string, conn redis.Conn) (bool, error) {
 	if conn == nil {
 		conn = pool.Get()
@@ -86,9 +94,9 @@ func SetContains(key, member string, conn redis.Conn) (bool, error) {
 	return redis.Bool(conn.Do("sismember", key, member))
 }
 
-// generates a random string that is more or less
-// garunteed to be unique. Used as Ids for records
-// where an Id is not otherwise provided.
+// generateRandomId generates a random string that is more or less
+// garunteed to be unique. Used as Ids for records where an Id is
+// not otherwise provided.
 func generateRandomId() string {
 	timeInt := time.Now().Unix()
 	timeString := strconv.FormatInt(timeInt, 36)
@@ -96,25 +104,10 @@ func generateRandomId() string {
 	return randomString + timeString
 }
 
-// adds value as a member of a redis set identified by {name}:index
-// where {name} is the name of the model you want to index.
-// If the conn paramater is nil, will get a connection from the
-// pool and close it before returning. If conn is a redis.Conn,
-// it will use the existing connection.
-func addToIndex(name, value string, conn redis.Conn) error {
-	if conn == nil {
-		conn = pool.Get()
-		defer conn.Close()
-	}
-	key := name + ":index"
-	_, err := conn.Do("sadd", key, value)
-	return err
-}
-
-// return a proper configuration struct.
-// if the passed in struct is nil, return defaultConfiguration
-// else, for each attribute, if the passed in struct is "", 0, etc,
-// use the default value for that attribute.
+// getConfiguration returns a well-formed configuration struct.
+// If the passedConfig is nil, returns defaultConfiguration.
+// Else, for each zero value field in passedConfig,
+// use the default value for that field.
 func getConfiguration(passedConfig *Configuration) Configuration {
 	if passedConfig == nil {
 		return defaultConfiguration
