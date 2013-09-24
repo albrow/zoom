@@ -1,3 +1,7 @@
+// Copyright 2013 Alex Browne.  All rights reserved.
+// Use of this source code is governed by the MIT
+// license, which can be found in the LICENSE file.
+
 // File database.go contains code strictly related to the database, including
 // setting up the database with given config, generating unique,
 // random ids, and creating and managing a connection pool. There
