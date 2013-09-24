@@ -1,3 +1,7 @@
+// Copyright 2013 Alex Browne.  All rights reserved.
+// Use of this source code is governed by the MIT
+// license, which can be found in the LICENSE file.
+
 // Package zoom provides the top-level API for the zoom library. Zoom is lightweight,
 // blazing-fast ORM powered by redis. It allows you to persist any arbitrary struct,
 // preserve relationships between structs, retrieve structs by their id, and perform

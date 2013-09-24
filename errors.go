@@ -1,3 +1,7 @@
+// Copyright 2013 Alex Browne.  All rights reserved.
+// Use of this source code is governed by the MIT
+// license, which can be found in the LICENSE file.
+
 // File errors.go declares all the different errors that might be thrown
 // by the package and provides constructors for each one.
 

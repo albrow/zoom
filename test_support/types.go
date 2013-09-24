@@ -1,4 +1,9 @@
-// file contains type declarations that are used in various places, especially in test package
+// Copyright 2013 Alex Browne.  All rights reserved.
+// Use of this source code is governed by the MIT
+// license, which can be found in the LICENSE file.
+
+// File types.go contains type declarations that are used
+// in various places, especially in test package
 
 package test_support
 

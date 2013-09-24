@@ -1,3 +1,7 @@
+// Copyright 2013 Alex Browne.  All rights reserved.
+// Use of this source code is governed by the MIT
+// license, which can be found in the LICENSE file.
+
 // File model.go contains code strictly related to DefaultData and Model.
 // The Register() method and associated methods are also included here.
 

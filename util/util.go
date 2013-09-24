@@ -1,4 +1,9 @@
-// file contains miscellaneous utility functions used throughout
+// Copyright 2013 Alex Browne.  All rights reserved.
+// Use of this source code is governed by the MIT
+// license, which can be found in the LICENSE file.
+
+// Package util contains miscellaneous utility functions used throughout
+// the zoom library. They are not intended for external use.
 
 package util
 
