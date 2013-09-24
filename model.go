@@ -1,7 +1,7 @@
-package zoom
-
-// File contains code strictly related to DefaultData and Model.
+// File model.go contains code strictly related to DefaultData and Model.
 // The Register() method and associated methods are also included here.
+
+package zoom
 
 import (
 	"errors"
@@ -10,15 +10,20 @@ import (
 	"reflect"
 )
 
+// DefaultData should be embedded in any struct you wish to save.
+// It includes all the required fields.
 type DefaultData struct {
 	Id string `redis:"-"`
-	// TODO: add CreatedAt and UpdatedAt
+	// TODO: add other default fields?
 }
 
+// Model is an interface encapsulating anything that can be saved.
+// Any struct which includes an embedded DefaultData field satisfies
+// the Model interface.
 type Model interface {
 	GetId() string
 	SetId(string)
-	// TODO: add getters and setters for CreatedAt and UpdatedAt
+	// TODO: add getters and setters for other default fields?
 }
 
 type modelSpec struct {
@@ -72,9 +77,9 @@ func (d *DefaultData) SetId(id string) {
 	d.Id = id
 }
 
-// adds a model to the map of registered models
-// Both name and typeOf(m) must be unique, i.e.
-// not already registered
+// Register adds a type to the list of registered types. Any struct
+// you wish to save must be registered first. Both name and type of in
+// must be unique, i.e. not already registered.
 func Register(in interface{}, name string) error {
 	typ := reflect.TypeOf(in)
 
@@ -162,6 +167,9 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 	return nil
 }
 
+// UnregisterName removes a type (identified by name) from the list of
+// registered types. You only need to call UnregisterName or UnregisterType,
+// not both.
 func UnregisterName(name string) error {
 	typ, ok := nameToType[name]
 	if !ok {
@@ -172,6 +180,8 @@ func UnregisterName(name string) error {
 	return nil
 }
 
+// UnregisterName removes a type from the list of registered types.
+// You only need to call UnregisterName or UnregisterType, not both.
 func UnregisterType(typ reflect.Type) error {
 	name, ok := typeToName[typ]
 	if !ok {
@@ -182,21 +192,21 @@ func UnregisterType(typ reflect.Type) error {
 	return nil
 }
 
-// returns true iff the model name has already been registered
+// alreadyRegisteredName returns true iff the model name has already been registered
 func alreadyRegisteredName(n string) bool {
 	_, ok := nameToType[n]
 	return ok
 }
 
-// returns true iff the model type has already been registered
+// alreadyRegisteredType returns true iff the model type has already been registered
 func alreadyRegisteredType(t reflect.Type) bool {
 	_, ok := typeToName[t]
 	return ok
 }
 
-// get the registered name of the model we're trying to save
-// based on the interfaces type. If the interface's name/type has
-// not been registered, returns a ModelTypeNotRegisteredError
+// getRegisteredNameFromInterface gets the registered name of the model we're
+// trying to save based on the interfaces type. If the interface's name/type
+// has not been registered, returns a ModelTypeNotRegisteredError
 func getRegisteredNameFromInterface(in interface{}) (string, error) {
 	typ := reflect.TypeOf(in)
 	name, ok := typeToName[typ]
@@ -206,9 +216,9 @@ func getRegisteredNameFromInterface(in interface{}) (string, error) {
 	return name, nil
 }
 
-// get the registered type of the model we're trying to save
-// based on the model name. If the interface's name/type has
-// not been registered, returns a ModelNameNotRegisteredError
+// getRegisteredTypeFromName gets the registered type of the model we're trying
+// to save based on the model name. If the interface's name/type has not been registered,
+// returns a ModelNameNotRegisteredError
 func getRegisteredTypeFromName(name string) (reflect.Type, error) {
 	typ, ok := nameToType[name]
 	if !ok {

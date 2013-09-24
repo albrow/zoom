@@ -1,3 +1,7 @@
+// File helpers.go contains various public-facing helper methods.
+// They are typically used to convert the responses of a query to their
+// underlying type.
+
 package zoom
 
 import (
@@ -6,6 +10,9 @@ import (
 	"reflect"
 )
 
+// Models converts an interface to a slice of Model. It is typically
+// used to convert a return value of a FindAllQuery into the underlying
+// type.
 func Models(in interface{}) []Model {
 	typ := reflect.TypeOf(in)
 	if !util.TypeIsSliceOrArray(typ) {
@@ -34,6 +41,5 @@ func Models(in interface{}) []Model {
 		}
 		results[i] = model
 	}
-
 	return results
 }
