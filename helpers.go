@@ -15,7 +15,7 @@ import (
 )
 
 // Models converts an interface to a slice of Model. It is typically
-// used to convert a return value of a FindAllQuery into the underlying
+// used to convert a return value of a MultiModelQuery into the underlying
 // type.
 func Models(in interface{}) []Model {
 	typ := reflect.TypeOf(in)

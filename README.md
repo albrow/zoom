@@ -176,8 +176,8 @@ type Query interface {
 }
 ```
 
-There are two different types of queries satisfying the query interface: FindQuery and FindAllQuery.
-FindQuery is used for finding a single record, while FindAllQuery is used for finding one or more
+There are two different types of queries satisfying the query interface: ModelQuery and MultiModelQuery.
+ModelQuery is used for finding a single record, while MultiModelQuery is used for finding one or more
 records. There are two different constructors for each type of query, one (the Find* constructor) involves
 depending on a type-unsafe return value, and (the Scan* constructor) the other requires passing in a pointer
 to a scannable Model or array of models.
@@ -185,7 +185,7 @@ to a scannable Model or array of models.
 ### Finding a Single Model
 
 Zoom will automatically assign a random, unique id to each saved model. To retrieve a model by id,
-create a FindQuery object using the FindById or ScanById constructor. Then call Run() on the query object.
+create a ModelQuery object using the FindById or ScanById constructor. Then call Run() on the query object.
 
 Here's an example of using FindById. You must use the same string name you used in zoom.Register.
 The return type of Run is interface{} so you may need to type assert.
@@ -253,9 +253,9 @@ if _, err := zoom.ScanAll(persons).Run(); err != nil {
 You can chain a query object together with one or more different modifiers and then call Run
 when you are ready to run the query. 
 
-The modifiers for a FindQuery are: Include and Exclude.
+The modifiers for a ModelQuery are: Include and Exclude.
 
-The modifiers for a FindAllQuery are: Include, Exclude, SortBy, Order, Limit, and Offset. 
+The modifiers for a MultiModelQuery are: Include, Exclude, SortBy, Order, Limit, and Offset. 
 
 Here's an example of a more complicated query using several modifiers:
 
@@ -515,7 +515,7 @@ Ordered generally by priority, here's what I'm working on:
 
 - Add a --host flag to benchmarks and tests
 - Improve sort/limit/offset performance by using custom indeces
-- Add Filter and Count modifiers to FindAllQuery
+- Add Filter and Count modifiers to MultiModelQuery
 - Support AND and OR operators on Filters
 - Support combining queries into a single transaction
 - Use scripting to reduce round-trip latencies in queries

@@ -25,8 +25,8 @@ type Query interface {
 	Run() (interface{}, error)
 }
 
-// A FindQuery is a query which returns a single item from the database
-type FindQuery struct {
+// A ModelQuery is a query which returns a single item from the database
+type ModelQuery struct {
 	scannable Model
 	includes  []string
 	excludes  []string
@@ -35,8 +35,8 @@ type FindQuery struct {
 	err       error
 }
 
-// A FindAllQuery is a query wich returns one or more items from the database
-type FindAllQuery struct {
+// A MultiModelQuery is a query wich returns one or more items from the database
+type MultiModelQuery struct {
 	scannables interface{}
 	includes   []string
 	excludes   []string
@@ -64,35 +64,35 @@ type namedIncluderExcluder interface {
 	name() string
 }
 
-func (q *FindQuery) getIncludes() []string {
+func (q *ModelQuery) getIncludes() []string {
 	return q.includes
 }
 
-func (q *FindQuery) getExcludes() []string {
+func (q *ModelQuery) getExcludes() []string {
 	return q.excludes
 }
 
-func (q *FindAllQuery) getIncludes() []string {
+func (q *MultiModelQuery) getIncludes() []string {
 	return q.includes
 }
 
-func (q *FindAllQuery) getExcludes() []string {
+func (q *MultiModelQuery) getExcludes() []string {
 	return q.excludes
 }
 
-func (q *FindQuery) name() string {
+func (q *ModelQuery) name() string {
 	return q.modelName
 }
 
-func (q *FindAllQuery) name() string {
+func (q *MultiModelQuery) name() string {
 	return q.modelName
 }
 
-// FindById returns a FindQuery which can be chained with additional modifiers.
-func FindById(modelName, id string) *FindQuery {
+// FindById returns a ModelQuery which can be chained with additional modifiers.
+func FindById(modelName, id string) *ModelQuery {
 
 	// create a query object
-	q := &FindQuery{
+	q := &ModelQuery{
 		modelName: modelName,
 		id:        id,
 	}
@@ -118,13 +118,13 @@ func FindById(modelName, id string) *FindQuery {
 	return q
 }
 
-// ScanById returns a FindQuery which can be chained with additional modifiers.
+// ScanById returns a ModelQuery which can be chained with additional modifiers.
 // It expects Model as an argument, which should be a pointer to a struct of a
 // registered type. ScanById will mutate the struct, filling in its fields.
-func ScanById(id string, m Model) *FindQuery {
+func ScanById(id string, m Model) *ModelQuery {
 
 	// create a query object
-	q := &FindQuery{
+	q := &ModelQuery{
 		id:        id,
 		scannable: m,
 	}
@@ -142,7 +142,7 @@ func ScanById(id string, m Model) *FindQuery {
 }
 
 // Include specifies fields to be filled in. Any fields which are included will be unchanged.
-func (q *FindQuery) Include(fields ...string) *FindQuery {
+func (q *ModelQuery) Include(fields ...string) *ModelQuery {
 	if len(q.excludes) > 0 {
 		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
 		return q
@@ -153,7 +153,7 @@ func (q *FindQuery) Include(fields ...string) *FindQuery {
 
 // Exclude specifies fields to *not* be filled in. Excluded fields will remain unchanged.
 // Any other fields *will* be filled in with the values stored in redis.
-func (q *FindQuery) Exclude(fields ...string) *FindQuery {
+func (q *ModelQuery) Exclude(fields ...string) *ModelQuery {
 	if len(q.includes) > 0 {
 		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
 		return q
@@ -162,7 +162,7 @@ func (q *FindQuery) Exclude(fields ...string) *FindQuery {
 	return q
 }
 
-func (q *FindQuery) setErrorIfNone(e error) {
+func (q *ModelQuery) setErrorIfNone(e error) {
 	if q.err == nil {
 		q.err = e
 	}
@@ -173,7 +173,7 @@ func (q *FindQuery) setErrorIfNone(e error) {
 // constructor, the first return value is typically not needed. The second
 // return value is the first error (if any) that occured in the query constructor
 // or modifier methods.
-func (q *FindQuery) Run() (interface{}, error) {
+func (q *ModelQuery) Run() (interface{}, error) {
 	// check if the query had any prior errors
 	if q.err != nil {
 		return q.scannable, q.err
@@ -194,11 +194,11 @@ func (q *FindQuery) Run() (interface{}, error) {
 	return q.scannable, nil
 }
 
-// FindAll returns a FindAllQuery which can be chained with additional modifiers.
-func FindAll(modelName string) *FindAllQuery {
+// FindAll returns a MultiModelQuery which can be chained with additional modifiers.
+func FindAll(modelName string) *MultiModelQuery {
 
 	// create a query object
-	q := &FindAllQuery{
+	q := &MultiModelQuery{
 		modelName: modelName,
 	}
 
@@ -217,14 +217,14 @@ func FindAll(modelName string) *FindAllQuery {
 	return q
 }
 
-// ScanAll returns a FindAllQuery which can be chained with additional modifiers.
+// ScanAll returns a MultiModelQuery which can be chained with additional modifiers.
 // It expects a pointer to a slice (or array) of Models as an argument, which should be
 // a pointer to a slice (or array) of pointers to structs of a registered type. ScanAll
 // will mutate the slice or array by appending to it.
-func ScanAll(models interface{}) *FindAllQuery {
+func ScanAll(models interface{}) *MultiModelQuery {
 
 	// create a query object
-	q := new(FindAllQuery)
+	q := new(MultiModelQuery)
 
 	// make sure models is the right type
 	typ := reflect.TypeOf(models).Elem()
@@ -254,7 +254,7 @@ func ScanAll(models interface{}) *FindAllQuery {
 
 // Include specifies fields to be filled in for each model. Any fields which are included
 // will be unchanged.
-func (q *FindAllQuery) Include(fields ...string) *FindAllQuery {
+func (q *MultiModelQuery) Include(fields ...string) *MultiModelQuery {
 	if len(q.excludes) > 0 {
 		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
 		return q
@@ -265,7 +265,7 @@ func (q *FindAllQuery) Include(fields ...string) *FindAllQuery {
 
 // Exclude specifies fields to *not* be filled in for each struct. Excluded fields will
 // remain unchanged. Any other fields *will* be filled in with the values stored in redis.
-func (q *FindAllQuery) Exclude(fields ...string) *FindAllQuery {
+func (q *MultiModelQuery) Exclude(fields ...string) *MultiModelQuery {
 	if len(q.includes) > 0 {
 		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
 		return q
@@ -276,14 +276,14 @@ func (q *FindAllQuery) Exclude(fields ...string) *FindAllQuery {
 
 // SortBy specifies a field to sort by. The field argument should be exactly the name of
 // an exported field. Will cause an error if the field is not found.
-func (q *FindAllQuery) SortBy(field string) *FindAllQuery {
+func (q *MultiModelQuery) SortBy(field string) *MultiModelQuery {
 	q.sort.fieldName = field
 	return q
 }
 
 // Order specifies the order in which records should be sorted. It should be either ASC
 // or DESC. Any other argument will cause an error.
-func (q *FindAllQuery) Order(order string) *FindAllQuery {
+func (q *MultiModelQuery) Order(order string) *MultiModelQuery {
 	if order == "ASC" {
 		q.sort.desc = false
 	} else if order == "DESC" {
@@ -295,19 +295,19 @@ func (q *FindAllQuery) Order(order string) *FindAllQuery {
 }
 
 // Limit specifies an upper limit on the number of records to return.
-func (q *FindAllQuery) Limit(amount uint) *FindAllQuery {
+func (q *MultiModelQuery) Limit(amount uint) *MultiModelQuery {
 	q.limit = amount
 	return q
 }
 
 // Offset specifies a starting index from which to start counting records that
 // will be returned.
-func (q *FindAllQuery) Offset(amount uint) *FindAllQuery {
+func (q *MultiModelQuery) Offset(amount uint) *MultiModelQuery {
 	q.offset = amount
 	return q
 }
 
-func (q *FindAllQuery) setErrorIfNone(e error) {
+func (q *MultiModelQuery) setErrorIfNone(e error) {
 	if q.err == nil {
 		q.err = e
 	}
@@ -318,7 +318,7 @@ func (q *FindAllQuery) setErrorIfNone(e error) {
 // using the ScanAll constructor, the first return value is typically not needed.
 // The second return value is the first error (if any) that occured in the query
 // constructor or modifier methods.
-func (q *FindAllQuery) Run() (interface{}, error) {
+func (q *MultiModelQuery) Run() (interface{}, error) {
 
 	// check if the query had any prior errors
 	if q.err != nil {
@@ -387,7 +387,7 @@ func findModelWithIncludes(id string, scannable Model, q namedIncluderExcluder, 
 	return nil
 }
 
-func (q *FindAllQuery) getIds() ([]string, error) {
+func (q *MultiModelQuery) getIds() ([]string, error) {
 	conn := GetConn()
 	defer conn.Close()
 
