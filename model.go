@@ -56,8 +56,8 @@ type relation struct {
 type relationType int
 
 const (
-	ONE_TO_ONE = iota
-	ONE_TO_MANY
+	oneToOne = iota
+	oneToMany
 )
 
 // maps a type to a string identifier. The string is used
@@ -137,7 +137,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 			ms.relations[field.Name] = relation{
 				redisName: redisName,
 				fieldName: field.Name,
-				typ:       ONE_TO_ONE,
+				typ:       oneToOne,
 			}
 		} else if util.TypeIsSliceOrArray(field.Type) {
 			// we're dealing with a slice or an array, which should be converted to a list, set, or one-to-many relation
@@ -153,7 +153,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 				ms.relations[field.Name] = relation{
 					redisName: redisName,
 					fieldName: field.Name,
-					typ:       ONE_TO_MANY,
+					typ:       oneToMany,
 				}
 				continue
 			}

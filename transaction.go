@@ -229,11 +229,11 @@ func (t *transaction) saveModelSets(m Model, modelName string, ms *modelSpec) er
 
 func (t *transaction) saveModelRelations(m Model, modelName string, ms *modelSpec) error {
 	for _, r := range ms.relations {
-		if r.typ == ONE_TO_ONE {
+		if r.typ == oneToOne {
 			if err := t.saveModelOneToOneRelation(m, modelName, r); err != nil {
 				return err
 			}
-		} else if r.typ == ONE_TO_MANY {
+		} else if r.typ == oneToMany {
 			if err := t.saveModelOneToManyRelation(m, modelName, r); err != nil {
 				return err
 			}
@@ -421,11 +421,11 @@ func (t *transaction) findModelRelations(key string, scannable Model, ms *modelS
 				continue // skip field names that are not in includes
 			}
 		}
-		if r.typ == ONE_TO_ONE {
+		if r.typ == oneToOne {
 			if err := t.findModelOneToOneRelation(key, reflect.ValueOf(scannable).Elem(), ms, r); err != nil {
 				return err
 			}
-		} else if r.typ == ONE_TO_MANY {
+		} else if r.typ == oneToMany {
 			if err := t.findModelOneToManyRelation(key, reflect.ValueOf(scannable).Elem(), ms, r); err != nil {
 				return err
 			}
