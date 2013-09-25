@@ -336,6 +336,77 @@ fmt.Println(ownerCopy.Pet.Name)
 //	Spot
 ```
 
+**Possible Gotcha:** Zoom does not remember the address of pointers accross multiple model references. If you
+have two different references to a model (i.e. two Model interfaces with the same Id), the relationships of
+those models will point to different addresses. To account for this, you should never be dealing with two references
+to a model with the same id. Here's an example illustrating this gotcha:
+
+``` go
+// Note: error handling is hidden for brevity
+
+// create and save a new PetOwner and a Pet
+owner := &PetOwner{Name: "Bob"}
+pet := &Pet{Name: "Spot"}
+zoom.Save(pet)
+owner.Pet = pet
+zoom.Save(owner)
+
+// retrieve a copy of PetOwner from the database
+ownerCopy := &PetOwner{}
+q := zoom.ScanById("the_id_of_above_pet_owner", ownerCopy).Run()
+
+// modify ownerCopy's Pet
+ownerCopy.Pet.Name = "Fido"
+
+// the orignal pet's name is unchanged
+fmt.Println("original: ", pet.Name, "\nnew: ", ownerCopy.Pet.Name)
+
+// Output:
+//	original: Spot
+//      new: Fido
+
+```
+
+**Another Possible Gotcha:** Zoom will not automatically save a model's relationships. So if you want to modify
+a PetOwner's pet, you should save the Pet explicitly. Here's an example:
+
+``` go
+// create and save a new PetOwner and a Pet
+owner := &PetOwner{Name: "Bob"}
+pet := &Pet{Name: "Spot"}
+zoom.Save(pet)
+owner.Pet = pet
+zoom.Save(owner)
+
+// retrieve a copy of PetOwner from the database
+ownerCopy := &PetOwner{}
+q := zoom.ScanById("the_id_of_above_pet_owner", ownerCopy).Run()
+
+// modify ownerCopy's Pet
+ownerCopy.Pet.Name = "Cupcake"
+
+// resave ownerCopy
+zoom.Save(ownerCopy)
+
+// get a copy of the pet model from the database
+petCopy := &Pet{}
+q := zoom.ScanById(ownerCopy.Pet.Id, petCopy).Run()
+
+// the database record was not updated
+fmt.Println("pet name: ", petCopy.Name)
+
+// if we explicitly save ownerCopy.Pet, the database record will be updated
+zoom.Save(ownerCopy.Pet)
+q := zoom.ScanById(ownerCopy.Pet.Id, petCopy).Run()
+fmt.Println("pet name after save: ", petCopy.Name)
+
+// Output:
+//	pet name: Spot
+//	pet name after save: Cupcake
+
+```
+
+
 ### One-to-Many Relationships
 
 One-to-many relationships work similarly. This time we're going to use two new struct types in the examples.
