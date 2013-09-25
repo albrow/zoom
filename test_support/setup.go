@@ -2,12 +2,11 @@
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
+// File setup.go contains helper functions SetUp() and TearDown()
+
 // Package test_support contains various types and functions that
 // are used to simplify test and benchmark execution. Not intended
 // for external use.
-
-// File setup.go contains helper functions SetUp() and TearDown()
-
 package test_support
 
 import (
