@@ -55,7 +55,7 @@ func TestFindOneToOne(t *testing.T) {
 
 	// find the saved person
 	aCopy := &test_support.Artist{}
-	if _, err := zoom.ScanById(aCopy, a.Id).Run(); err != nil {
+	if _, err := zoom.ScanById(a.Id, aCopy).Run(); err != nil {
 		t.Error(err)
 	}
 
@@ -133,7 +133,7 @@ func TestFindOneToMany(t *testing.T) {
 
 	// get a copy of the owner from the database
 	oCopy := &test_support.PetOwner{}
-	if _, err := zoom.ScanById(oCopy, o.Id).Run(); err != nil {
+	if _, err := zoom.ScanById(o.Id, oCopy).Run(); err != nil {
 		t.Error(err)
 	}
 
@@ -210,7 +210,7 @@ func TestFindManyToMany(t *testing.T) {
 
 		// get a copy of the friend from the database
 		fCopy := &test_support.Friend{}
-		if _, err := zoom.ScanById(fCopy, f.Id).Run(); err != nil {
+		if _, err := zoom.ScanById(f.Id, fCopy).Run(); err != nil {
 			t.Error(err)
 		}
 
@@ -250,7 +250,7 @@ func TestFindOneToOneExclude(t *testing.T) {
 
 	// find the saved person
 	aCopy := &test_support.Artist{}
-	if _, err := zoom.ScanById(aCopy, a.Id).Exclude("FavoriteColor").Run(); err != nil {
+	if _, err := zoom.ScanById(a.Id, aCopy).Exclude("FavoriteColor").Run(); err != nil {
 		t.Error(err)
 	}
 
@@ -282,7 +282,7 @@ func TestFindOneToManyExclude(t *testing.T) {
 
 	// get a copy of the owner from the database
 	oCopy := &test_support.PetOwner{}
-	if _, err := zoom.ScanById(oCopy, o.Id).Exclude("Pets").Run(); err != nil {
+	if _, err := zoom.ScanById(o.Id, oCopy).Exclude("Pets").Run(); err != nil {
 		t.Error(err)
 	}
 

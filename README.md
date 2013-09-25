@@ -208,7 +208,7 @@ sometimes easier to use because it doesn't require type assertion.
 
 ``` go
 p := &Person{}
-if err := zoom.ScanById(p, "a_valid_person_id").Run(); err != nil {
+if err := zoom.ScanById("a_valid_person_id", p).Run(); err != nil {
     // handle error
 }
 ```
@@ -324,7 +324,7 @@ you would have to manually set up both relationships.
 
 ``` go
 ownerCopy := &PetOwner{}
-q := zoom.ScanById(ownerCopy, "the_id_of_above_pet_owner")
+q := zoom.ScanById("the_id_of_above_pet_owner", ownerCopy)
 if _, err := q.Run(); err != nil {
 	// handle err
 }
@@ -386,7 +386,7 @@ the children again is straight forward.
 
 ``` go
 parentCopy := &Parent{}
-q := zoom.ScanById(parentCopy, "the_id_of_above_parent")
+q := zoom.ScanById("the_id_of_above_parent", parentCopy)
 if _, err := q.Run(); err != nil {
 	// handle error
 }
@@ -407,7 +407,7 @@ this is the case, it's a good idea to use the Exclude modifier when you don't in
 
 ``` go
 parentCopyNoChildren := &Parent{}
-q := zoom.ScanById(parentCopyNoChildren, "the_id_of_above_parent").Exclude("Children")
+q := zoom.ScanById("the_id_of_above_parent", parentCopyNoChildren).Exclude("Children")
 if _, err := q.Run(); err != nil {
 	// handle error
 }
