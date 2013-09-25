@@ -590,12 +590,12 @@ func checkPersonSaved(t *testing.T, p *test_support.Person, conn redis.Conn) {
 	}
 
 	// make sure it was added to the index
-	indexed, err := zoom.SetContains("person:index", p.Id, conn)
+	indexed, err := zoom.SetContains("person:all", p.Id, conn)
 	if err != nil {
 		t.Error(err)
 	}
 	if indexed == false {
-		t.Error("model was not added to person:index")
+		t.Error("model was not added to person:all")
 	}
 }
 
@@ -610,11 +610,11 @@ func checkPersonDeleted(t *testing.T, id string, conn redis.Conn) {
 	}
 
 	// Make sure it was removed from index
-	indexed, err := zoom.SetContains("person:index", id, conn)
+	indexed, err := zoom.SetContains("person:all", id, conn)
 	if err != nil {
 		t.Error(err)
 	}
 	if indexed {
-		t.Error("model id is still in person:index")
+		t.Error("model id is still in person:all")
 	}
 }
