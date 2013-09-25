@@ -392,7 +392,7 @@ func (q *MultiModelQuery) getIds() ([]string, error) {
 	defer conn.Close()
 
 	// construct a redis command to get the ids
-	indexKey := q.modelName + ":index"
+	indexKey := q.modelName + ":all"
 	args := redis.Args{}
 	var command string
 	if q.sort.fieldName == "" {

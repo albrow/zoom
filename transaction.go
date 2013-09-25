@@ -144,7 +144,7 @@ func (t *transaction) saveModel(m Model) error {
 	}
 
 	// add an operation to add to index for this model
-	indexKey := name + ":index"
+	indexKey := name + ":all"
 	if err := t.index(indexKey, m.GetId()); err != nil {
 		return err
 	}
@@ -518,7 +518,7 @@ func (t *transaction) deleteModel(modelName, id string) error {
 	}
 
 	// add an operation to remove the model id from the index
-	indexKey := modelName + ":index"
+	indexKey := modelName + ":all"
 	if err := t.unindex(indexKey, id); err != nil {
 		return err
 	}
