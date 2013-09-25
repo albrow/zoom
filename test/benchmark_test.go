@@ -104,7 +104,7 @@ func BenchmarkFindById(b *testing.B) {
 func BenchmarkScanById(b *testing.B) {
 	queryFunc := func(id string) zoom.Query {
 		p := &test_support.Person{}
-		return zoom.ScanById(p, id)
+		return zoom.ScanById(id, p)
 	}
 	benchmarkFindQuery(b, 1000, singleIdSelect, queryFunc)
 }

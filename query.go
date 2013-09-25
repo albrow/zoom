@@ -121,7 +121,7 @@ func FindById(modelName, id string) *FindQuery {
 // ScanById returns a FindQuery which can be chained with additional modifiers.
 // It expects Model as an argument, which should be a pointer to a struct of a
 // registered type. ScanById will mutate the struct, filling in its fields.
-func ScanById(m Model, id string) *FindQuery {
+func ScanById(id string, m Model) *FindQuery {
 
 	// create a query object
 	q := &FindQuery{

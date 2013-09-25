@@ -79,7 +79,7 @@ func TestScanById(t *testing.T) {
 	pCopy := &test_support.Person{}
 
 	// execute a test query and compare against the expected person
-	testScanWithExpectedPersonAndScannable(t, zoom.ScanById(pCopy, p.Id), p, pCopy)
+	testScanWithExpectedPersonAndScannable(t, zoom.ScanById(p.Id, pCopy), p, pCopy)
 }
 
 func TestDelete(t *testing.T) {
@@ -338,7 +338,7 @@ func TestFindByIdWithList(t *testing.T) {
 
 	// retrieve using FindById
 	mCopy := &test_support.ModelWithList{}
-	if _, err := zoom.ScanById(mCopy, m.Id).Run(); err != nil {
+	if _, err := zoom.ScanById(m.Id, mCopy).Run(); err != nil {
 		t.Error(err)
 	}
 
@@ -391,7 +391,7 @@ func TestFindByIdWithSet(t *testing.T) {
 
 	// retrieve using FindById
 	mCopy := &test_support.ModelWithSet{}
-	if _, err := zoom.ScanById(mCopy, m.Id).Run(); err != nil {
+	if _, err := zoom.ScanById(m.Id, mCopy).Run(); err != nil {
 		t.Error(err)
 	}
 
@@ -443,7 +443,7 @@ func TestFindByIdWithListExclude(t *testing.T) {
 
 	// retrieve using FindById
 	mCopy := &test_support.ModelWithList{}
-	if _, err := zoom.ScanById(mCopy, m.Id).Exclude("List").Run(); err != nil {
+	if _, err := zoom.ScanById(m.Id, mCopy).Exclude("List").Run(); err != nil {
 		t.Error(err)
 	}
 
@@ -465,7 +465,7 @@ func TestFindByIdWithSetExclude(t *testing.T) {
 
 	// retrieve using FindById
 	mCopy := &test_support.ModelWithSet{}
-	if _, err := zoom.ScanById(mCopy, m.Id).Exclude("Set").Run(); err != nil {
+	if _, err := zoom.ScanById(m.Id, mCopy).Exclude("Set").Run(); err != nil {
 		t.Error(err)
 	}
 
