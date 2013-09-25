@@ -31,10 +31,10 @@ type Model interface {
 }
 
 type modelSpec struct {
-	fieldNames []string
-	sets       []*externalSet
-	lists      []*externalList
-	relations  map[string]relation
+	fieldNames    []string
+	sets          []*externalSet
+	lists         []*externalList
+	relationships map[string]relation
 }
 
 type externalSet struct {
@@ -104,7 +104,7 @@ func Register(in interface{}, modelName string) error {
 	}
 
 	// create a new model spec and register its lists and sets
-	ms := &modelSpec{relations: make(map[string]relation)}
+	ms := &modelSpec{relationships: make(map[string]relation)}
 	if err := compileModelSpec(typ, ms); err != nil {
 		return err
 	}
@@ -135,7 +135,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 			} else if redisName == "" {
 				redisName = field.Name
 			}
-			ms.relations[field.Name] = relation{
+			ms.relationships[field.Name] = relation{
 				redisName: redisName,
 				fieldName: field.Name,
 				typ:       oneToOne,
@@ -151,7 +151,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 			}
 			if util.TypeIsPointerToStruct(field.Type.Elem()) {
 				// assume we're dealing with a one-to-many relation
-				ms.relations[field.Name] = relation{
+				ms.relationships[field.Name] = relation{
 					redisName: redisName,
 					fieldName: field.Name,
 					typ:       oneToMany,
