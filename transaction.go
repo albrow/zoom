@@ -133,19 +133,19 @@ func (t *transaction) saveModel(m Model) error {
 	}
 
 	// set the id if needed
-	if m.GetId() == "" {
-		m.SetId(generateRandomId())
+	if m.getId() == "" {
+		m.setId(generateRandomId())
 	}
 
 	// add an operation to write data to database
-	key := name + ":" + m.GetId()
+	key := name + ":" + m.getId()
 	if err := t.saveStruct(key, m); err != nil {
 		return err
 	}
 
 	// add an operation to add to index for this model
 	indexKey := name + ":all"
-	if err := t.index(indexKey, m.GetId()); err != nil {
+	if err := t.index(indexKey, m.getId()); err != nil {
 		return err
 	}
 
@@ -168,9 +168,9 @@ func (t *transaction) saveModel(m Model) error {
 		}
 	}
 
-	// add operations to save model relations
-	if len(ms.relations) != 0 {
-		if err := t.saveModelRelations(m, name, ms); err != nil {
+	// add operations to save model relationships
+	if len(ms.relationships) != 0 {
+		if err := t.saveModelRelationships(m, name, ms); err != nil {
 			return err
 		}
 	}
@@ -202,7 +202,7 @@ func (t *transaction) saveModelLists(m Model, modelName string, ms *modelSpec) e
 		if field.IsNil() {
 			continue // skip empty lists
 		}
-		listKey := modelName + ":" + m.GetId() + ":" + list.redisName
+		listKey := modelName + ":" + m.getId() + ":" + list.redisName
 		args := redis.Args{}.Add(listKey).AddFlat(field.Interface())
 		if err := t.command("RPUSH", args, nil); err != nil {
 			return err
@@ -218,7 +218,7 @@ func (t *transaction) saveModelSets(m Model, modelName string, ms *modelSpec) er
 		if field.IsNil() {
 			continue // skip empty sets
 		}
-		setKey := modelName + ":" + m.GetId() + ":" + set.redisName
+		setKey := modelName + ":" + m.getId() + ":" + set.redisName
 		args := redis.Args{}.Add(setKey).AddFlat(field.Interface())
 		if err := t.command("SADD", args, nil); err != nil {
 			return err
@@ -227,13 +227,13 @@ func (t *transaction) saveModelSets(m Model, modelName string, ms *modelSpec) er
 	return nil
 }
 
-func (t *transaction) saveModelRelations(m Model, modelName string, ms *modelSpec) error {
-	for _, r := range ms.relations {
-		if r.typ == ONE_TO_ONE {
+func (t *transaction) saveModelRelationships(m Model, modelName string, ms *modelSpec) error {
+	for _, r := range ms.relationships {
+		if r.typ == oneToOne {
 			if err := t.saveModelOneToOneRelation(m, modelName, r); err != nil {
 				return err
 			}
-		} else if r.typ == ONE_TO_MANY {
+		} else if r.typ == oneToMany {
 			if err := t.saveModelOneToManyRelation(m, modelName, r); err != nil {
 				return err
 			}
@@ -245,7 +245,7 @@ func (t *transaction) saveModelRelations(m Model, modelName string, ms *modelSpe
 func (t *transaction) saveModelOneToOneRelation(m Model, modelName string, r relation) error {
 	mVal := reflect.ValueOf(m).Elem()
 	field := mVal.FieldByName(r.fieldName)
-	if _, found := typeToName[field.Type()]; !found {
+	if _, found := modelTypeToName[field.Type()]; !found {
 		msg := fmt.Sprintf("zoom: cannot save pointer to a struct of unregistered type %s\n", field.Type().String())
 		return errors.New(msg)
 	}
@@ -254,14 +254,14 @@ func (t *transaction) saveModelOneToOneRelation(m Model, modelName string, r rel
 		msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", field.Type().String())
 		return errors.New(msg)
 	}
-	if rModel.GetId() == "" {
+	if rModel.getId() == "" {
 		msg := fmt.Sprintf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
 		return errors.New(msg)
 	}
 
 	// add a command to the transaction to set the relation key
-	relationKey := modelName + ":" + m.GetId() + ":" + r.redisName
-	args := redis.Args{relationKey, rModel.GetId()}
+	relationKey := modelName + ":" + m.getId() + ":" + r.redisName
+	args := redis.Args{relationKey, rModel.getId()}
 	if err := t.command("SET", args, nil); err != nil {
 		return err
 	}
@@ -271,7 +271,7 @@ func (t *transaction) saveModelOneToOneRelation(m Model, modelName string, r rel
 func (t *transaction) saveModelOneToManyRelation(m Model, modelName string, r relation) error {
 	mVal := reflect.ValueOf(m).Elem()
 	field := mVal.FieldByName(r.fieldName)
-	if _, found := typeToName[field.Type().Elem()]; !found {
+	if _, found := modelTypeToName[field.Type().Elem()]; !found {
 		msg := fmt.Sprintf("zoom: cannot save slice of pointer to a struct of unregistered type %s\n", field.Type().String())
 		return errors.New(msg)
 	}
@@ -289,19 +289,19 @@ func (t *transaction) saveModelOneToManyRelation(m Model, modelName string, r re
 		}
 
 		// make sure the id is not nil
-		if rModel.GetId() == "" {
+		if rModel.getId() == "" {
 			msg := fmt.Sprintf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
 			return errors.New(msg)
 		}
 
 		// add its id to the slice
-		ids = append(ids, rModel.GetId())
+		ids = append(ids, rModel.getId())
 	}
 
 	if len(ids) > 0 {
 
 		// add a command to the transaction to save the ids
-		relationKey := modelName + ":" + m.GetId() + ":" + r.redisName
+		relationKey := modelName + ":" + m.getId() + ":" + r.redisName
 		args := redis.Args{}.Add(relationKey).AddFlat(ids)
 		if err := t.command("SADD", args, nil); err != nil {
 			return err
@@ -346,7 +346,7 @@ func (t *transaction) findModel(name, id string, scannable Model, includes []str
 		}
 	}
 
-	scannable.SetId(id)
+	scannable.setId(id)
 	ms, found := modelSpecs[name]
 	if !found {
 		msg := fmt.Sprintf("zoom: no spec found for model of type %T and registered name %s\n", scannable, name)
@@ -365,9 +365,9 @@ func (t *transaction) findModel(name, id string, scannable Model, includes []str
 		}
 	}
 
-	// find the relations for the model
-	if len(ms.relations) != 0 {
-		if err := t.findModelRelations(key, scannable, ms, includes); err != nil {
+	// find the relationships for the model
+	if len(ms.relationships) != 0 {
+		if err := t.findModelRelationships(key, scannable, ms, includes); err != nil {
 			return err
 		}
 	}
@@ -414,18 +414,18 @@ func (t *transaction) findModelSets(key string, scannable Model, ms *modelSpec, 
 	return nil
 }
 
-func (t *transaction) findModelRelations(key string, scannable Model, ms *modelSpec, includes []string) error {
-	for _, r := range ms.relations {
+func (t *transaction) findModelRelationships(key string, scannable Model, ms *modelSpec, includes []string) error {
+	for _, r := range ms.relationships {
 		if includes != nil {
 			if !util.StringSliceContains(r.fieldName, includes) {
 				continue // skip field names that are not in includes
 			}
 		}
-		if r.typ == ONE_TO_ONE {
+		if r.typ == oneToOne {
 			if err := t.findModelOneToOneRelation(key, reflect.ValueOf(scannable).Elem(), ms, r); err != nil {
 				return err
 			}
-		} else if r.typ == ONE_TO_MANY {
+		} else if r.typ == oneToMany {
 			if err := t.findModelOneToManyRelation(key, reflect.ValueOf(scannable).Elem(), ms, r); err != nil {
 				return err
 			}
@@ -441,7 +441,7 @@ func (t *transaction) findModelOneToOneRelation(key string, modelVal reflect.Val
 	field.Set(reflect.New(field.Type().Elem()))
 
 	// get the registered name
-	rName, found := typeToName[field.Type()]
+	rName, found := modelTypeToName[field.Type()]
 	if !found {
 		return NewModelTypeNotRegisteredError(field.Type())
 	}
@@ -486,7 +486,7 @@ func (t *transaction) findModelOneToManyRelation(key string, modelVal reflect.Va
 
 	field := modelVal.FieldByName(r.fieldName)
 	rType := field.Type().Elem()
-	rName, found := typeToName[rType]
+	rName, found := modelTypeToName[rType]
 	if !found {
 		return NewModelTypeNotRegisteredError(rType)
 	}
