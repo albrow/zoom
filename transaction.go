@@ -168,9 +168,9 @@ func (t *transaction) saveModel(m Model) error {
 		}
 	}
 
-	// add operations to save model relations
-	if len(ms.relations) != 0 {
-		if err := t.saveModelRelations(m, name, ms); err != nil {
+	// add operations to save model relationships
+	if len(ms.relationships) != 0 {
+		if err := t.saveModelRelationships(m, name, ms); err != nil {
 			return err
 		}
 	}
@@ -227,8 +227,8 @@ func (t *transaction) saveModelSets(m Model, modelName string, ms *modelSpec) er
 	return nil
 }
 
-func (t *transaction) saveModelRelations(m Model, modelName string, ms *modelSpec) error {
-	for _, r := range ms.relations {
+func (t *transaction) saveModelRelationships(m Model, modelName string, ms *modelSpec) error {
+	for _, r := range ms.relationships {
 		if r.typ == oneToOne {
 			if err := t.saveModelOneToOneRelation(m, modelName, r); err != nil {
 				return err
@@ -365,9 +365,9 @@ func (t *transaction) findModel(name, id string, scannable Model, includes []str
 		}
 	}
 
-	// find the relations for the model
-	if len(ms.relations) != 0 {
-		if err := t.findModelRelations(key, scannable, ms, includes); err != nil {
+	// find the relationships for the model
+	if len(ms.relationships) != 0 {
+		if err := t.findModelRelationships(key, scannable, ms, includes); err != nil {
 			return err
 		}
 	}
@@ -414,8 +414,8 @@ func (t *transaction) findModelSets(key string, scannable Model, ms *modelSpec, 
 	return nil
 }
 
-func (t *transaction) findModelRelations(key string, scannable Model, ms *modelSpec, includes []string) error {
-	for _, r := range ms.relations {
+func (t *transaction) findModelRelationships(key string, scannable Model, ms *modelSpec, includes []string) error {
+	for _, r := range ms.relationships {
 		if includes != nil {
 			if !util.StringSliceContains(r.fieldName, includes) {
 				continue // skip field names that are not in includes
