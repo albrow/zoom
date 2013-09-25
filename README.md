@@ -5,6 +5,9 @@ Version: X.X.X
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
+Full documentation is available on
+[godoc.org](http://godoc.org/github.com/stephenalexbrowne/zoom).
+
 **WARNING:** this isn't done yet and may change significantly before the official release. I do not
 advise using Zoom for production or mission-critical applications. Feedback and pull requests are welcome :)
 
@@ -23,6 +26,7 @@ Zoom allows you to:
 - Persistently save structs of any type
 - Retrieve structs from the database
 - Preserve relationships between structs
+- Preform *limited* SQL-like queries
 
 Zoom consciously makes the trade off of using more memory in order to increase performance. However,
 you can configure it to use less memory if you want. Zoom does not do sharding (but might in the future),
@@ -33,8 +37,7 @@ it manages its own connection pool, performs transactions when possible, and aut
 structs to and from a format suitable for the database. If needed, you can still execute redis commands
 directly.
 
-Most importantly, Zoom is ***fast***. [Check the benchmarks](#running-the-benchmarks).
-
+If you want to use advanced or complicated SQL queries, Zoom is not for you.
 
 Installation
 ------------
@@ -49,9 +52,9 @@ To install Zoom itself:
 This will pull the current master branch, which is (most likely) working but is quickly changing.
 
 Getting Started
------
+---------------
 
-### Setup
+### Set Up
 
 First, add github.com/stephenalexbrowne/zoom to your import statement:
 
@@ -84,8 +87,6 @@ type Configuration struct {
 	Address       string // Address to connect to. Default: "localhost:6379"
 	Network       string // Network to use. Default: "tcp"
 	Database      int    // Database id to use (using SELECT). Default: 0
-	CacheCapacity uint64 // Size of the cache in bytes. Default: 67108864 (64 MB)
-	CacheDisabled bool   // If true, cache will be disabled. Default: false
 }
 ```
 
@@ -98,7 +99,6 @@ especially the bottom sections.
 
 To use unix sockets with Zoom, simply pass in "unix" as the Network and "/tmp/unix.sock" as the Address:
 
-
 ``` go
 config := &zoom.Configuration {
 	Address: "/tmp/redis.sock",
@@ -109,33 +109,20 @@ if err := zoom.Init(config); err != nil {
 }
 ```
 
-### Creating your models
+### Creating Models
 
-In order to save a struct using Zoom, you need to embed an anonymous *zoom.Model field. Here's
-an example of a Person model:
+In order to save a struct using Zoom, you need to embed an anonymous DefaultData field. DefaultData
+gives you an Id and getters and setters for that id, which are required in order to save the model
+to the database. Here's an example of a Person model:
 
 ``` go
 type Person struct {
     Name String
-    *zoom.Model
+    zoom.DefaultData
 }
 ```
 
-*zoom.Model automatically gives you an Id field. You do not need to add an Id field
-to the struct.
-
-**Important:** In the constructor, you must initialize the Model field. Something like this:
-
-``` go
-func NewPerson(name string) *Person {
-    return &Person{
-        Name:  name,
-        Model: new(zoom.Model), // don't forget this!
-    }
-}
-```
-
-You must also call zoom.Register so that Zoom knows what name to assign to the *Person type. You only
+You must also call zoom.Register so that Zoom knows what name to assign to a given type. You only
 need to do this once per type. For example, somewhere in your initialization sequence (e.g. in the main
 function) put the following:
 
@@ -157,14 +144,54 @@ if err := zoom.Save(p); err != nil {
 }
 ```
 
-### Retreiving Models
+### Deleting Models
 
-Zoom will automatically assign a random, unique id to each saved model. To retrieve a model by id,
-you must use the same string name you used in zoom.Register. The return type
-is interface{}, so you may need to cast to *Person using a type assertion.
+To delete a model you can just use the Delete function:
 
 ``` go
-result, err := zoom.FindById("person", "your-person-id")
+if err := zoom.Delete(person); err != nil {
+	// handle err
+}
+```
+
+Or if you know the model's id, use the DeleteById function:
+
+``` go
+if err := zoom.DeleteById("some_person_id"); err != nil {
+	// handle err
+}
+```
+
+Running Queries
+---------------
+
+### The Query Object
+
+Zoom provides a useful abstraction for querying the database. Queries read nicely and are easy to write.
+The Query interface consists of only one method:
+
+``` go
+type Query interface {
+	Run() (interface{}, error)
+}
+```
+
+There are two different types of queries satisfying the query interface: FindQuery and FindAllQuery.
+FindQuery is used for finding a single record, while FindAllQuery is used for finding one or more
+records. There are two different constructors for each type of query, one (the Find* constructor) involves
+depending on a type-unsafe return value, and (the Scan* constructor) the other requires passing in a pointer
+to a scannable Model or array of models.
+
+### Finding a Single Model
+
+Zoom will automatically assign a random, unique id to each saved model. To retrieve a model by id,
+create a FindQuery object using the FindById or ScanById constructor. Then call Run() on the query object.
+
+Here's an example of using FindById. You must use the same string name you used in zoom.Register.
+The return type of Run is interface{} so you may need to type assert.
+
+``` go
+result, err := zoom.FindById("person", "a_valid_person_id").Run()
 if err != nil {
     // handle error
 }
@@ -176,25 +203,27 @@ if !ok {
 }
 ```
 
-You also have the option of using the ScanById function. Instead of taking a string name, it takes a
-pointer to a struct as an argument and fills in the fields of that struct. This can lead to slightly cleaner
-code because it removes the need for a type assertion.
+The ScanById constructor expects a pointer to a struct of registered type as an argument. It is
+sometimes easier to use because it doesn't require type assertion.
 
 ``` go
 p := &Person{}
-if err := zoom.ScanById(p, "your-person-id"); err != nil {
+if err := zoom.ScanById(p, "a_valid_person_id").Run(); err != nil {
     // handle error
 }
 ```
 
-Note that in the above code, we didn't need to use the NewPerson constructor or instantiate the anonymous
-Model field. For ScanById, you can just pass in an empty struct of any registered type.
+### Finding One or More Models of a Given Type 
 
-To retrieve a list of all persons use zoom.FindAll. Like FindById the return type is []interface{}.
-If you want an array or slice of *Person, you need to type assert each element individually.
+To retrieve a list of all persons, we need a FindAll query. You can use either the FindAll constructor
+or the ScanAll constructor.
+
+Here's an example of using FindAll. You must use the same string name you used in zoom.Register.
+The return type of Run is interface{}, but the underlying type is a slice of Model, i.e. a slice
+of pointers to structs. You may need a type assertion.
 
 ``` go
-results, err := zoom.FindAll("person")
+results, err := zoom.FindAll("person").Run()
 if err != nil {
     // handle error
 }
@@ -209,32 +238,43 @@ for i, result := range results {
 }
 ```
 
-To avoid redundant type assertions, it might be helpful to wrap your own functions/methods around the Zoom API.
-
-### Deleting Models
-
-To delete a model you can just use the Delete function:
+You can use the ScanAll constructor if you want to avoid a type assertion. ScanAll expects a pointer to
+a slice or array of Model.
 
 ``` go
-if err := zoom.Delete(person); err != nil {
+persons := make([]*Person, 0)
+if _, err := zoom.ScanAll(persons).Run(); err != nil {
 	// handle err
 }
 ```
 
-Or use the DeleteById function:
+### Using Query Modifiers
+
+You can chain a query object together with one or more different modifiers and then call Run
+when you are ready to run the query. 
+
+The modifiers for a FindQuery are: Include and Exclude.
+
+The modifiers for a FindAllQuery are: Include, Exclude, SortBy, Order, Limit, and Offset. 
+
+Here's an example of a more complicated query using several modifiers:
 
 ``` go
-if err := zoom.DeleteById("some_person_id"); err != nil {
-	// handle err
-}
+q := zoom.FindAll("person").SortBy("Name").Order("DESC").Limit(10)
+result, err := q.Run()
 ```
 
-## Relations
+Full documentation on the different modifiers is available on
+[godoc.org](http://godoc.org/github.com/stephenalexbrowne/zoom).
 
-Relations in Zoom are dead simple. There are no special return types or functions for using relations.
+
+Relationships
+-------------
+
+Relationships in Zoom are simple. There are no special return types or functions for using relationships.
 What you put in is what you get out.
 
-### One-to-One Relations
+### One-to-One Relationships
 
 For these examples we're going to introduce two new struct types:
 
@@ -243,159 +283,112 @@ For these examples we're going to introduce two new struct types:
 type PetOwner struct {
 	Name  string
 	Pet   *Pet    // *Pet should also be a registered type
-	*zoom.Model
-}
-
-// A convenient constructor for the PetOwner struct
-func NewPetOwner(name string) *PetOwner {
-	return &PetOwner{
-		Name:  name,
-		Model: new(zoom.Model),
-	}
+	zoom.DefaultData
 }
 
 // The Pet struct
 type Pet struct {
 	Name   string
-	*zoom.Model
+	zoom.DefaultData
 }
 
-// A convenient constructor for the Pet struct
-func NewPet(name string) *Pet {
-	return &Pet{
-		Name:  name,
-		Model: new(zoom.Model),
-	}
-}
 ```
 
-Assuming you've registered both the *PetOwner and *Pet types, Zoom will automatically set up a relation
-when you save a PetOwner with a non-nil Pet.
+Assuming you've registered both the *PetOwner and *Pet types, Zoom will automatically set up a relationship
+when you save a PetOwner with a valid Pet. (The Pet must have an id)
 
 ``` go
 // create a new PetOwner and a Pet
-owner := NewPetOwner("Bob")
-pet := NewPet("Spot")
+owner := &PetOwner{Name: "Bob"}
+pet := &Pet{Name: "Spot"}
 
-// set the PetOwner's pet
+// save the pet
+if err := zoom.Save(pet); err != nil {
+	// handle err
+}
+
+// set the owner's pet
 owner.Pet = pet
 
-// save it
+// save the owner
 if err := zoom.Save(owner); err != nil {
-	// handle error
+	// handle err
 }
 ```
 
-Behind the scenes, Zoom creates a seperate database entry for the pet and assigns it an id. Now if you
-retrieve the pet owner by it's id, the pet attribute will persist as well.
+Now if you retrieve the pet owner by it's id, the pet attribute will persist as well.
 
-For now, Zoom does not support reflexivity of one-to-one relations. So if you want pet ownership to be
+For now, Zoom does not support reflexivity of one-to-one relationships. So if you want pet ownership to be
 bidirectional (i.e. if you want an owner to know about its pet **and** a pet to know about its owner),
-you would have to manually set up both relations.
+you would have to manually set up both relationships.
 
 ``` go
-reply, err := zoom.FindById("petOwner", "the_id_of_above_pet_owner")
-if err != nil {
-	// handle error
-}
-
-// don't forget to type assert
-ownerCopy, ok := reply.(*PetOwner)
-if !ok {
-	// handle this
+ownerCopy := &PetOwner{}
+q := zoom.ScanById(ownerCopy, "the_id_of_above_pet_owner")
+if _, err := q.Run(); err != nil {
+	// handle err
 }
 
 // the Pet attribute is still set
 fmt.Println(ownerCopy.Pet.Name)
 
-// output:
+// Output:
 //	Spot
 ```
 
-The pet is stored in its own database entry, so you could retreive the pet named "Spot" directly by 
-it's id (if you know it). You can also examine the list of pets to see that it is there.
+### One-to-Many Relationships
 
-``` go
-// this would work
-reply, err := zoom.FindById("pet", "the_id_of_above_pet")
-
-// this would work too
-results, err := zoom.FindAll("pet")
-// results would contain the one Pet named Spot
-```
-
-
-### One-to-Many Relations
-
-One-to-many relations work similarly. This time we're going to use two new struct types in the examples.
+One-to-many relationships work similarly. This time we're going to use two new struct types in the examples.
 
 ``` go
 // The Parent struct
 type Parent struct {
 	Name     string
 	Children []*Child  // *Child should also be a registered type
-	*zoom.Model
-}
-
-// A convenient constructor for the Parent struct
-func NewParent(name string) *Parent {
-	return &Parent{
-		Name:  name,
-		Model: new(zoom.Model),
-	}
+	zoom.DefaultData
 }
 
 // The Child struct
 type Child struct {
 	Name   string
-	*zoom.Model
-}
-
-// A convenient constructor for the Child struct
-func NewChild(name string) *Child {
-	return &Child{
-		Name:  name,
-		Model: new(zoom.Model),
-	}
+	zoom.DefaultData
 }
 ```
 
-Assuming you register both the *Parent and *Child types, Zoom will automatically set up a relation
-for you when you save a parent with non-nil children. Here's an example:
+Assuming you register both the *Parent and *Child types, Zoom will automatically set up a relationship
+when you save a parent with some children (as long as each child has an id). Here's an example:
 
 ``` go
 // create a parent and two children
-parent := NewParent("Christine")
-child1 := NewChild("Derick")
-child2 := NewChild("Elise")
+parent := &Parent{Name: "Christine"}
+child1 := &Child{Name: "Derick"}
+child2 := &Child{Name: "Elise"}
+
+// save the children
+if err := zoom.Save(child1, child2); err != nil {
+	// handle err
+}
 
 // assign the children to the parent
 parent.Children = append(parent.Children, child1, child2)
 
 // save the parent
 if err := zoom.Save(parent); err != nil {
-	// handle error
+	// handle err
 }
 ```
 
-When the above code is run, Zoom will create a database entry for each child and give them a unique id.
-
 Again, Zoom does not support reflexivity. So if you wanted a child to know about its parent, you would have
-to set up and manage the relation manually. This might change in the future.
+to set up and manage the relationship manually. This might change in the future.
 
-Now when you retrieve a parent by id, it's children attribute will automatically be populated. So getting
+Now when you retrieve a parent by id, it's children field will automatically be populated. So getting
 the children again is straight forward.
 
 ``` go
-reply, err := zoom.FindById("parent", "the_id_of_above_parent")
-if err != nil {
+parentCopy := &Parent{}
+q := zoom.ScanById(parentCopy, "the_id_of_above_parent")
+if _, err := q.Run(); err != nil {
 	// handle error
-}
-
-// don't forget to type assert
-parentCopy, ok := reply.(*Parent)
-if !ok {
-	// handle this
 }
 
 // now you can access the children normally
@@ -403,120 +396,41 @@ for _, child := range parentCopy.Children {
 	fmt.Println(child.Name)
 }
 
-// output:
+// Output:
 //	Derick
 //	Elise
 
 ```
 
-Since each child is its own database entry, you could also access the children directly or get a list
-of all children.
+For a Parent with a lot of children, it may take a long time to get each Child from the database. If
+this is the case, it's a good idea to use the Exclude modifier when you don't intend to use the children.
 
 ``` go
-// this would work
-reply, err := zoom.FindById("child", "the_id_of_an_above_child")
+parentCopyNoChildren := &Parent{}
+q := zoom.ScanById(parentCopyNoChildren, "the_id_of_above_parent").Exclude("Children")
+if _, err := q.Run(); err != nil {
+	// handle error
+}
 
-// this would work too
-results, err := zoom.FindAll("child")
-// results would contain both children
+// Since it was excluded, Children is empty.
+fmt.Println(parentCopyNoChildren.Children)
 
+// Output:
+//	[]
 ```
 
-### Many-to-Many Relations
+### Many-to-Many Relationships
 
-There is nothing special about many-to-many relations. They are basically made up of multiple one-to-many
-relations.
+There is nothing special about many-to-many relationships. They are simply made up of multiple one-to-many
+relationships.
 
-Here's an example:
-
-``` go
-// The Friend struct
-type Friend struct {
-	Name    string
-	Friends []*Friend
-	*zoom.Model
-}
-
-// A convenient constructor for the Friend struct
-func NewFriend(name string) *Friend {
-	return &Friend{
-		Name:  name,
-		Model: new(zoom.Model),
-	}
-}
-```
-
-Each Friend struct holds a list of his/her friends. Assuming a two-way friend relationship,
-if Joe is friends with Amy, there would be two entries: Amy's id is in Joe's list of friends and Joe's id is in
-Amy's list of friends. This redundancy makes queries faster at the expense of higher memory usage. Since there are
-no joins needed to lookup Joe's friends, we can get them from the database quickly. The latency scales
-linearly with the number of Joe's friends, regardless of the total number of Friend entries or the total number
-of Friend-to-Friend relations.
-
-Here's how you would save some friends in the database:
-
-
-``` go
-// create 5 people
-fred := NewFriend("Fred")
-george := NewFriend("George")
-hellen := NewFriend("Hellen")
-ilene := NewFriend("Ilene")
-jim := NewFriend("Jim")
-
-// Fred is friends with George, Hellen, and Jim
-fred.Friends = append(fred.Friends, george, hellen, jim)
-
-// George is friends with Fred, Hellen, and Ilene
-george.Friends = append(george.Friends, fred, hellen, ilene)
-
-// save both Fred and George
-if err := zoom.Save(fred); err != nil {
-	c.Error(err)
-}
-if err := zoom.Save(george); err != nil {
-	c.Error(err)
-}
-```
-
-Recall that Zoom does not support reflexivity of relations. So if you want friendships to be bidirectional,
-you would have to manually add each person to the list of the other's friends. This might change in the future.
-
-Also note that in the above example, Zoom will create separate database entries for Hellen, Ilene, and Jim
-because they are related to Fred and George, even though we did not call Save explicitly.
-
-Retrieving many-to-many relations works exactly the same as one-to-many. When you get a friend from
-the database using FindById or FindAll, the friend.Friends array is auto-filled. You get out whatever
-you put in.
-
-``` go
-// retrieve fred from the database
-result, err := zoom.FindById("friend", fred.Id)
-if err != nil {
-	// handle err
-}
-
-// type assert to *Friend
-fredCopy, ok := result.(*Friend)
-if !ok {
-	// handle this
-}
-
-for _, friend := range fred.Friends {
-	fmt.Println(friend.Name)
-}
-
-// output:
-//	George
-// 	Hellen
-//	Jim
-```
 
 Testing & Benchmarking
 ----------------------
 
 **IMPORTANT**: Before running any tests or benchmarks, make sure you have a redis-server instance running.
-Tests will use a tcp connection on localhost:6379. Benchmarks will use a unix socket connection on /tmp/unix.sock.
+The tests and benchmarks will attempt to use a socket connection on /tmp/redis.sock. If that doesn't work,
+they will fallback to a tcp connection on localhost:6379.
 
 All the tests and benchmarks will use database #9. If database #9 is non-empty, they will
 will throw and error and not run. (so as to not corrupt your data). Database #9 is flushed at the end of
@@ -524,38 +438,26 @@ every test/benchmark.
 
 ### Running the Tests:
 
-To run the tests, make sure you're in the project root directory and run:
+To run the tests, make sure you're in the root directory for Zoom and run:
 
     go test ./...
     
 If everything passes, you should see something like:
 
-    ?   	github.com/stephenalexbrowne/zoom	[no test files]
-    ok  	github.com/stephenalexbrowne/zoom/benchmark	0.147s
-    ok  	github.com/stephenalexbrowne/zoom/redis	0.272s
-    ok  	github.com/stephenalexbrowne/zoom/test	0.155s
-    ok  	github.com/stephenalexbrowne/zoom/test_relate	0.277s
+    ?       github.com/stephenalexbrowne/zoom   [no test files]
+    ok      github.com/stephenalexbrowne/zoom/redis 1.338s
+    ok      github.com/stephenalexbrowne/zoom/test  0.367s
+    ?       github.com/stephenalexbrowne/zoom/test_support  [no test files]
+    ok      github.com/stephenalexbrowne/zoom/util  0.101s
     
 If any of the tests fail, please [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new) and
 describe what happened.
 
 ### Running the Benchmarks:
 
-**Important:** Before running the benchmarks, make sure that you have redis running and accepting
-connections on a unix socket at /tmp/unix.sock. The benchmarks use a unix socket connection to ensure
-that the times shown reflect the maximum potential speed.
+To run the benchmarks, again make sure you're in the root directory and run:
 
-To test if your redis server is properly set up, you can run:
-
-    redis-cli -s /tmp/redis.sock -c ping
-    
-If you receive PONG in response, then you are good to go. If anything else happens, redis is not setup
-properly. Check out the [official redis docs](http://redis.io/topics/config) for help. You might also find
-the [redis quickstart guide](http://redis.io/topics/quickstart) helpful, especially the bottom sections.
-
-To run the benchmarks, again make sure you're in the project root directory and run:
-
-    go test ./benchmark -bench .
+    go test ./... -bench .
     
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new).
@@ -563,43 +465,37 @@ You should see some runtimes for various operations. If you see an error or if t
 Here are the results from my laptop (2.3GHz intel i7, 8GB ram):
 
 ```
-BenchmarkConnection		20000000	  93.4 ns/op
-BenchmarkPing	   		50000	     39224 ns/op
-BenchmarkSet	   		50000	     45488 ns/op
-BenchmarkGet	   		50000	     40358 ns/op
-
-BenchmarkRepeatSave	   				50000	     66611 ns/op
-BenchmarkSequentialSave	   			50000	     65305 ns/op
-BenchmarkRepeatFindById	 			5000000	       482 ns/op
-BenchmarkSequentialFindById	 		5000000	       516 ns/op
-BenchmarkRandomFindById	 			5000000	       536 ns/op
-BenchmarkRepeatFindByIdNoCache	  	50000	     68655 ns/op
-BenchmarkSequentialFindByIdNoCache	50000	     68258 ns/op
-BenchmarkRandomFindByIdNoCache	   	50000	     68944 ns/op
-BenchmarkRepeatDeleteById	   		50000	     58557 ns/op
-BenchmarkSequentialDeleteById	   	50000	     59049 ns/op
-BenchmarkRandomDeleteById	   		50000	     58773 ns/op
-BenchmarkFindAll10	 				5000000	       642 ns/op
-BenchmarkFindAll100	 				5000000	       650 ns/op
-BenchmarkFindAll1000			 	5000000	       659 ns/op
-BenchmarkFindAll10000	 			5000000	       710 ns/op
-BenchmarkFindAllNoCache10	    	2000	    759905 ns/op
-BenchmarkFindAllNoCache100	     	500	  	   7176779 ns/op
-BenchmarkFindAllNoCache1000 		100	  	  70498624 ns/op
-BenchmarkFindAllNoCache10000 		100	 	 732820152 ns/op
-
-BenchmarkRepeatSaveOneToMany10  			10000	    235596 ns/op
-BenchmarkRepeatSaveOneToMany1000			100	  	  11252917 ns/op
-BenchmarkRandomFindOneToMany10	 			5000000	       569 ns/op
-BenchmarkRandomFindOneToMany1000	 		2000000	       714 ns/op
-BenchmarkRandomFindOneToManyNoCache10	    5000	    641972 ns/op
-BenchmarkRandomFindOneToManyNoCache1000		20	  	  61739641 ns/op
-
+BenchmarkConnection      20000000          99.2 ns/op
+BenchmarkPing               50000         40761 ns/op
+BenchmarkSet                50000         48653 ns/op
+BenchmarkGet                50000         42537 ns/op
+BenchmarkSave               50000         70305 ns/op
+BenchmarkFindById           50000         55120 ns/op
+BenchmarkScanById           50000         54960 ns/op
+BenchmarkFindByIdExclude    50000         57914 ns/op
+BenchmarkRepeatDeleteById   50000         63256 ns/op
+BenchmarkRandomDeleteById   50000         64386 ns/op
+BenchmarkFindAll10          10000        208239 ns/op
+BenchmarkFindAll100          2000        987973 ns/op
+BenchmarkFindAll1000          200       7915705 ns/op
+BenchmarkFindAll10000          20      83554133 ns/op
+BenchmarkScanAll10          10000        204737 ns/op
+BenchmarkScanAll100          2000        935378 ns/op
+BenchmarkScanAll1000          200       7834456 ns/op
+BenchmarkScanAll10000          20      84332092 ns/op
+BenchmarkSortNumeric10      10000        219864 ns/op
+BenchmarkSortNumeric100      2000       1022086 ns/op
+BenchmarkSortNumeric1000      200       8935983 ns/op
+BenchmarkSortNumeric10000      20      93927469 ns/op
+BenchmarkSortNumeric10000Limit1      100      11256255 ns/op
+BenchmarkSortNumeric10000Limit10     100      11289648 ns/op
+BenchmarkSortNumeric10000Limit100    100      11982038 ns/op
+BenchmarkSortNumeric10000Limit1000    50      20232813 ns/op
+BenchmarkSortAlpha10       10000        225211 ns/op
+BenchmarkSortAlpha100       2000       1074775 ns/op
+BenchmarkSortAlpha1000       200       9372886 ns/op
+BenchmarkSortAlpha10000       20     100336418 ns/op
 ```
-
-Zoom features an LRU, language-level, read-only cache. Finds for cached elements are incredibly fast
-(you can do about 1.5 million random finds per second). The benchmarks with the NoCache suffix clear
-the cache on each iteration, so they reflect latency for finding a record not in the cache.
 
 You should run your own benchmarks that are closer to your use case to get a real sense of how Zoom
 will perform for you. The speeds above are already pretty fast, but improving them is one of the top
@@ -609,24 +505,25 @@ Example Usage
 -------------
 
 The [zoom_example repository](https://github.com/stephenalexbrowne/zoom_example) is an up-to-date
-example of how to use Zoom in a json/rest application. Use it as a reference if anything above is
-not clear. Formal documentation is on my todo list.
+example of how to use Zoom in a json/rest application.
 
 
 TODO
 ----
 
-In no particular order, here's what I'm working on:
+Ordered generally by priority, here's what I'm working on:
 
-
-- Implement sorting
-- Add CreatedAt and UpdatedAt attributes to zoom.Model
-- Implement saving arbitrary embedded structs (even if not registered)
-- Write good, formal documentation
-- Re-implement low-level pub/sub (currently missing entirely)
+- Add a --host flag to benchmarks and tests
+- Improve sort/limit/offset performance by using custom indeces
+- Add Filter and Count modifiers to FindAllQuery
+- Support AND and OR operators on Filters
+- Support combining queries into a single transaction
+- Use scripting to reduce round-trip latencies in queries
 - Implement high-level watching for record changes
-- Add option to make relations reflexive
+- Support callbacks (BeforeSave, AfterSave, BeforeDelete, AfterDelete, etc.)
+- Add option to make relationships reflexive (inverseOf struct tag?)
 - Add a dependent:delete struct tag
+- Support automatic sharding
 
 
 LICENSE
@@ -635,4 +532,4 @@ LICENSE
 Zoom is licensed under the MIT License. See the LICENSE file for more information.
 
 The redis driver for Zoom is based on https://github.com/garyburd/redigo and is licensed under
-the Apache License, Version 2.0. See redis/NOTICE for more information. Thanks Gary!
+the Apache License, Version 2.0. See the NOTICE file for more information. Thanks Gary!
