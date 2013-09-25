@@ -20,12 +20,10 @@ import (
 	"reflect"
 )
 
-// Save writes an arbitrary struct or structs to the redis database.
-// Structs which are savable (i.e. that implement the Model interface)
-// will often be referred to as "models". Save throws an error if the type
-// of the struct has not yet been registered. If the Id field of the struct
-// is nil, Save will mutate the struct by setting the Id. To make a struct
-// satisfy the Model interface, you can embed zoom.DefaultData.
+// Save writes an arbitrary struct (or structs) to the redis database.
+// Save throws an error if the type of the struct has not yet been registered.
+// If the Id field of the struct is empty, Save will mutate the struct by setting
+// the Id. To make a struct satisfy the Model interface, you can embed zoom.DefaultData.
 func Save(models ...Model) error {
 	t := newTransaction()
 	for _, m := range models {
@@ -54,14 +52,14 @@ func Save(models ...Model) error {
 func Delete(models ...Model) error {
 	t := newTransaction()
 	for _, m := range models {
-		if m.GetId() == "" {
+		if m.getId() == "" {
 			return errors.New("zoom: cannot delete because model Id field is empty")
 		}
 		modelName, err := getRegisteredNameFromInterface(m)
 		if err != nil {
 			return err
 		}
-		if err := t.deleteModel(modelName, m.GetId()); err != nil {
+		if err := t.deleteModel(modelName, m.getId()); err != nil {
 			return err
 		}
 	}

@@ -17,8 +17,8 @@ import (
 	"time"
 )
 
-// Configuration contains various options for the Zoom library.
-// It should be created and used once during application startup.
+// Configuration contains various options. It should be created once
+// and passed in to the Init function during application startup.
 type Configuration struct {
 	Address  string // Address to connect to. Default: "localhost:6379"
 	Network  string // Network to use. Default: "tcp"
@@ -43,8 +43,8 @@ func GetConn() redis.Conn {
 
 // Init starts the Zoom library and creates a connection pool. It accepts
 // a Configuration struct as an argument. Any zero values in the configuration
-// struct will fallback to their default values. Init should be called once
-// during application startup.
+// will fallback to their default values. Init should be called once during
+// application startup.
 func Init(passedConfig *Configuration) {
 	config := getConfiguration(passedConfig)
 
@@ -70,13 +70,13 @@ func Init(passedConfig *Configuration) {
 	}
 }
 
-// Closes the connection pool and shuts down the Zoom library.
+// Close closes the connection pool and shuts down the Zoom library.
 // It should be run when application exits, e.g. using defer.
 func Close() {
 	pool.Close()
 }
 
-// KeyExists returns true iff a given key exists in redis
+// KeyExists returns true iff a given key exists in redis.
 // If conn is nil, a new connection will be created and
 // closed before the end of the function.
 func KeyExists(key string, conn redis.Conn) (bool, error) {
