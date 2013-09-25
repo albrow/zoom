@@ -4,7 +4,6 @@
 
 // Package util contains miscellaneous utility functions used throughout
 // the zoom library. They are not intended for external use.
-
 package util
 
 import (
