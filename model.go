@@ -73,7 +73,7 @@ var modelSpecs map[string]*modelSpec = make(map[string]*modelSpec)
 
 // methods so that DefaultData (and any struct with DefaultData embedded)
 // satisifies Model interface
-func (d *DefaultData) GetId() string {
+func (d DefaultData) GetId() string {
 	return d.Id
 }
 
