@@ -1,7 +1,7 @@
 Zoom
 ====
 
-Version: X.X.X
+Version: 0.3.1
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
@@ -10,9 +10,6 @@ Full documentation is available on
 
 **WARNING:** this isn't done yet and may change significantly before the official release. I do not
 advise using Zoom for production or mission-critical applications. Feedback and pull requests are welcome :)
-
-Since the development branch is quickly changing, this README might not necessarily reflect the most
-up-to-date version of the API.
 
 
 Philosophy
