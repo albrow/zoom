@@ -13,7 +13,8 @@ import (
 
 // TODO: add more custom error types based on common use cases throughout the package
 
-// NameAlreadyRegistered
+// NameAlreadyRegisteredError is returned if you try to register a
+// name which has already been registered.
 type NameAlreadyRegisteredError struct {
 	name string
 }
@@ -26,7 +27,8 @@ func NewNameAlreadyRegisteredError(name string) *NameAlreadyRegisteredError {
 	return &NameAlreadyRegisteredError{name}
 }
 
-// TypeAlreadyRegistered
+// TypeAlreadyRegisteredError is returned if you try to register a
+// type which has already been registered.
 type TypeAlreadyRegisteredError struct {
 	typ reflect.Type
 }
@@ -39,7 +41,8 @@ func NewTypeAlreadyRegisteredError(typ reflect.Type) *TypeAlreadyRegisteredError
 	return &TypeAlreadyRegisteredError{typ}
 }
 
-// ModelTypeNotRegistered
+// ModelTypeNotRegisteredError is returned if you attempt to perform
+// certain operations for unregistered types.
 type ModelTypeNotRegisteredError struct {
 	typ reflect.Type
 }
@@ -52,7 +55,8 @@ func NewModelTypeNotRegisteredError(typ reflect.Type) *ModelTypeNotRegisteredErr
 	return &ModelTypeNotRegisteredError{typ}
 }
 
-// ModelNameNotRegistered
+// ModelNameNotRegisteredError is returned if you attempt to perform
+// certain operations for unregistered names.
 type ModelNameNotRegisteredError struct {
 	name string
 }

@@ -1,7 +1,7 @@
 Zoom
 ====
 
-Version: 0.3.0
+Version: 0.3.1
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 

@@ -25,7 +25,8 @@ type Query interface {
 	Run() (interface{}, error)
 }
 
-// A ModelQuery is a query which returns a single item from the database
+// A ModelQuery is a query which returns a single item from the database.
+// It can be chained with query modifiers.
 type ModelQuery struct {
 	scannable Model
 	includes  []string
@@ -35,7 +36,8 @@ type ModelQuery struct {
 	err       error
 }
 
-// A MultiModelQuery is a query wich returns one or more items from the database
+// A MultiModelQuery is a query wich returns one or more items from the database.
+// It can be chained with query modifiers.
 type MultiModelQuery struct {
 	scannables interface{}
 	includes   []string
@@ -242,7 +244,7 @@ func ScanAll(models interface{}) *MultiModelQuery {
 	q.modelType = elemType
 
 	// get the registered name corresponding to the type of models
-	modelName, found := typeToName[elemType]
+	modelName, found := modelTypeToName[elemType]
 	if !found {
 		q.setErrorIfNone(NewModelTypeNotRegisteredError(elemType))
 		return q
