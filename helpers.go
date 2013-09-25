@@ -15,8 +15,7 @@ import (
 )
 
 // Models converts an interface to a slice of Model. It is typically
-// used to convert a return value of a MultiModelQuery into the underlying
-// type.
+// used to convert a return value of a MultiModelQuery.
 func Models(in interface{}) []Model {
 	typ := reflect.TypeOf(in)
 	if !util.TypeIsSliceOrArray(typ) {
@@ -28,7 +27,7 @@ func Models(in interface{}) []Model {
 		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nSlice or array must have elements of type pointer to struct.", in)
 		panic(msg)
 	}
-	_, found := typeToName[elemTyp]
+	_, found := modelTypeToName[elemTyp]
 	if !found {
 		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nType %T is not registered.", in, in)
 		panic(msg)
