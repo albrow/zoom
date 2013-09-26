@@ -10,7 +10,6 @@
 package test_support
 
 import (
-	"fmt"
 	"github.com/stephenalexbrowne/zoom"
 	"github.com/stephenalexbrowne/zoom/redis"
 	"math/rand"
@@ -69,7 +68,6 @@ func connect() redis.Conn {
 	// if dialUNIX failed, try using a tcp connection
 	conn := zoom.GetConn()
 	if err := testConn(conn); err != nil {
-		fmt.Println("WARNING: falling back to tcp connection. For maximum performance use a socket connection on /tmp/redis.sock")
 		dialTCP()
 		conn = zoom.GetConn()
 		if err := testConn(conn); err != nil {
