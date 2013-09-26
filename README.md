@@ -8,8 +8,9 @@ A blazing-fast, lightweight ORM for Go built on Redis.
 Full documentation is available on
 [godoc.org](http://godoc.org/github.com/stephenalexbrowne/zoom).
 
-**WARNING:** this isn't done yet and may change significantly before the official release. I do not
-advise using Zoom for production or mission-critical applications. Feedback and pull requests are welcome :)
+**WARNING:** this isn't done yet and may change significantly before the official release. There is no
+promise of backwards compatibility until version 1.0. I do not advise using Zoom for production or
+mission-critical applications. Feedback and pull requests are welcome :)
 
 
 Philosophy
