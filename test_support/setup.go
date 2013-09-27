@@ -10,24 +10,30 @@
 package test_support
 
 import (
+	"flag"
+	"fmt"
 	"github.com/stephenalexbrowne/zoom"
 	"github.com/stephenalexbrowne/zoom/redis"
 	"math/rand"
 	"time"
 )
 
-func SetUp() {
+var address *string = flag.String("address", "localhost:6379", "the address of a redis server to connect to")
+var network *string = flag.String("network", "tcp", "the network to use for the database connection (e.g. 'tcp' or 'unix')")
+var database *int = flag.Int("database", 9, "the redis database number to use for testing")
 
+func SetUp() {
 	conn := connect()
 	defer conn.Close()
 
-	// make sure database #9 is empty
+	// make sure database is empty
 	n, err := redis.Int(conn.Do("DBSIZE"))
 	if err != nil {
 		panic(err.Error())
 	}
 	if n != 0 {
-		panic("Database #9 is not empty, test can not continue")
+		msg := fmt.Sprintf("Database #%d is not empty, test can not continue", *database)
+		panic(msg)
 	}
 
 	// register the types in types.go
@@ -60,39 +66,21 @@ func SetUp() {
 	rand.Seed(time.Now().UTC().UnixNano())
 }
 
+// initialize zoom and test the connection
 func connect() redis.Conn {
-
-	// initialize zoom
-	dialUNIX()
-
-	// if dialUNIX failed, try using a tcp connection
+	dial()
 	conn := zoom.GetConn()
 	if err := testConn(conn); err != nil {
-		dialTCP()
-		conn = zoom.GetConn()
-		if err := testConn(conn); err != nil {
-			// if dialTCP failed, panic.
-			panic(err)
-		}
+		panic(err)
 	}
-
-	// get a connection
 	return conn
 }
 
-func dialUNIX() {
+func dial() {
 	zoom.Init(&zoom.Configuration{
-		Address:  "/tmp/redis.sock",
-		Network:  "unix",
-		Database: 9,
-	})
-}
-
-func dialTCP() {
-	zoom.Init(&zoom.Configuration{
-		Address:  "localhost:6379",
-		Network:  "tcp",
-		Database: 9,
+		Address:  *address,
+		Network:  *network,
+		Database: *database,
 	})
 }
 
