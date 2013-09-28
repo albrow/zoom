@@ -553,6 +553,8 @@ To run the benchmarks, again make sure you're in the root directory and run:
 go test ./test -bench .
 ```   
 
+You can use the same flags as above to change the network, address, and database used.
+
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new).
 
