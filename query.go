@@ -231,7 +231,7 @@ func ScanAll(models interface{}) *MultiModelQuery {
 	// make sure models is the right type
 	typ := reflect.TypeOf(models).Elem()
 	if !util.TypeIsSliceOrArray(typ) {
-		msg := fmt.Sprintf("zoom: ScanAll requires a pointer to a slice slice or array as an argument. Got: %T", models)
+		msg := fmt.Sprintf("zoom: ScanAll requires a pointer to a slice or array as an argument. Got: %T", models)
 		q.setErrorIfNone(errors.New(msg))
 		return q
 	}
