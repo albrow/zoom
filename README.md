@@ -518,20 +518,14 @@ relationships.
 Testing & Benchmarking
 ----------------------
 
-**IMPORTANT**: Before running any tests or benchmarks, make sure you have a redis-server instance running.
-The tests and benchmarks will attempt to use a socket connection on /tmp/redis.sock. If that doesn't work,
-they will fallback to a tcp connection on localhost:6379.
-
-All the tests and benchmarks will use database #9. If database #9 is non-empty, they will
-will throw and error and not run. (so as to not corrupt your data). Database #9 is flushed at the end of
-every test/benchmark.
-
 ### Running the Tests:
 
 To run the tests, make sure you're in the root directory for Zoom and run:
 
-    go test ./...
-    
+```
+go test ./test
+```   
+
 If everything passes, you should see something like:
 
     ?       github.com/stephenalexbrowne/zoom   [no test files]
@@ -543,16 +537,26 @@ If everything passes, you should see something like:
 If any of the tests fail, please [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new) and
 describe what happened.
 
+By default, tests and benchmarks will run on localhost:6379 and use database #9. You can change the address,
+network, and database used with flags. So to run on a unix socket at /tmp/redis.sock and use database #3,
+you could use:
+
+```
+go test ./test -network unix -address /tmp/redis.sock -database 3
+```
+
 ### Running the Benchmarks:
 
 To run the benchmarks, again make sure you're in the root directory and run:
 
-    go test ./... -bench .
-    
+```
+go test ./test -bench .
+```   
+
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new).
 
-Here are the results from my laptop (2.3GHz intel i7, 8GB ram):
+Here are the results from my laptop (2.3GHz intel i7, 8GB ram) with Redis set to append-only mode:
 
 ```
 BenchmarkConnection      20000000          99.2 ns/op
