@@ -15,6 +15,21 @@ Since the development branch is quickly changing, this README might not necessar
 up-to-date version of the API.
 
 
+Table of Contents
+-----------------
+
+- [Philosophy](#philosophy)
+- [Installation](#installation)
+- [Getting Started](#getting-started)
+- [Working with Models](#working-with-models)
+- [Running Queries](#running-queries)
+- [Relationships](#relationships)
+- [Testing & Benchmarking](#testing--benchmarking)
+- [Example Usage](#example-usage)
+- [TODO](#todo)
+- [License](#license)
+
+
 Philosophy
 ----------
 
@@ -39,6 +54,7 @@ directly.
 
 If you want to use advanced or complicated SQL queries, Zoom is not for you.
 
+
 Installation
 ------------
 
@@ -51,10 +67,9 @@ To install Zoom itself:
     
 This will pull the current master branch, which is (most likely) working but is quickly changing.
 
+
 Getting Started
 ---------------
-
-### Set Up
 
 First, add github.com/stephenalexbrowne/zoom to your import statement:
 
@@ -108,6 +123,10 @@ if err := zoom.Init(config); err != nil {
 	// handle err
 }
 ```
+
+
+Working with Models
+-------------------
 
 ### Creating Models
 
@@ -597,7 +616,7 @@ Ordered generally by priority, here's what I'm working on:
 - Support automatic sharding
 
 
-LICENSE
+License
 -------
 
 Zoom is licensed under the MIT License. See the LICENSE file for more information.
