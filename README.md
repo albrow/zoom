@@ -1,15 +1,31 @@
 Zoom
 ====
 
-Version: 0.3.2
+Version: 0.3.3
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
 Full documentation is available on
 [godoc.org](http://godoc.org/github.com/stephenalexbrowne/zoom).
 
-**WARNING:** this isn't done yet and may change significantly before the official release. I do not
-advise using Zoom for production or mission-critical applications. Feedback and pull requests are welcome :)
+**WARNING:** this isn't done yet and may change significantly before the official release. There is no
+promise of backwards compatibility until version 1.0.I do not advise using Zoom for production or
+mission-critical applications. Feedback and pull requests are welcome :)
+
+
+Table of Contents
+-----------------
+
+- [Philosophy](#philosophy)
+- [Installation](#installation)
+- [Getting Started](#getting-started)
+- [Working with Models](#working-with-models)
+- [Running Queries](#running-queries)
+- [Relationships](#relationships)
+- [Testing & Benchmarking](#testing--benchmarking)
+- [Example Usage](#example-usage)
+- [TODO](#todo)
+- [License](#license)
 
 
 Philosophy
@@ -36,6 +52,7 @@ directly.
 
 If you want to use advanced or complicated SQL queries, Zoom is not for you.
 
+
 Installation
 ------------
 
@@ -48,10 +65,9 @@ To install Zoom itself:
     
 This will pull the current master branch, which is (most likely) working but is quickly changing.
 
+
 Getting Started
 ---------------
-
-### Set Up
 
 First, add github.com/stephenalexbrowne/zoom to your import statement:
 
@@ -105,6 +121,10 @@ if err := zoom.Init(config); err != nil {
 	// handle err
 }
 ```
+
+
+Working with Models
+-------------------
 
 ### Creating Models
 
@@ -496,20 +516,14 @@ relationships.
 Testing & Benchmarking
 ----------------------
 
-**IMPORTANT**: Before running any tests or benchmarks, make sure you have a redis-server instance running.
-The tests and benchmarks will attempt to use a socket connection on /tmp/redis.sock. If that doesn't work,
-they will fallback to a tcp connection on localhost:6379.
-
-All the tests and benchmarks will use database #9. If database #9 is non-empty, they will
-will throw and error and not run. (so as to not corrupt your data). Database #9 is flushed at the end of
-every test/benchmark.
-
 ### Running the Tests:
 
 To run the tests, make sure you're in the root directory for Zoom and run:
 
-    go test ./...
-    
+```
+go test ./test
+```   
+
 If everything passes, you should see something like:
 
     ?       github.com/stephenalexbrowne/zoom   [no test files]
@@ -521,16 +535,28 @@ If everything passes, you should see something like:
 If any of the tests fail, please [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new) and
 describe what happened.
 
+By default, tests and benchmarks will run on localhost:6379 and use database #9. You can change the address,
+network, and database used with flags. So to run on a unix socket at /tmp/redis.sock and use database #3,
+you could use:
+
+```
+go test ./test -network unix -address /tmp/redis.sock -database 3
+```
+
 ### Running the Benchmarks:
 
 To run the benchmarks, again make sure you're in the root directory and run:
 
-    go test ./... -bench .
-    
+```
+go test ./test -bench .
+```   
+
+You can use the same flags as above to change the network, address, and database used.
+
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new).
 
-Here are the results from my laptop (2.3GHz intel i7, 8GB ram):
+Here are the results from my laptop (2.3GHz intel i7, 8GB ram) with Redis set to append-only mode:
 
 ```
 BenchmarkConnection      20000000          99.2 ns/op
@@ -581,7 +607,6 @@ TODO
 
 Ordered generally by priority, here's what I'm working on:
 
-- Add a --host flag to benchmarks and tests
 - Improve sort/limit/offset performance by using custom indeces
 - Add Filter and Count modifiers to MultiModelQuery
 - Support AND and OR operators on Filters
@@ -594,7 +619,7 @@ Ordered generally by priority, here's what I'm working on:
 - Support automatic sharding
 
 
-LICENSE
+License
 -------
 
 Zoom is licensed under the MIT License. See the LICENSE file for more information.
