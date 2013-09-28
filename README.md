@@ -26,6 +26,9 @@ Table of Contents
 - [Example Usage](#example-usage)
 - [TODO](#todo)
 - [License](#license)
+=======
+promise of backwards compatibility until version 1.0. I do not advise using Zoom for production or
+mission-critical applications. Feedback and pull requests are welcome :)
 
 
 Philosophy
