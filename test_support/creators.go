@@ -231,3 +231,28 @@ func friendListContains(f *Friend, list []*Friend) bool {
 	}
 	return false
 }
+
+func NewPrimativeTypes(num int) ([]*PrimativeTypes, error) {
+	results := make([]*PrimativeTypes, num)
+	for i := 0; i < num; i++ {
+		pt := &PrimativeTypes{
+			Uint:    1,
+			Uint8:   2,
+			Uint16:  3,
+			Uint32:  4,
+			Uint64:  5,
+			Int:     6,
+			Int8:    7,
+			Int16:   8,
+			Int32:   9,
+			Int64:   10,
+			Float32: 11.0,
+			Float64: 12.0,
+			Byte:    13,
+			Rune:    14,
+			String:  "15",
+		}
+		results[i] = pt
+	}
+	return results, nil
+}

@@ -7,6 +7,7 @@
 package util
 
 import (
+	"encoding/json"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -150,4 +151,28 @@ func RandInt(min int, max int) int {
 		panic("invalid args. max must be at least one more than min")
 	}
 	return min + rand.Intn(max-min+1)
+}
+
+// returns true if the two things are equal.
+// equality is based on underlying value, so if the pointer addresses
+// are different it doesn't matter. We use json encoding for simplicity,
+// assuming that if the json representation of two things is the same,
+// those two things can be considered equal. Differs from reflect.DeepEqual
+// because of the indifference concerning pointer addresses.
+func Equals(one, two interface{}) (bool, error) {
+	// first make sure the things are the same type
+	if reflect.TypeOf(one) != reflect.TypeOf(two) {
+		return false, nil
+	}
+
+	oneJSON, err := json.Marshal(one)
+	if err != nil {
+		return false, err
+	}
+	twoJSON, err := json.Marshal(two)
+	if err != nil {
+		return false, err
+	}
+
+	return (string(oneJSON) == string(twoJSON)), nil
 }
