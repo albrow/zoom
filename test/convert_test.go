@@ -31,3 +31,28 @@ func TestPrimativeTypes(t *testing.T) {
 		t.Errorf("model was not saved/retrieved correctly.\nExpected: %+v\nGot %+v\n", pt, ptCopy)
 	}
 }
+
+func TestPointerToPrimativeTypes(t *testing.T) {
+	test_support.SetUp()
+	defer test_support.TearDown()
+
+	pts, err := test_support.NewPointerPrimativeTypes(1)
+	if err != nil {
+		t.Error(err)
+	}
+	pt := pts[0]
+	zoom.Save(pt)
+
+	ptCopy := &test_support.PointerPrimativeTypes{}
+	if _, err := zoom.ScanById(pt.Id, ptCopy).Run(); err != nil {
+		t.Error(err)
+	}
+
+	equal, err := util.Equals(pt, ptCopy)
+	if err != nil {
+		t.Error(err)
+	}
+	if !equal {
+		t.Errorf("model was not saved/retrieved correctly.\nExpected: %+v\nGot %+v\n", pt, ptCopy)
+	}
+}

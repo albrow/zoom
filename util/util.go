@@ -109,27 +109,11 @@ func TypeIsPointerToStruct(typ reflect.Type) bool {
 }
 
 func TypeIsString(typ reflect.Type) bool {
-	if typ.Kind() == reflect.Ptr {
-		return elemIsString(typ.Elem())
-	} else {
-		return elemIsString(typ)
-	}
-}
-
-func elemIsString(typ reflect.Type) bool {
 	k := typ.Kind()
 	return k == reflect.String || ((k == reflect.Slice || k == reflect.Array) && typ.Elem().Kind() == reflect.Uint8)
 }
 
 func TypeIsNumeric(typ reflect.Type) bool {
-	if typ.Kind() == reflect.Ptr {
-		return elemIsNumeric(typ.Elem())
-	} else {
-		return elemIsNumeric(typ)
-	}
-}
-
-func elemIsNumeric(typ reflect.Type) bool {
 	k := typ.Kind()
 	switch k {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
@@ -142,6 +126,10 @@ func elemIsNumeric(typ reflect.Type) bool {
 func TypeIsBool(typ reflect.Type) bool {
 	k := typ.Kind()
 	return k == reflect.Bool || (k == reflect.Ptr && typ.Elem().Kind() == reflect.Bool)
+}
+
+func TypeIsPrimative(typ reflect.Type) bool {
+	return TypeIsString(typ) || TypeIsNumeric(typ) || TypeIsBool(typ)
 }
 
 // generate a random int from min to max (inclusively).

@@ -60,7 +60,6 @@ type Friend struct {
 
 // The PrimativeTypes struct
 // A struct containing all supported primative types
-// and pointers to primative types
 type PrimativeTypes struct {
 	Uint    uint
 	Uint8   uint8
@@ -77,5 +76,26 @@ type PrimativeTypes struct {
 	Byte    byte
 	Rune    rune
 	String  string
+	zoom.DefaultData
+}
+
+// The PointerPrimativeTypes struct
+// A struct containing pointers to all supported primative types
+type PointerPrimativeTypes struct {
+	Uint    *uint
+	Uint8   *uint8
+	Uint16  *uint16
+	Uint32  *uint32
+	Uint64  *uint64
+	Int     *int
+	Int8    *int8
+	Int16   *int16
+	Int32   *int32
+	Int64   *int64
+	Float32 *float32
+	Float64 *float64
+	Byte    *byte
+	Rune    *rune
+	String  *string
 	zoom.DefaultData
 }

@@ -557,7 +557,7 @@ func testFindAllWithExpectedPersonsAndScannable(t *testing.T, query zoom.Query, 
 
 func checkPersonsEqual(t *testing.T, expected, got *test_support.Person) {
 	if !reflect.DeepEqual(expected, got) {
-		t.Error("person was not equal.\nExpected: %+v\nGot: %+v\n", expected, got)
+		t.Errorf("person was not equal.\nExpected: %+v\nGot: %+v\n", expected, got)
 	}
 }
 

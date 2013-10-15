@@ -64,6 +64,9 @@ func SetUp() {
 	if err := zoom.Register(&PrimativeTypes{}, "primativeTypes"); err != nil {
 		panic(err.Error())
 	}
+	if err := zoom.Register(&PointerPrimativeTypes{}, "pointerPrimativeTypes"); err != nil {
+		panic(err.Error())
+	}
 
 	// generate a new seed for rand
 	rand.Seed(time.Now().UTC().UnixNano())
@@ -106,6 +109,7 @@ func TearDown() {
 	zoom.UnregisterName("pet")
 	zoom.UnregisterName("friend")
 	zoom.UnregisterName("primativeTypes")
+	zoom.UnregisterName("pointerPrimativeTypes")
 
 	// flush and close the database
 	conn := zoom.GetConn()
