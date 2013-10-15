@@ -17,8 +17,8 @@ func NewPersons(num int) ([]*Person, error) {
 	results := make([]*Person, num)
 	for i := 0; i < num; i++ {
 		p := &Person{
-			Name: "person_" + strconv.Itoa(i),
-			Age:  i,
+			Name: "person_" + strconv.Itoa(i+1),
+			Age:  i + 1,
 		}
 		results[i] = p
 	}
@@ -27,13 +27,9 @@ func NewPersons(num int) ([]*Person, error) {
 
 // creates and saves num persons
 func CreatePersons(num int) ([]*Person, error) {
-	results := make([]*Person, num)
-	for i := 0; i < num; i++ {
-		p := &Person{
-			Name: "person_" + strconv.Itoa(i),
-			Age:  i,
-		}
-		results[i] = p
+	results, err := NewPersons(num)
+	if err != nil {
+		return results, err
 	}
 	if err := zoom.Save(zoom.Models(results)...); err != nil {
 		return results, err
@@ -45,7 +41,7 @@ func NewArtists(num int) ([]*Artist, error) {
 	results := make([]*Artist, num)
 	for i := 0; i < num; i++ {
 		a := &Artist{
-			Name: "artist_" + strconv.Itoa(i),
+			Name: "artist_" + strconv.Itoa(i+1),
 		}
 		results[i] = a
 	}
@@ -53,12 +49,9 @@ func NewArtists(num int) ([]*Artist, error) {
 }
 
 func CreateArtists(num int) ([]*Artist, error) {
-	results := make([]*Artist, num)
-	for i := 0; i < num; i++ {
-		a := &Artist{
-			Name: "artist_" + strconv.Itoa(i),
-		}
-		results[i] = a
+	results, err := NewArtists(num)
+	if err != nil {
+		return results, err
 	}
 	if err := zoom.Save(zoom.Models(results)...); err != nil {
 		return results, err
@@ -69,7 +62,7 @@ func CreateArtists(num int) ([]*Artist, error) {
 func NewColors(num int) ([]*Color, error) {
 	results := make([]*Color, num)
 	for i := 0; i < num; i++ {
-		val := i % 255
+		val := i%254 + 1
 		c := &Color{
 			R: val,
 			G: val,
@@ -81,15 +74,9 @@ func NewColors(num int) ([]*Color, error) {
 }
 
 func CreateColors(num int) ([]*Color, error) {
-	results := make([]*Color, num)
-	for i := 0; i < num; i++ {
-		val := i % 255
-		c := &Color{
-			R: val,
-			G: val,
-			B: val,
-		}
-		results[i] = c
+	results, err := NewColors(num)
+	if err != nil {
+		return results, err
 	}
 	if err := zoom.Save(zoom.Models(results)...); err != nil {
 		return results, err
@@ -101,7 +88,7 @@ func NewPetOwners(num int) ([]*PetOwner, error) {
 	results := make([]*PetOwner, num)
 	for i := 0; i < num; i++ {
 		p := &PetOwner{
-			Name: "petOwner_" + strconv.Itoa(i),
+			Name: "petOwner_" + strconv.Itoa(i+1),
 		}
 		results[i] = p
 	}
@@ -109,12 +96,9 @@ func NewPetOwners(num int) ([]*PetOwner, error) {
 }
 
 func CreatePetOwners(num int) ([]*PetOwner, error) {
-	results := make([]*PetOwner, num)
-	for i := 0; i < num; i++ {
-		p := &PetOwner{
-			Name: "petOwner_" + strconv.Itoa(i),
-		}
-		results[i] = p
+	results, err := NewPetOwners(num)
+	if err != nil {
+		return results, err
 	}
 	if err := zoom.Save(zoom.Models(results)...); err != nil {
 		return results, err
@@ -126,7 +110,7 @@ func NewPets(num int) ([]*Pet, error) {
 	results := make([]*Pet, num)
 	for i := 0; i < num; i++ {
 		p := &Pet{
-			Name: "pet_" + strconv.Itoa(i),
+			Name: "pet_" + strconv.Itoa(i+1),
 		}
 		results[i] = p
 	}
@@ -134,12 +118,9 @@ func NewPets(num int) ([]*Pet, error) {
 }
 
 func CreatePets(num int) ([]*Pet, error) {
-	results := make([]*Pet, num)
-	for i := 0; i < num; i++ {
-		p := &Pet{
-			Name: "pet_" + strconv.Itoa(i),
-		}
-		results[i] = p
+	results, err := NewPets(num)
+	if err != nil {
+		return results, err
 	}
 	if err := zoom.Save(zoom.Models(results)...); err != nil {
 		return results, err
@@ -159,12 +140,9 @@ func NewFriends(num int) ([]*Friend, error) {
 }
 
 func CreateFriends(num int) ([]*Friend, error) {
-	results := make([]*Friend, num)
-	for i := 0; i < num; i++ {
-		f := &Friend{
-			Name: "friend_" + strconv.Itoa(i),
-		}
-		results[i] = f
+	results, err := NewFriends(num)
+	if err != nil {
+		return results, err
 	}
 	if err := zoom.Save(zoom.Models(results)...); err != nil {
 		return results, err
@@ -253,6 +231,46 @@ func NewPrimativeTypes(num int) ([]*PrimativeTypes, error) {
 			String:  "15",
 		}
 		results[i] = pt
+	}
+	return results, nil
+}
+
+func NewPointerPrimativeTypes(num int) ([]*PointerPrimativeTypes, error) {
+	results := make([]*PointerPrimativeTypes, num)
+	pUint := uint(1)
+	pUint8 := uint8(2)
+	pUint16 := uint16(3)
+	pUint32 := uint32(4)
+	pUint64 := uint64(5)
+	pInt := int(6)
+	pInt8 := int8(7)
+	pInt16 := int16(8)
+	pInt32 := int32(9)
+	pInt64 := int64(10)
+	pFloat32 := float32(11.0)
+	pFloat64 := float64(12.0)
+	pByte := byte(13)
+	pRune := rune(14)
+	pString := "15"
+	for i := 0; i < num; i++ {
+		ppt := &PointerPrimativeTypes{
+			Uint:    &pUint,
+			Uint8:   &pUint8,
+			Uint16:  &pUint16,
+			Uint32:  &pUint32,
+			Uint64:  &pUint64,
+			Int:     &pInt,
+			Int8:    &pInt8,
+			Int16:   &pInt16,
+			Int32:   &pInt32,
+			Int64:   &pInt64,
+			Float32: &pFloat32,
+			Float64: &pFloat64,
+			Byte:    &pByte,
+			Rune:    &pRune,
+			String:  &pString,
+		}
+		results[i] = ppt
 	}
 	return results, nil
 }
