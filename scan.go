@@ -1,3 +1,10 @@
+// Copyright 2013 Alex Browne.  All rights reserved.
+// Use of this source code is governed by the MIT
+// license, which can be found in the LICENSE file.
+
+// File scan.go contains code that converts go data structures
+// to and from a format that redis can understand
+
 package zoom
 
 import (
