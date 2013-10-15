@@ -1,3 +1,10 @@
+// Copyright 2013 Alex Browne.  All rights reserved.
+// Use of this source code is governed by the MIT
+// license, which can be found in the LICENSE file.
+
+// File convert_test.go is intended to test the conversion
+// to and from go data structures of a variety of types
+
 package test
 
 import (
