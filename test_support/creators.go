@@ -274,3 +274,48 @@ func NewPointerPrimativeTypes(num int) ([]*PointerPrimativeTypes, error) {
 	}
 	return results, nil
 }
+
+func NewInconvertibleTypes(num int) ([]*InconvertibleTypes, error) {
+	results := make([]*InconvertibleTypes, num)
+	for i := 0; i < num; i++ {
+		m := &InconvertibleTypes{
+			Complex:     complex128(1 + 2i),
+			IntSlice:    []int{3, 4, 5},
+			StringSlice: []string{"6", "7", "8"},
+			IntArray:    [3]int{9, 10, 11},
+			StringArray: [3]string{"12", "13", "14"},
+			StringMap:   map[string]string{"15": "fifteen", "16": "sixteen"},
+			IntMap:      map[int]int{17: 18, 19: 20},
+		}
+		results[i] = m
+	}
+	return results, nil
+}
+
+func NewEmbeddedStructs(num int) ([]*EmbeddedStruct, error) {
+	results := make([]*EmbeddedStruct, num)
+	for i := 0; i < num; i++ {
+		m := &EmbeddedStruct{
+			Embed: Embed{
+				Int:    1,
+				String: "foo",
+			},
+		}
+		results[i] = m
+	}
+	return results, nil
+}
+
+func NewPointerEmbeddedStructs(num int) ([]*PointerEmbeddedStruct, error) {
+	results := make([]*PointerEmbeddedStruct, num)
+	for i := 0; i < num; i++ {
+		m := &PointerEmbeddedStruct{
+			Embed: &Embed{
+				Int:    1,
+				String: "foo",
+			},
+		}
+		results[i] = m
+	}
+	return results, nil
+}

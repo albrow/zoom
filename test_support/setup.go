@@ -22,9 +22,27 @@ var address *string = flag.String("address", "localhost:6379", "the address of a
 var network *string = flag.String("network", "tcp", "the network to use for the database connection (e.g. 'tcp' or 'unix')")
 var database *int = flag.Int("database", 9, "the redis database number to use for testing")
 
+var types map[string]interface{} = map[string]interface{}{
+	"person":                &Person{},
+	"modelWithList":         &ModelWithList{},
+	"modelWithSet":          &ModelWithSet{},
+	"artist":                &Artist{},
+	"color":                 &Color{},
+	"petOwner":              &PetOwner{},
+	"pet":                   &Pet{},
+	"friend":                &Friend{},
+	"primativeTypes":        &PrimativeTypes{},
+	"pointerPrimativeTypes": &PointerPrimativeTypes{},
+	"incovertibleTypes":     &InconvertibleTypes{},
+	"embeddedStruct":        &EmbeddedStruct{},
+	"pointerEmbeddedStruct": &PointerEmbeddedStruct{},
+}
+
 func SetUp() {
 	conn := connect()
 	defer conn.Close()
+
+	registerTypes()
 
 	// make sure database is empty
 	n, err := redis.Int(conn.Do("DBSIZE"))
@@ -34,38 +52,6 @@ func SetUp() {
 	if n != 0 {
 		msg := fmt.Sprintf("Database #%d is not empty, test can not continue", *database)
 		panic(msg)
-	}
-
-	// register the types in types.go
-	if err := zoom.Register(&Person{}, "person"); err != nil {
-		panic(err.Error())
-	}
-	if err := zoom.Register(&ModelWithList{}, "modelWithList"); err != nil {
-		panic(err.Error())
-	}
-	if err := zoom.Register(&ModelWithSet{}, "modelWithSet"); err != nil {
-		panic(err.Error())
-	}
-	if err := zoom.Register(&Artist{}, "artist"); err != nil {
-		panic(err.Error())
-	}
-	if err := zoom.Register(&Color{}, "color"); err != nil {
-		panic(err.Error())
-	}
-	if err := zoom.Register(&PetOwner{}, "petOwner"); err != nil {
-		panic(err.Error())
-	}
-	if err := zoom.Register(&Pet{}, "pet"); err != nil {
-		panic(err.Error())
-	}
-	if err := zoom.Register(&Friend{}, "friend"); err != nil {
-		panic(err.Error())
-	}
-	if err := zoom.Register(&PrimativeTypes{}, "primativeTypes"); err != nil {
-		panic(err.Error())
-	}
-	if err := zoom.Register(&PointerPrimativeTypes{}, "pointerPrimativeTypes"); err != nil {
-		panic(err.Error())
 	}
 
 	// generate a new seed for rand
@@ -97,19 +83,17 @@ func testConn(conn redis.Conn) error {
 	return nil
 }
 
-func TearDown() {
+// register the types in types.go
+func registerTypes() {
+	for name, in := range types {
+		if err := zoom.Register(in, name); err != nil {
+			panic(err)
+		}
+	}
+}
 
-	// unregister types in types.go
-	zoom.UnregisterName("person")
-	zoom.UnregisterName("modelWithList")
-	zoom.UnregisterName("modelWithSet")
-	zoom.UnregisterName("artist")
-	zoom.UnregisterName("color")
-	zoom.UnregisterName("petOwner")
-	zoom.UnregisterName("pet")
-	zoom.UnregisterName("friend")
-	zoom.UnregisterName("primativeTypes")
-	zoom.UnregisterName("pointerPrimativeTypes")
+func TearDown() {
+	unregisterTypes()
 
 	// flush and close the database
 	conn := zoom.GetConn()
@@ -119,4 +103,11 @@ func TearDown() {
 	}
 	conn.Close()
 	zoom.Close()
+}
+
+// unregister types in types.go
+func unregisterTypes() {
+	for name, _ := range types {
+		zoom.UnregisterName(name)
+	}
 }

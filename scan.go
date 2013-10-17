@@ -10,6 +10,7 @@ package zoom
 import (
 	"errors"
 	"fmt"
+	"github.com/stephenalexbrowne/zoom/blob"
 	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 	"strconv"
@@ -139,5 +140,16 @@ func scanPointerVal(src interface{}, dest reflect.Value) error {
 }
 
 func scanInconvertibleVal(src interface{}, dest reflect.Value) error {
+	srcBytes, ok := src.([]byte)
+	if !ok {
+		msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
+		return errors.New(msg)
+	}
+
+	// TODO: account for json, msgpack or other custom fallbacks
+	m := blob.DefaultMarshalerUnmarshaler{}
+	if err := m.Unmarshal(srcBytes, dest.Addr().Interface()); err != nil {
+		return err
+	}
 	return nil
 }
