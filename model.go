@@ -8,9 +8,9 @@
 package zoom
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/stephenalexbrowne/zoom/blob"
 	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
@@ -414,12 +414,13 @@ func (mr modelRef) mainHashArgs() ([]interface{}, error) {
 		args = append(args, p.redisName, mr.value(p.fieldName).Elem().Interface())
 	}
 	for _, inc := range ms.inconvertibles {
-		// TODO: account for the possibility of msgpack or custom fallbacks
-		js, err := json.Marshal(mr.value(inc.fieldName).Interface())
+		// TODO: account for the possibility of json, msgpack or custom fallbacks
+		b := blob.DefaultMarshalerUnmarshaler{}
+		valBytes, err := b.Marshal(mr.value(inc.fieldName).Interface())
 		if err != nil {
-			return nil, err
+			return args, err
 		}
-		args = append(args, inc.redisName, js)
+		args = append(args, inc.redisName, valBytes)
 	}
 	return args, nil
 }

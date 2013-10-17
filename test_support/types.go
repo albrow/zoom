@@ -11,7 +11,6 @@ import (
 	"github.com/stephenalexbrowne/zoom"
 )
 
-// The Person struct
 type Person struct {
 	Name string
 	Age  int
@@ -58,8 +57,7 @@ type Friend struct {
 	zoom.DefaultData
 }
 
-// The PrimativeTypes struct
-// A struct containing all supported primative types
+// PrimativeTypes is a struct containing all supported primative types
 type PrimativeTypes struct {
 	Uint    uint
 	Uint8   uint8
@@ -79,8 +77,8 @@ type PrimativeTypes struct {
 	zoom.DefaultData
 }
 
-// The PointerPrimativeTypes struct
-// A struct containing pointers to all supported primative types
+// PointerPrimativeTypes is a struct containing pointers to all
+// supported primative types.
 type PointerPrimativeTypes struct {
 	Uint    *uint
 	Uint8   *uint8
@@ -98,4 +96,37 @@ type PointerPrimativeTypes struct {
 	Rune    *rune
 	String  *string
 	zoom.DefaultData
+}
+
+// InconvertibleTypes is a struct containing fields which are
+// not directly convertible. A fallback (e.g. gob/json) encoding
+// should be used.
+type InconvertibleTypes struct {
+	Complex     complex128
+	IntSlice    []int
+	StringSlice []string
+	IntArray    [3]int
+	StringArray [3]string
+	StringMap   map[string]string
+	IntMap      map[int]int
+	zoom.DefaultData
+}
+
+// EmbeddedStruct is a struct containing an embedded struct
+// of an unregistered type
+type EmbeddedStruct struct {
+	Embed
+	zoom.DefaultData
+}
+
+// PointerEmbeddedStruct is a struct containing an embedded
+// struct pointer of an unregistered type
+type PointerEmbeddedStruct struct {
+	*Embed
+	zoom.DefaultData
+}
+
+type Embed struct {
+	Int    int
+	String string
 }
