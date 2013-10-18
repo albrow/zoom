@@ -28,26 +28,23 @@ type Query interface {
 // A ModelQuery is a query which returns a single item from the database.
 // It can be chained with query modifiers.
 type ModelQuery struct {
-	scannable Model
-	includes  []string
-	excludes  []string
-	modelName string
-	id        string
-	err       error
+	modelRef modelRef
+	includes []string
+	excludes []string
+	err      error
 }
 
 // A MultiModelQuery is a query wich returns one or more items from the database.
 // It can be chained with query modifiers.
 type MultiModelQuery struct {
-	scannables interface{}
-	includes   []string
-	excludes   []string
-	modelName  string
-	modelType  reflect.Type
-	sort       sort
-	limit      uint
-	offset     uint
-	err        error
+	modelSpec modelSpec
+	models    interface{}
+	includes  []string
+	excludes  []string
+	sort      sort
+	limit     uint
+	offset    uint
+	err       error
 }
 
 type sort struct {
@@ -83,31 +80,26 @@ func (q *MultiModelQuery) getExcludes() []string {
 }
 
 func (q *ModelQuery) name() string {
-	return q.modelName
+	return q.modelRef.modelSpec.modelName
 }
 
 func (q *MultiModelQuery) name() string {
-	return q.modelName
+	return q.modelSpec.modelName
 }
 
 // FindById returns a ModelQuery which can be chained with additional modifiers.
 func FindById(modelName, id string) *ModelQuery {
 
-	// create a query object
-	q := &ModelQuery{
-		modelName: modelName,
-		id:        id,
-	}
+	q := &ModelQuery{}
 
-	// get the type corresponding to the modelName
-	typ, err := getRegisteredTypeFromName(modelName)
+	mr, err := newModelRefFromName(modelName)
 	if err != nil {
 		q.setErrorIfNone(err)
-		return q
 	}
+	q.modelRef = mr
 
 	// create a new struct of type typ
-	val := reflect.New(typ.Elem())
+	val := reflect.New(mr.modelSpec.modelType.Elem())
 	m, ok := val.Interface().(Model)
 	if !ok {
 		msg := fmt.Sprintf("zoom: could not convert val of type %T to Model", val.Interface())
@@ -115,8 +107,9 @@ func FindById(modelName, id string) *ModelQuery {
 		return q
 	}
 
-	// set scannable and return the query
-	q.scannable = m
+	// set model and return the query
+	q.modelRef.model = m
+	q.modelRef.model.setId(id)
 	return q
 }
 
@@ -125,21 +118,14 @@ func FindById(modelName, id string) *ModelQuery {
 // registered type. ScanById will mutate the struct, filling in its fields.
 func ScanById(id string, m Model) *ModelQuery {
 
-	// create a query object
-	q := &ModelQuery{
-		id:        id,
-		scannable: m,
-	}
-
-	// get the name corresponding to the type of m
-	modelName, err := getRegisteredNameFromInterface(m)
+	// create and return a query object
+	q := &ModelQuery{}
+	mr, err := newModelRefFromInterface(m)
 	if err != nil {
 		q.setErrorIfNone(err)
-		return q
 	}
-
-	// set modelName and return the query
-	q.modelName = modelName
+	q.modelRef = mr
+	q.modelRef.model.setId(id)
 	return q
 }
 
@@ -178,31 +164,29 @@ func (q *ModelQuery) setErrorIfNone(e error) {
 func (q *ModelQuery) Run() (interface{}, error) {
 	// check if the query had any prior errors
 	if q.err != nil {
-		return q.scannable, q.err
+		return q.modelRef.model, q.err
 	}
 
 	// start a transaction
 	t := newTransaction()
 
 	// set up includes
-	if err := findModelWithIncludes(q.id, q.scannable, q, t); err != nil {
-		return q.scannable, err
+	if err := findModelWithIncludes(q.modelRef, q, t); err != nil {
+		return q.modelRef.model, err
 	}
 
 	// execute the transaction
 	if err := t.exec(); err != nil {
-		return q.scannable, err
+		return q.modelRef.model, err
 	}
-	return q.scannable, nil
+	return q.modelRef.model, nil
 }
 
 // FindAll returns a MultiModelQuery which can be chained with additional modifiers.
 func FindAll(modelName string) *MultiModelQuery {
 
 	// create a query object
-	q := &MultiModelQuery{
-		modelName: modelName,
-	}
+	q := new(MultiModelQuery)
 
 	// get the registered type corresponding to the modelName
 	typ, err := getRegisteredTypeFromName(modelName)
@@ -210,12 +194,12 @@ func FindAll(modelName string) *MultiModelQuery {
 		q.setErrorIfNone(err)
 		return q
 	}
+	q.modelSpec = newModelSpec(modelName, typ)
 
-	// instantiate a new slice and set it as scannables
-	q.modelType = typ
-	newVal := reflect.New(reflect.SliceOf(typ))
-	newVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(typ), 0, 0))
-	q.scannables = newVal.Interface()
+	modelsVal := reflect.New(reflect.SliceOf(typ))
+	modelsVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(typ), 0, 0))
+	q.models = modelsVal.Interface()
+
 	return q
 }
 
@@ -235,22 +219,20 @@ func ScanAll(models interface{}) *MultiModelQuery {
 		q.setErrorIfNone(errors.New(msg))
 		return q
 	}
-	elemType := typ.Elem()
-	if !util.TypeIsPointerToStruct(elemType) {
+	modelType := typ.Elem()
+	if !util.TypeIsPointerToStruct(modelType) {
 		msg := fmt.Sprintf("zoom: ScanAll requires a pointer to a slice of pointers to structs. Got: %T", models)
 		q.setErrorIfNone(errors.New(msg))
 		return q
 	}
-	q.modelType = elemType
-
 	// get the registered name corresponding to the type of models
-	modelName, found := modelTypeToName[elemType]
-	if !found {
-		q.setErrorIfNone(NewModelTypeNotRegisteredError(elemType))
-		return q
+	modelName, err := getRegisteredNameFromType(modelType)
+	if err != nil {
+		q.setErrorIfNone(err)
 	}
-	q.modelName = modelName
-	q.scannables = models
+	q.modelSpec = newModelSpec(modelName, modelType)
+	q.models = models
+
 	return q
 }
 
@@ -327,13 +309,13 @@ func (q *MultiModelQuery) Run() (interface{}, error) {
 		return nil, q.err
 	}
 
-	// use reflection to get a value for scannables
-	scannablesVal := reflect.ValueOf(q.scannables).Elem()
+	// use reflection to get a value for models
+	modelsVal := reflect.ValueOf(q.models).Elem()
 
 	// get the ids for the models
 	ids, err := q.getIds()
 	if err != nil {
-		return scannablesVal.Interface(), err
+		return modelsVal.Interface(), err
 	}
 
 	// start a transaction
@@ -342,34 +324,40 @@ func (q *MultiModelQuery) Run() (interface{}, error) {
 	// iterate through the ids and add a find operation for each model
 	for _, id := range ids {
 
-		// instantiate a new scannable element and append it to q.scannables
-		scannable := reflect.New(q.modelType.Elem())
-		scannablesVal.Set(reflect.Append(scannablesVal, scannable))
+		// instantiate a new scannable element and append it to q.models
+		scannable := reflect.New(q.modelSpec.modelType.Elem())
+		modelsVal.Set(reflect.Append(modelsVal, scannable))
 
 		model, ok := scannable.Interface().(Model)
 		if !ok {
 			msg := fmt.Sprintf("zoom: could not convert val of type %s to Model\n", scannable.Type().String())
-			return scannablesVal.Interface(), errors.New(msg)
+			return modelsVal.Interface(), errors.New(msg)
 		}
+		mr, err := newModelRefFromInterface(model)
+		if err != nil {
+			return modelsVal, err
+		}
+		mr.model.setId(id)
 
 		// add a find operation for the model m
-		findModelWithIncludes(id, model, q, t)
+		findModelWithIncludes(mr, q, t)
 	}
 
 	// execute the transaction
 	if err := t.exec(); err != nil {
-		return scannablesVal.Interface(), err
+		return modelsVal.Interface(), err
 	}
 
-	return scannablesVal.Interface(), nil
+	return modelsVal.Interface(), nil
 }
 
-func findModelWithIncludes(id string, scannable Model, q namedIncluderExcluder, t *transaction) error {
-	ms := modelSpecs[q.name()]
-	includes := ms.fieldNames
+func findModelWithIncludes(mr modelRef, q namedIncluderExcluder, t *transaction) error {
+	//ms := modelSpecs[q.name()]
+	//includes := ms.fieldNames
+	includes := make([]string, 0)
 	if len(q.getIncludes()) != 0 {
 		// add a model find operation to the transaction
-		if err := t.findModel(q.name(), id, scannable, q.getIncludes()); err != nil {
+		if err := t.findModel(mr, q.getIncludes()); err != nil {
 			return err
 		}
 	} else if len(q.getExcludes()) != 0 {
@@ -377,12 +365,12 @@ func findModelWithIncludes(id string, scannable Model, q namedIncluderExcluder, 
 			includes = util.RemoveElementFromStringSlice(includes, name)
 		}
 		// add a model find operation to the transaction
-		if err := t.findModel(q.name(), id, scannable, includes); err != nil {
+		if err := t.findModel(mr, includes); err != nil {
 			return err
 		}
 	} else {
 		// add a model find operation to the transaction
-		if err := t.findModel(q.name(), id, scannable, nil); err != nil {
+		if err := t.findModel(mr, nil); err != nil {
 			return err
 		}
 	}
@@ -394,31 +382,29 @@ func (q *MultiModelQuery) getIds() ([]string, error) {
 	defer conn.Close()
 
 	// construct a redis command to get the ids
-	indexKey := q.modelName + ":all"
 	args := redis.Args{}
 	var command string
 	if q.sort.fieldName == "" {
 		// without sorting
 		command = "SMEMBERS"
-		args = args.Add(indexKey)
+		args = args.Add(q.modelSpec.indexKey())
 	} else {
 		// with sorting
 		command = "SORT"
-		weight := q.modelName + ":*->" + q.sort.fieldName
-		args = args.Add(indexKey).Add("BY").Add(weight)
+		weight := q.modelSpec.modelName + ":*->" + q.sort.fieldName
+		args = args.Add(q.modelSpec.indexKey()).Add("BY").Add(weight)
 
 		// check if the field is sortable and if we need the alpha option
-		field, found := q.modelType.Elem().FieldByName(q.sort.fieldName)
+		field, found := q.modelSpec.field(q.sort.fieldName)
 		if !found {
-			msg := fmt.Sprintf("zoom: invalid SortBy modifier. model of type %s has no field %s\n.", q.modelType.String(), q.sort.fieldName)
+			msg := fmt.Sprintf("zoom: invalid SortBy modifier. model of type %s has no field %s\n.", q.modelSpec.modelType.String(), q.sort.fieldName)
 			return nil, errors.New(msg)
 		}
-		fieldType := field.Type
-		if !typeIsSortable(fieldType) {
-			msg := fmt.Sprintf("zoom: invalid SortBy modifier. field of type %s is not sortable.\nmust be string, int, uint, float, byte, or bool.", fieldType.String())
+		if !typeIsSortable(field.Type) {
+			msg := fmt.Sprintf("zoom: invalid SortBy modifier. field of type %s is not sortable.\nmust be string, int, uint, float, byte, or bool.", field.Type.String())
 			return nil, errors.New(msg)
 		}
-		if util.TypeIsString(fieldType) {
+		if util.TypeIsString(field.Type) {
 			args = args.Add("ALPHA")
 		}
 
@@ -438,5 +424,9 @@ func (q *MultiModelQuery) getIds() ([]string, error) {
 }
 
 func typeIsSortable(typ reflect.Type) bool {
-	return util.TypeIsString(typ) || util.TypeIsNumeric(typ) || util.TypeIsBool(typ)
+	if typ.Kind() == reflect.Ptr {
+		return util.TypeIsPrimative(typ.Elem())
+	} else {
+		return util.TypeIsPrimative(typ)
+	}
 }

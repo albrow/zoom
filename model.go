@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
-// File model.go contains code strictly related to DefaultData and Model.
+// File model.go contains code related to DefaultData and Model.
 // The Register() method and associated methods are also included here.
 
 package zoom
@@ -10,6 +10,7 @@ package zoom
 import (
 	"errors"
 	"fmt"
+	"github.com/stephenalexbrowne/zoom/blob"
 	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
@@ -31,26 +32,56 @@ type Model interface {
 }
 
 type modelSpec struct {
-	fieldNames    []string
-	sets          []*externalSet
-	lists         []*externalList
-	relationships map[string]relation
+	modelType      reflect.Type
+	modelName      string
+	primatives     map[string]primative     // primative types: int, float, string, etc.
+	pointers       map[string]pointer       // pointers to primative tyeps: *int, *float, *string, etc.
+	inconvertibles map[string]inconvertible // types which cannot be directly converted. fallback to json/msgpack
+	sets           map[string]externalSet   // separate set entities
+	lists          map[string]externalList  // separate list entities
+	relationships  map[string]relationship  // pointers to structs of registered types
+	// TODO add external hashes
+}
+
+type primative struct {
+	redisName string
+	fieldName string
+	fieldType reflect.Type
+}
+
+type pointer struct {
+	redisName string
+	fieldName string
+	fieldType reflect.Type
+	elemType  reflect.Type
+}
+
+type inconvertible struct {
+	redisName string
+	fieldName string
+	fieldType reflect.Type
 }
 
 type externalSet struct {
 	redisName string
 	fieldName string
+	fieldType reflect.Type
+	elemType  reflect.Type
 }
 
 type externalList struct {
 	redisName string
 	fieldName string
+	fieldType reflect.Type
+	elemType  reflect.Type
 }
 
-type relation struct {
+type relationship struct {
 	redisName string
 	fieldName string
-	typ       relationType
+	fieldType reflect.Type
+	elemType  reflect.Type
+	rType     relationType
 }
 
 type relationType int
@@ -59,6 +90,11 @@ const (
 	oneToOne = iota
 	oneToMany
 )
+
+type modelRef struct {
+	model     Model
+	modelSpec modelSpec
+}
 
 // maps a type to a string identifier. The string is used
 // as a key in the redis database.
@@ -69,10 +105,47 @@ var modelTypeToName map[reflect.Type]string = make(map[reflect.Type]string)
 var modelNameToType map[string]reflect.Type = make(map[string]reflect.Type)
 
 // maps a string identifier to a modelSpec
-var modelSpecs map[string]*modelSpec = make(map[string]*modelSpec)
+var modelSpecs map[string]modelSpec = make(map[string]modelSpec)
 
-// methods so that DefaultData (and any struct with DefaultData embedded)
-// satisifies Model interface
+func newModelSpec(name string, typ reflect.Type) modelSpec {
+	return modelSpec{
+		modelType:      typ,
+		modelName:      name,
+		primatives:     make(map[string]primative),
+		pointers:       make(map[string]pointer),
+		inconvertibles: make(map[string]inconvertible),
+		sets:           make(map[string]externalSet),
+		lists:          make(map[string]externalList),
+		relationships:  make(map[string]relationship),
+	}
+}
+
+func newModelRefFromInterface(m Model) (modelRef, error) {
+	mr := modelRef{
+		model: m,
+	}
+	modelName, err := getRegisteredNameFromInterface(m)
+	if err != nil {
+		return mr, err
+	}
+	mr.modelSpec = modelSpecs[modelName]
+	return mr, nil
+}
+
+func newModelRefFromName(modelName string) (modelRef, error) {
+	mr := modelRef{
+		modelSpec: modelSpecs[modelName],
+	}
+	// create a new struct of the proper type
+	val := reflect.New(mr.modelSpec.modelType.Elem())
+	m, ok := val.Interface().(Model)
+	if !ok {
+		msg := fmt.Sprintf("zoom: could not convert val of type %T to Model", val.Interface())
+		return mr, errors.New(msg)
+	}
+	mr.model = m
+	return mr, nil
+}
 
 func (d DefaultData) getId() string {
 	return d.Id
@@ -96,80 +169,143 @@ func Register(in interface{}, modelName string) error {
 	}
 
 	// make sure the name and type have not been previously registered
-	if alreadyRegisteredType(typ) {
+	if modelTypeIsRegistered(typ) {
 		return NewTypeAlreadyRegisteredError(typ)
 	}
-	if alreadyRegisteredName(modelName) {
+	if modelNameIsRegistered(modelName) {
 		return NewNameAlreadyRegisteredError(modelName)
-	}
-
-	// create a new model spec and register its lists and sets
-	ms := &modelSpec{relationships: make(map[string]relation)}
-	if err := compileModelSpec(typ, ms); err != nil {
-		return err
 	}
 
 	modelTypeToName[typ] = modelName
 	modelNameToType[modelName] = typ
-	modelSpecs[modelName] = ms
+	if err := compileModelSpecs(); err != nil {
+		return err
+	}
 
 	return nil
 }
 
+func compileModelSpecs() error {
+	for name, typ := range modelNameToType {
+		ms := newModelSpec(name, typ)
+		if err := compileModelSpec(typ, &ms); err != nil {
+			return err
+		}
+		modelSpecs[name] = ms
+	}
+	return nil
+}
+
+// TODO: take into account embedded structs
 func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
-	// iterate through fields to find slices and arrays
+
+	// iterate through fields
 	elem := typ.Elem()
 	numFields := elem.NumField()
 	for i := 0; i < numFields; i++ {
 		field := elem.Field(i)
-		if field.Name != "DefaultData" {
-			ms.fieldNames = append(ms.fieldNames, field.Name)
+		if field.Name == "DefaultData" {
+			continue // skip default data
 		}
-		if util.TypeIsPointerToStruct(field.Type) {
-			// assume we're dealing with a one-to-one relation
-			// get the redisName
-			tag := field.Tag
-			redisName := tag.Get("redis")
-			if redisName == "-" {
-				continue // skip field
-			} else if redisName == "" {
-				redisName = field.Name
-			}
-			ms.relationships[field.Name] = relation{
+		// get the redisName
+		tag := field.Tag
+		redisName := tag.Get("redis")
+		if redisName == "-" {
+			continue // skip field
+		} else if redisName == "" {
+			redisName = field.Name
+		}
+		if util.TypeIsPrimative(field.Type) {
+			// primative
+			p := primative{
 				redisName: redisName,
 				fieldName: field.Name,
-				typ:       oneToOne,
+				fieldType: field.Type,
 			}
-		} else if util.TypeIsSliceOrArray(field.Type) {
-			// we're dealing with a slice or an array, which should be converted to a list, set, or one-to-many relation
-			tag := field.Tag
-			redisName := tag.Get("redis")
-			if redisName == "-" {
-				continue // skip field
-			} else if redisName == "" {
-				redisName = field.Name
-			}
-			if util.TypeIsPointerToStruct(field.Type.Elem()) {
-				// assume we're dealing with a one-to-many relation
-				ms.relationships[field.Name] = relation{
+			ms.primatives[field.Name] = p
+		} else if field.Type.Kind() == reflect.Ptr {
+			if util.TypeIsPrimative(field.Type.Elem()) {
+				// pointer to a primative
+				p := pointer{
 					redisName: redisName,
 					fieldName: field.Name,
-					typ:       oneToMany,
+					fieldType: field.Type,
+					elemType:  field.Type.Elem(),
 				}
-				continue
+				ms.pointers[field.Name] = p
+			} else if util.TypeIsPointerToStruct(field.Type) {
+				if modelTypeIsRegistered(field.Type) {
+					// one-to-one relationship
+					ms.relationships[field.Name] = relationship{
+						redisName: redisName,
+						fieldName: field.Name,
+						fieldType: field.Type,
+						elemType:  field.Type.Elem(),
+						rType:     oneToOne,
+					}
+				} else {
+					// a pointer to a struct of unregistered type is incovertable
+					ms.addInconvertible(field, redisName)
+				}
 			}
-			redisType := tag.Get("redisType")
-			if redisType == "" || redisType == "list" {
-				ms.lists = append(ms.lists, &externalList{redisName: redisName, fieldName: field.Name})
-			} else if redisType == "set" {
-				ms.sets = append(ms.sets, &externalSet{redisName: redisName, fieldName: field.Name})
+		} else if util.TypeIsSliceOrArray(field.Type) {
+			if util.TypeIsPointerToStruct(field.Type.Elem()) {
+				if modelTypeIsRegistered(field.Type.Elem()) {
+					// one-to-many relationship
+					ms.relationships[field.Name] = relationship{
+						redisName: redisName,
+						fieldName: field.Name,
+						fieldType: field.Type,
+						elemType:  field.Type.Elem().Elem(),
+						rType:     oneToMany,
+					}
+				} else {
+					// a slice or array of pointers to structs of unregistered type is incovertable
+					ms.addInconvertible(field, redisName)
+				}
 			} else {
-				msg := fmt.Sprintf("zoom: invalid struct tag for redisType: %s. must be either 'set' or 'list'\n", redisType)
-				return errors.New(msg)
+				redisType := tag.Get("redisType")
+				if redisType == "list" {
+					l := externalList{
+						fieldName: field.Name,
+						redisName: redisName,
+						fieldType: field.Type,
+						elemType:  field.Type.Elem(),
+					}
+					ms.lists[field.Name] = l
+				} else if redisType == "set" {
+					s := externalSet{
+						fieldName: field.Name,
+						redisName: redisName,
+						fieldType: field.Type,
+						elemType:  field.Type.Elem(),
+					}
+					ms.sets[field.Name] = s
+				} else if redisType == "" {
+					// if application did not specify it wanted an external list or external set, treat
+					// the array or slice as inconvertible. Later it will be encoded to a string format
+					// and written directly into the redis hash.
+					ms.addInconvertible(field, redisName)
+				} else {
+					msg := fmt.Sprintf("zoom: redisType tag for type %s was invalid.\nShould be either 'list' or 'set'.\nGot: %s", typ.String(), redisType)
+					return errors.New(msg)
+				}
 			}
+		} else {
+			// if we've reached here, the field type is inconvertible
+			ms.addInconvertible(field, redisName)
 		}
 	}
+
 	return nil
+}
+
+func (ms *modelSpec) addInconvertible(field reflect.StructField, redisName string) {
+	ms.inconvertibles[field.Name] = inconvertible{
+		fieldName: field.Name,
+		redisName: redisName,
+		fieldType: field.Type,
+	}
 }
 
 // UnregisterName removes a type (identified by modelName) from the list of
@@ -197,28 +333,34 @@ func UnregisterType(modelType reflect.Type) error {
 	return nil
 }
 
-// alreadyRegisteredName returns true iff the model name has already been registered
-func alreadyRegisteredName(n string) bool {
+// modelNameIsRegistered returns true iff the model name has already been registered
+func modelNameIsRegistered(n string) bool {
 	_, ok := modelNameToType[n]
 	return ok
 }
 
-// alreadyRegisteredType returns true iff the model type has already been registered
-func alreadyRegisteredType(t reflect.Type) bool {
+// modelTypeIsRegistered returns true iff the model type has already been registered
+func modelTypeIsRegistered(t reflect.Type) bool {
 	_, ok := modelTypeToName[t]
 	return ok
+}
+
+// getRegisteredNameFromType gets the registered name of the model we're
+// trying to save based on the type. If the interface's name/type
+// has not been registered, returns a ModelTypeNotRegisteredError
+func getRegisteredNameFromType(typ reflect.Type) (string, error) {
+	name, ok := modelTypeToName[typ]
+	if !ok {
+		return "", NewModelTypeNotRegisteredError(typ)
+	}
+	return name, nil
 }
 
 // getRegisteredNameFromInterface gets the registered name of the model we're
 // trying to save based on the interfaces type. If the interface's name/type
 // has not been registered, returns a ModelTypeNotRegisteredError
 func getRegisteredNameFromInterface(in interface{}) (string, error) {
-	typ := reflect.TypeOf(in)
-	name, ok := modelTypeToName[typ]
-	if !ok {
-		return "", NewModelTypeNotRegisteredError(typ)
-	}
-	return name, nil
+	return getRegisteredNameFromType(reflect.TypeOf(in))
 }
 
 // getRegisteredTypeFromName gets the registered type of the model we're trying
@@ -230,4 +372,55 @@ func getRegisteredTypeFromName(name string) (reflect.Type, error) {
 		return nil, NewModelNameNotRegisteredError(name)
 	}
 	return typ, nil
+}
+
+func (mr modelRef) elemVal() reflect.Value {
+	return reflect.ValueOf(mr.model).Elem()
+}
+
+func (mr modelRef) modelVal() reflect.Value {
+	return reflect.ValueOf(mr.model)
+}
+
+func (mr modelRef) value(fieldName string) reflect.Value {
+	return mr.elemVal().FieldByName(fieldName)
+}
+
+func (mr modelRef) key() string {
+	return mr.modelSpec.modelName + ":" + mr.model.getId()
+}
+
+func (mr modelRef) indexKey() string {
+	return mr.modelSpec.modelName + ":all"
+}
+
+func (ms modelSpec) field(fieldName string) (reflect.StructField, bool) {
+	return ms.modelType.Elem().FieldByName(fieldName)
+}
+
+func (ms modelSpec) indexKey() string {
+	return ms.modelName + ":all"
+}
+
+// returns the args that should be sent to the redis driver
+// and used in a HMSET command
+func (mr modelRef) mainHashArgs() ([]interface{}, error) {
+	args := []interface{}{mr.key()}
+	ms := mr.modelSpec
+	for _, p := range ms.primatives {
+		args = append(args, p.redisName, mr.value(p.fieldName).Interface())
+	}
+	for _, p := range ms.pointers {
+		args = append(args, p.redisName, mr.value(p.fieldName).Elem().Interface())
+	}
+	for _, inc := range ms.inconvertibles {
+		// TODO: account for the possibility of json, msgpack or custom fallbacks
+		b := blob.DefaultMarshalerUnmarshaler{}
+		valBytes, err := b.Marshal(mr.value(inc.fieldName).Interface())
+		if err != nil {
+			return args, err
+		}
+		args = append(args, inc.redisName, valBytes)
+	}
+	return args, nil
 }

@@ -60,11 +60,12 @@ func TestFindOneToOne(t *testing.T) {
 	}
 
 	// make sure favorite color is the same
-	if aCopy.FavoriteColor == nil {
-		t.Error("relation was not persisted. aCopy.FavoriteColor was nil")
+	equal, err := util.Equals(a, aCopy)
+	if err != nil {
+		t.Error(err)
 	}
-	if a.FavoriteColor.Id != aCopy.FavoriteColor.Id {
-		t.Errorf("Id of favorite color was incorrect.\nExpected: %s\nGot: %s\n", a.FavoriteColor.Id, aCopy.FavoriteColor.Id)
+	if !equal {
+		t.Errorf("artist was not saved/retrieved correctly.\nExpected: %+v\nGot: %+v\n", a, aCopy)
 	}
 }
 
