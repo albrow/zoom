@@ -403,7 +403,7 @@ func TestFindByIdWithSet(t *testing.T) {
 	}
 }
 
-func TestFindByIdInclude(t *testing.T) {
+func TestFindByIdExclude(t *testing.T) {
 	test_support.SetUp()
 	defer test_support.TearDown()
 
@@ -417,7 +417,7 @@ func TestFindByIdInclude(t *testing.T) {
 	testFindWithExpectedPerson(t, zoom.FindById("person", p.Id).Exclude("Name"), noName)
 }
 
-func TestFindByIdExclude(t *testing.T) {
+func TestFindByIdInclude(t *testing.T) {
 	test_support.SetUp()
 	defer test_support.TearDown()
 

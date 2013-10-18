@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
-// File model.go contains code strictly related to DefaultData and Model.
+// File model.go contains code related to DefaultData and Model.
 // The Register() method and associated methods are also included here.
 
 package zoom
@@ -251,7 +251,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 		} else if util.TypeIsSliceOrArray(field.Type) {
 			if util.TypeIsPointerToStruct(field.Type.Elem()) {
 				if modelTypeIsRegistered(field.Type.Elem()) {
-					// we have a one-to-many relationship
+					// one-to-many relationship
 					ms.relationships[field.Name] = relationship{
 						redisName: redisName,
 						fieldName: field.Name,
