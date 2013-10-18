@@ -12,7 +12,7 @@ package zoom
 
 import (
 	"github.com/dchest/uniuri"
-	"github.com/stephenalexbrowne/zoom/redis"
+	"github.com/garyburd/redigo/redis"
 	"strconv"
 	"time"
 )
