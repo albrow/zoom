@@ -8,6 +8,7 @@ package util
 
 import (
 	"fmt"
+	"github.com/stephenalexbrowne/zoom/blob"
 	"math/rand"
 	"reflect"
 )
@@ -108,27 +109,11 @@ func TypeIsPointerToStruct(typ reflect.Type) bool {
 }
 
 func TypeIsString(typ reflect.Type) bool {
-	if typ.Kind() == reflect.Ptr {
-		return elemIsString(typ.Elem())
-	} else {
-		return elemIsString(typ)
-	}
-}
-
-func elemIsString(typ reflect.Type) bool {
 	k := typ.Kind()
 	return k == reflect.String || ((k == reflect.Slice || k == reflect.Array) && typ.Elem().Kind() == reflect.Uint8)
 }
 
 func TypeIsNumeric(typ reflect.Type) bool {
-	if typ.Kind() == reflect.Ptr {
-		return elemIsNumeric(typ.Elem())
-	} else {
-		return elemIsNumeric(typ)
-	}
-}
-
-func elemIsNumeric(typ reflect.Type) bool {
 	k := typ.Kind()
 	switch k {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
@@ -143,6 +128,10 @@ func TypeIsBool(typ reflect.Type) bool {
 	return k == reflect.Bool || (k == reflect.Ptr && typ.Elem().Kind() == reflect.Bool)
 }
 
+func TypeIsPrimative(typ reflect.Type) bool {
+	return TypeIsString(typ) || TypeIsNumeric(typ) || TypeIsBool(typ)
+}
+
 // generate a random int from min to max (inclusively).
 // I.e. to get either 1 or 0, use randInt(0,1)
 func RandInt(min int, max int) int {
@@ -150,4 +139,29 @@ func RandInt(min int, max int) int {
 		panic("invalid args. max must be at least one more than min")
 	}
 	return min + rand.Intn(max-min+1)
+}
+
+// returns true if the two things are equal.
+// equality is based on underlying value, so if the pointer addresses
+// are different it doesn't matter. We use gob encoding for simplicity,
+// assuming that if the gob representation of two things is the same,
+// those two things can be considered equal. Differs from reflect.DeepEqual
+// because of the indifference concerning pointer addresses.
+func Equals(one, two interface{}) (bool, error) {
+	// first make sure the things are the same type
+	if reflect.TypeOf(one) != reflect.TypeOf(two) {
+		return false, nil
+	}
+
+	m := blob.DefaultMarshalerUnmarshaler{}
+	oneBytes, err := m.Marshal(one)
+	if err != nil {
+		return false, err
+	}
+	twoBytes, err := m.Marshal(two)
+	if err != nil {
+		return false, err
+	}
+
+	return (string(oneBytes) == string(twoBytes)), nil
 }
