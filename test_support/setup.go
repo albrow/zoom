@@ -12,8 +12,8 @@ package test_support
 import (
 	"flag"
 	"fmt"
+	"github.com/garyburd/redigo/redis"
 	"github.com/stephenalexbrowne/zoom"
-	"github.com/stephenalexbrowne/zoom/redis"
 	"math/rand"
 	"time"
 )

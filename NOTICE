@@ -1,9 +1,0 @@
-Portions of this code are based on the redigo library created by github user garyburd (Gary).
-Redigo is available under the Apache License, Version 2.0.
-The original source files can be found at https://github.com/garyburd/redigo.
-
-The redigo source code was obtained on August 6, 2013 from the github repository and copied
-into the redis/ directory. Only one file (scan.go) was modified. The scan.go file includes a
-short notice describing exactly what was changed.
-
-Much thanks to Gary for creating this awesome redis driver :)

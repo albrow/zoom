@@ -626,6 +626,3 @@ License
 -------
 
 Zoom is licensed under the MIT License. See the LICENSE file for more information.
-
-The redis driver for Zoom is based on https://github.com/garyburd/redigo and is licensed under
-the Apache License, Version 2.0. See the NOTICE file for more information. Thanks Gary!

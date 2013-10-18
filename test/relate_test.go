@@ -5,8 +5,8 @@
 package test
 
 import (
+	"github.com/garyburd/redigo/redis"
 	"github.com/stephenalexbrowne/zoom"
-	"github.com/stephenalexbrowne/zoom/redis"
 	"github.com/stephenalexbrowne/zoom/test_support"
 	"github.com/stephenalexbrowne/zoom/util"
 	"testing"
