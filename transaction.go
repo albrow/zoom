@@ -11,7 +11,7 @@ package zoom
 import (
 	"errors"
 	"fmt"
-	"github.com/stephenalexbrowne/zoom/redis"
+	"github.com/garyburd/redigo/redis"
 	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
