@@ -82,7 +82,7 @@ func testConvertType(typ reflect.Type, construct func() (in interface{}, err err
 	if !ok {
 		t.Errorf("couldn't convert type %T to zoom.Model", modelCopyInterface)
 	}
-	if _, err := zoom.ScanById(id, modelCopy).Run(); err != nil {
+	if err := zoom.ScanById(id, modelCopy); err != nil {
 		t.Error(err)
 	}
 
