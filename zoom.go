@@ -42,6 +42,52 @@ func Save(models ...Model) error {
 	return nil
 }
 
+// FindById gets a model from the database. It returns an error
+// if a model with that id does not exist.
+func FindById(modelName, id string) (Model, error) {
+
+	// create a new struct of proper type
+	typ, err := getRegisteredTypeFromName(modelName)
+	if err != nil {
+		return nil, err
+	}
+	val := reflect.New(typ.Elem())
+	m, ok := val.Interface().(Model)
+	if !ok {
+		msg := fmt.Sprintf("zoom: could not convert val of type %T to Model", val.Interface())
+		return nil, errors.New(msg)
+	}
+
+	// invoke ScanById
+	if err := ScanById(id, m); err != nil {
+		return m, err
+	}
+	return m, nil
+}
+
+// ScanById returns a ModelQuery which can be chained with additional modifiers.
+// It expects Model as an argument, which should be a pointer to a struct of a
+// registered type. ScanById will mutate the struct, filling in its fields.
+func ScanById(id string, m Model) error {
+
+	// create a modelRef
+	mr, err := newModelRefFromInterface(m)
+	if err != nil {
+		return err
+	}
+	mr.model.setId(id)
+
+	// start a transaction
+	t := newTransaction()
+	t.findModel(mr, nil)
+
+	// execute the transaction and return the result
+	if err := t.exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // Delete removes a struct (or structs) from the database. Will
 // throw an error if the type of the struct has not yet been
 // registered, or if the Id field of the struct is empty.
