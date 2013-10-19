@@ -64,8 +64,18 @@ func TestFindById(t *testing.T) {
 	persons, _ := test_support.CreatePersons(1)
 	p := persons[0]
 
-	// execute a test query and compare against the expected person
-	testFindWithExpectedPerson(t, zoom.FindById("person", p.Id), p)
+	// use FindById to get a copy of the person
+	result, err := zoom.FindById("person", p.Id)
+	if err != nil {
+		t.Error(err)
+	}
+	pCopy, ok := result.(*test_support.Person)
+	if !ok {
+		t.Errorf("Could not convert type %T to *test_support.Person", result)
+	}
+
+	// make sure the found model is the same as original
+	checkPersonsEqual(t, p, pCopy)
 }
 
 func TestScanById(t *testing.T) {
@@ -76,10 +86,14 @@ func TestScanById(t *testing.T) {
 	persons, _ := test_support.CreatePersons(1)
 	p := persons[0]
 
-	pCopy := &test_support.Person{}
+	// create a new person and use ScanById
+	pCopy := new(test_support.Person)
+	if err := zoom.ScanById(p.Id, pCopy); err != nil {
+		t.Error(err)
+	}
 
-	// execute a test query and compare against the expected person
-	testScanWithExpectedPersonAndScannable(t, zoom.ScanById(p.Id, pCopy), p, pCopy)
+	// make sure the found model is the same as original
+	checkPersonsEqual(t, p, pCopy)
 }
 
 func TestDelete(t *testing.T) {
@@ -172,131 +186,6 @@ func TestVariadicDeleteById(t *testing.T) {
 	}
 }
 
-func TestFindAll(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save some persons
-	persons, err := test_support.CreatePersons(3)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// execute a test query and check the results
-	testFindAllWithExpectedPersons(t, zoom.FindAll("person"), persons, false)
-}
-
-func TestScanAll(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save some persons
-	persons, err := test_support.CreatePersons(3)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// create a scannable
-	personsCopy := make([]*test_support.Person, 0)
-
-	// execute a test query and check the results
-	testFindAllWithExpectedPersonsAndScannable(t, zoom.ScanAll(&personsCopy), persons, false, &personsCopy)
-}
-
-func TestFindAllSortAlpha(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save some persons
-	persons, err := test_support.CreatePersons(3)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// execute a test query and check the results
-	q := zoom.FindAll("person").SortBy("Name")
-	testFindAllWithExpectedPersons(t, q, persons, true)
-}
-
-func TestFindAllSortNumeric(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save some persons
-	persons, err := test_support.CreatePersons(3)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// execute a test query and check the results
-	q := zoom.FindAll("person").SortBy("Age")
-	testFindAllWithExpectedPersons(t, q, persons, true)
-}
-
-func TestFindAllSortAlphaDesc(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save some persons
-	persons, err := test_support.CreatePersons(3)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// execute a test query and check the results
-	q := zoom.FindAll("person").SortBy("Name").Order("DESC")
-	expected := []*test_support.Person{persons[2], persons[1], persons[0]}
-	testFindAllWithExpectedPersons(t, q, expected, true)
-}
-
-func TestFindAllSortNumericDesc(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save some persons
-	persons, err := test_support.CreatePersons(3)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// execute a test query and check the results
-	q := zoom.FindAll("person").SortBy("Age").Order("DESC")
-	expected := []*test_support.Person{persons[2], persons[1], persons[0]}
-	testFindAllWithExpectedPersons(t, q, expected, true)
-}
-
-func TestFindAllLimit(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save some persons
-	persons, err := test_support.CreatePersons(3)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// execute a test query and check the results
-	q := zoom.FindAll("person").SortBy("Name").Limit(2)
-	expected := []*test_support.Person{persons[0], persons[1]}
-	testFindAllWithExpectedPersons(t, q, expected, true)
-}
-
-func TestFindAllOffset(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save some persons
-	persons, err := test_support.CreatePersons(3)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// execute a test query and check the results
-	q := zoom.FindAll("person").SortBy("Name").Limit(2).Offset(1)
-	expected := []*test_support.Person{persons[1], persons[2]}
-	testFindAllWithExpectedPersons(t, q, expected, true)
-}
-
 func TestSaveWithList(t *testing.T) {
 	test_support.SetUp()
 	defer test_support.TearDown()
@@ -326,7 +215,7 @@ func TestSaveWithList(t *testing.T) {
 	}
 }
 
-func TestFindByIdWithList(t *testing.T) {
+func TestScanByIdWithList(t *testing.T) {
 	test_support.SetUp()
 	defer test_support.TearDown()
 
@@ -336,9 +225,9 @@ func TestFindByIdWithList(t *testing.T) {
 	}
 	zoom.Save(m)
 
-	// retrieve using FindById
+	// retrieve using ScanById
 	mCopy := &test_support.ModelWithList{}
-	if _, err := zoom.ScanById(m.Id, mCopy).Run(); err != nil {
+	if err := zoom.ScanById(m.Id, mCopy); err != nil {
 		t.Error(err)
 	}
 
@@ -379,7 +268,7 @@ func TestSaveWithSet(t *testing.T) {
 	}
 }
 
-func TestFindByIdWithSet(t *testing.T) {
+func TestScanByIdWithSet(t *testing.T) {
 	test_support.SetUp()
 	defer test_support.TearDown()
 
@@ -389,9 +278,9 @@ func TestFindByIdWithSet(t *testing.T) {
 	}
 	zoom.Save(m)
 
-	// retrieve using FindById
+	// retrieve using ScanById
 	mCopy := &test_support.ModelWithSet{}
-	if _, err := zoom.ScanById(m.Id, mCopy).Run(); err != nil {
+	if err := zoom.ScanById(m.Id, mCopy); err != nil {
 		t.Error(err)
 	}
 
@@ -400,158 +289,6 @@ func TestFindByIdWithSet(t *testing.T) {
 	equal, msg := util.CompareAsStringSet(set, mCopy.Set)
 	if !equal {
 		t.Error(msg)
-	}
-}
-
-func TestFindByIdExclude(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save a new model
-	persons, _ := test_support.CreatePersons(1)
-	p := persons[0]
-
-	// execute a test query and compare against the expected person
-	noName := &test_support.Person{Age: p.Age}
-	noName.Id = p.Id
-	testFindWithExpectedPerson(t, zoom.FindById("person", p.Id).Exclude("Name"), noName)
-}
-
-func TestFindByIdInclude(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save a new model
-	persons, _ := test_support.CreatePersons(1)
-	p := persons[0]
-
-	// execute a test query and compare against the expected person
-	justName := &test_support.Person{Name: p.Name}
-	justName.Id = p.Id
-	testFindWithExpectedPerson(t, zoom.FindById("person", p.Id).Include("Name"), justName)
-}
-
-func TestFindByIdWithListExclude(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save a modelWithList model
-	m := &test_support.ModelWithList{
-		List: []string{"one", "two", "three"},
-	}
-	zoom.Save(m)
-
-	// retrieve using FindById
-	mCopy := &test_support.ModelWithList{}
-	if _, err := zoom.ScanById(m.Id, mCopy).Exclude("List").Run(); err != nil {
-		t.Error(err)
-	}
-
-	// make sure the list is empty
-	if len(mCopy.List) != 0 {
-		t.Errorf("list was not empty. was: %v\n", mCopy.List)
-	}
-}
-
-func TestFindByIdWithSetExclude(t *testing.T) {
-	test_support.SetUp()
-	defer test_support.TearDown()
-
-	// create and save a modelWithSet model
-	m := &test_support.ModelWithSet{
-		Set: []string{"one", "two", "three", "three"},
-	}
-	zoom.Save(m)
-
-	// retrieve using FindById
-	mCopy := &test_support.ModelWithSet{}
-	if _, err := zoom.ScanById(m.Id, mCopy).Exclude("Set").Run(); err != nil {
-		t.Error(err)
-	}
-
-	// make sure the set is empty
-	if len(mCopy.Set) != 0 {
-		t.Errorf("set was not empty. was: %v\n", mCopy.Set)
-	}
-}
-
-func findTester(t *testing.T, query zoom.Query, checker func(*testing.T, interface{})) {
-	// execute the query
-	result, err := query.Run()
-	if err != nil {
-		t.Error(err)
-	}
-
-	// run the checker function
-	checker(t, result)
-}
-
-func testFindWithExpectedPerson(t *testing.T, query zoom.Query, expectedPerson *test_support.Person) {
-	findTester(t, query, func(t *testing.T, result interface{}) {
-		if result == nil {
-			t.Error("result of query was nil")
-		}
-		pCopy, ok := result.(*test_support.Person)
-		if !ok {
-			t.Error("could not type assert result to *Person")
-		}
-
-		// make sure the found model is the same as original
-		checkPersonsEqual(t, expectedPerson, pCopy)
-	})
-}
-
-func testScanWithExpectedPersonAndScannable(t *testing.T, query zoom.Query, expectedPerson *test_support.Person, scannable *test_support.Person) {
-	testFindWithExpectedPerson(t, query, expectedPerson)
-	checkPersonsEqual(t, expectedPerson, scannable)
-}
-
-func findAllTester(t *testing.T, query zoom.Query, checker func(*testing.T, interface{})) {
-	// execute the query
-	results, err := query.Run()
-	if err != nil {
-		t.Error(err)
-	}
-
-	// run the checker function
-	checker(t, results)
-}
-
-func testFindAllWithExpectedPersons(t *testing.T, query zoom.Query, expectedPersons []*test_support.Person, orderMatters bool) {
-	findAllTester(t, query, func(t *testing.T, results interface{}) {
-		gotPersons, ok := results.([]*test_support.Person)
-		if !ok {
-			t.Error("could not convert results to []*Person")
-		}
-
-		// make sure gotPersons is the right length
-		if len(gotPersons) != len(expectedPersons) {
-			t.Errorf("gotPersons was not the right length. Expected: %d. Got: %d.\n", len(gotPersons), len(expectedPersons))
-		}
-
-		if orderMatters {
-			if !reflect.DeepEqual(expectedPersons, gotPersons) {
-				t.Errorf("Persons were incorrect.\nExpected: %v\nGot: %v\n", expectedPersons, gotPersons)
-			}
-		} else {
-			equal, msg := util.CompareAsSet(expectedPersons, gotPersons)
-			if !equal {
-				t.Errorf("Persons were incorrect\n%s\nExpected: %v\nGot: %v\n", msg, expectedPersons, gotPersons)
-			}
-		}
-	})
-}
-
-func testFindAllWithExpectedPersonsAndScannable(t *testing.T, query zoom.Query, expectedPersons []*test_support.Person, orderMatters bool, scannables *[]*test_support.Person) {
-	testFindAllWithExpectedPersons(t, query, expectedPersons, orderMatters)
-	if orderMatters {
-		if !reflect.DeepEqual(expectedPersons, *scannables) {
-			t.Errorf("expected persons did not match scannables.\nExpected: %v\nGot: %v\n", expectedPersons, *scannables)
-		}
-	} else {
-		if equal, msg := util.CompareAsSet(expectedPersons, *scannables); !equal {
-			t.Errorf("expected persons did not match scannables.\nMsg: %s\nExpected: %v\nGot: %v\n", msg, expectedPersons, *scannables)
-		}
 	}
 }
 
