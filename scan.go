@@ -44,46 +44,33 @@ func scanModel(bulk []interface{}, mr modelRef) error {
 			}
 		}
 	}
-	newModel, ok := mr.modelVal().Interface().(Model)
-	if !ok {
-		msg := fmt.Sprintf("zoom: could not convert elemVal (%v, %v) to model", mr.elemVal(), mr.elemVal().Interface())
-		return errors.New(msg)
-	}
-	mr.model = newModel
 	return nil
 }
 
 func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 	typ := dest.Type()
+	srcBytes, ok := src.([]byte)
+	if !ok {
+		msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
+		return errors.New(msg)
+	}
+	if len(srcBytes) == 0 {
+		return nil // skip blanks
+	}
 	if util.TypeIsString(typ) {
 		switch typ.Kind() {
 		case reflect.String:
 			// straight up string types
-			srcBytes, ok := src.([]byte)
-			if !ok {
-				msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
-				return errors.New(msg)
-			}
 			srcString := string(srcBytes)
 			dest.SetString(srcString)
 		case reflect.Slice, reflect.Array:
 			// slice or array of bytes
-			srcBytes, ok := src.([]byte)
-			if !ok {
-				msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
-				return errors.New(msg)
-			}
 			dest.SetBytes(srcBytes)
 		default:
 			msg := fmt.Sprintf("zoom: don't know how to scan primative type: %T.\n", src)
 			return errors.New(msg)
 		}
 	} else if util.TypeIsNumeric(typ) {
-		srcBytes, ok := src.([]byte)
-		if !ok {
-			msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
-			return errors.New(msg)
-		}
 		srcString := string(srcBytes)
 		switch typ.Kind() {
 		case reflect.Float32, reflect.Float64:
@@ -115,11 +102,6 @@ func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 			return errors.New(msg)
 		}
 	} else if util.TypeIsBool(typ) {
-		srcBytes, ok := src.([]byte)
-		if !ok {
-			msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
-			return errors.New(msg)
-		}
 		srcString := string(srcBytes)
 		srcBool, err := strconv.ParseBool(srcString)
 		if err != nil {
@@ -144,6 +126,9 @@ func scanInconvertibleVal(src interface{}, dest reflect.Value) error {
 	if !ok {
 		msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
 		return errors.New(msg)
+	}
+	if len(srcBytes) == 0 {
+		return nil // skip blanks
 	}
 
 	// TODO: account for json, msgpack or other custom fallbacks
