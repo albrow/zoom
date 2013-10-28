@@ -335,6 +335,7 @@ func (t *transaction) findModel(mr modelRef, includes []string) error {
 			return err
 		}
 	}
+
 	return nil
 }
 
@@ -414,7 +415,18 @@ func (t *transaction) findModelOneToOneRelation(mr modelRef, r relationship) err
 
 	// instantiate the field using reflection
 	field := mr.value(r.fieldName)
-	field.Set(reflect.New(field.Type().Elem()))
+
+	// check if the key is already referenced in this transaction
+	rModelName, _ := getRegisteredNameFromType(field.Type())
+	rModelKey := rModelName + ":" + id
+	if prior, found := t.references[rModelKey]; found {
+		// use the same pointer (it's the same object)
+		field.Set(reflect.ValueOf(prior))
+		return nil
+	} else {
+		// create a new pointer
+		field.Set(reflect.New(field.Type().Elem()))
+	}
 
 	// convert field to a model
 	rModel, ok := field.Interface().(Model)
@@ -457,6 +469,17 @@ func (t *transaction) findModelOneToManyRelation(mr modelRef, r relationship) er
 
 	// iterate through the ids and find each model
 	for _, id := range ids {
+
+		// check if the key is already referenced in this transaction
+		rModelName, _ := getRegisteredNameFromType(rType)
+		rModelKey := rModelName + ":" + id
+		if prior, found := t.references[rModelKey]; found {
+			// use the same pointer (it's the same object)
+			sliceVal := reflect.Append(field, reflect.ValueOf(prior))
+			field.Set(sliceVal)
+			continue
+		}
+
 		rVal := reflect.New(rType.Elem())
 		rModel, ok := rVal.Interface().(Model)
 		if !ok {
