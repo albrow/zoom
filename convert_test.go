@@ -8,6 +8,7 @@
 package zoom
 
 import (
+	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"testing"
 )
@@ -36,9 +37,77 @@ func TestInconvertibleTypes(t *testing.T) {
 	testConvertType(reflect.TypeOf(inconvertibleTypesModel{}), construct, t)
 }
 
+func TestModelWithList(t *testing.T) {
+	// use the generic tester to make sure what we get out is the same
+	// as what we put in
+	construct := func() (interface{}, error) {
+		return &modelWithList{
+			List: []string{"one", "two", "three"},
+		}, nil
+	}
+	testConvertType(reflect.TypeOf(modelWithList{}), construct, t)
+
+	// test to make sure the field is saved as a redis list type
+	testingSetUp()
+	defer testingTearDown()
+
+	m1 := &modelWithList{
+		List: []string{"one", "two", "three"},
+	}
+	m2 := &modelWithList{} // make sure empty slice doesn't throw an error
+	if err := Save(m1, m2); err != nil {
+		t.Error(err)
+	}
+
+	conn := GetConn()
+	defer conn.Close()
+
+	listKey := "modelWithList:" + m1.Id + ":List"
+	result, err := redis.Strings(conn.Do("LRANGE", listKey, "0", "-1"))
+	if err != nil {
+		t.Error(err)
+	}
+	if !reflect.DeepEqual(m1.List, result) {
+		t.Errorf("List was not saved correctly.\nExpected: %+v\nGot: %+v\n", m1.List, result)
+	}
+}
+
+func TestModelWithSet(t *testing.T) {
+	// use the generic tester to make sure what we get out is the same
+	// as what we put in
+	construct := func() (interface{}, error) {
+		return &modelWithSet{
+			Set: []string{"one", "two", "three"},
+		}, nil
+	}
+	testConvertType(reflect.TypeOf(modelWithSet{}), construct, t)
+
+	// test to make sure the field is saved as a redis set type
+	testingSetUp()
+	defer testingTearDown()
+
+	m1 := &modelWithSet{
+		Set: []string{"one", "two", "three"},
+	}
+	m2 := &modelWithSet{} // make sure empty slice doesn't throw an error
+	if err := Save(m1, m2); err != nil {
+		t.Error(err)
+	}
+
+	conn := GetConn()
+	defer conn.Close()
+
+	setKey := "modelWithSet:" + m1.Id + ":Set"
+	result, err := redis.Strings(conn.Do("SMEMBERS", setKey))
+	if err != nil {
+		t.Error(err)
+	}
+	if equal, msg := compareAsStringSet(m1.Set, result); !equal {
+		t.Errorf("Set was not saved correctly.\nExpected: %+v\nGot: %+v\n%s\n", m1.Set, result, msg)
+	}
+}
+
 // TODO:
-//	- ModelWithList
-//	- ModelWithSet
 //	- ModelWithHash
 
 func TestEmbeddedStruct(t *testing.T) {
