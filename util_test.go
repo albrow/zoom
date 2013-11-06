@@ -9,6 +9,15 @@ import (
 	"testing"
 )
 
+func TestReverseString(t *testing.T) {
+	str := "hello"
+	expected := "olleh"
+	got := reverseString(str)
+	if got != expected {
+		t.Error("string was not correct.\nExpected: %s\nGot: %s\n", expected, got)
+	}
+}
+
 func TestIndexOfStringSlice(t *testing.T) {
 	slice := []string{"one", "two", "three"}
 	index := indexOfStringSlice("two", slice)

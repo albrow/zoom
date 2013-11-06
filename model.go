@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 // DefaultData should be embedded in any struct you wish to save.
@@ -153,29 +154,36 @@ func (d *DefaultData) setId(id string) {
 	d.Id = id
 }
 
-// Register adds a type to the list of registered types. Any struct
-// you wish to save must be registered first. Both modelName and type of
-// in must be unique, i.e. not already registered.
-func Register(in interface{}, modelName string) error {
-	typ := reflect.TypeOf(in)
+// Register adds a model type to the list of registered types. Any struct
+// you wish to save must be registered first. The type of model must be
+// unique, i.e. not already registered. Each registered model gets a name,
+// a unique string identifier, which by default is just the string version
+// of the type (the asterisk and any package prefixes are stripped). See
+// RegisterName if you would prefer to specify a custom name.
+func Register(model Model) error {
+	typeName := reflect.TypeOf(model).Elem().String()
+	// strip package name
+	modelName := reverseString(strings.Split(reverseString(typeName), ".")[0])
+	return RegisterName(modelName, model)
+}
 
-	// make sure the interface is the correct type
-	if typ.Kind() != reflect.Ptr {
-		return errors.New("zoom: schema must be a pointer to a struct")
-	} else if typ.Elem().Kind() != reflect.Struct {
-		return errors.New("zoom: schema must be a pointer to a struct")
-	}
-
+// RegisterName is like Register but allows you to specify a custom
+// name to use for the model type. The custom name will be used as
+// a prefix for all models of this type stored in redis. The custom
+// name will also be used in functions which require a model name,
+// such as queries.
+func RegisterName(name string, model Model) error {
 	// make sure the name and type have not been previously registered
+	typ := reflect.TypeOf(model)
 	if modelTypeIsRegistered(typ) {
 		return NewTypeAlreadyRegisteredError(typ)
 	}
-	if modelNameIsRegistered(modelName) {
-		return NewNameAlreadyRegisteredError(modelName)
+	if modelNameIsRegistered(name) {
+		return NewNameAlreadyRegisteredError(name)
 	}
 
-	modelTypeToName[typ] = modelName
-	modelNameToType[modelName] = typ
+	modelTypeToName[typ] = name
+	modelNameToType[name] = typ
 	if err := compileModelSpecs(); err != nil {
 		return err
 	}
@@ -306,28 +314,29 @@ func (ms *modelSpec) addInconvertible(field reflect.StructField, redisName strin
 	}
 }
 
-// UnregisterName removes a type (identified by modelName) from the list of
-// registered types. You only need to call UnregisterName or UnregisterType,
-// not both.
-func UnregisterName(modelName string) error {
-	typ, ok := modelNameToType[modelName]
-	if !ok {
-		return NewModelNameNotRegisteredError(modelName)
-	}
-	delete(modelNameToType, modelName)
-	delete(modelTypeToName, typ)
-	return nil
-}
-
-// UnregisterName removes a type from the list of registered types.
+// Unregister removes a model type from the list of registered types.
 // You only need to call UnregisterName or UnregisterType, not both.
-func UnregisterType(modelType reflect.Type) error {
+func Unregister(model Model) error {
+	modelType := reflect.TypeOf(model)
 	name, ok := modelTypeToName[modelType]
 	if !ok {
 		return NewModelTypeNotRegisteredError(modelType)
 	}
 	delete(modelNameToType, name)
 	delete(modelTypeToName, modelType)
+	return nil
+}
+
+// UnregisterName removes a model type (identified by modelName) from the list of
+// registered model types. You only need to call UnregisterName or UnregisterType,
+// not both.
+func UnregisterName(name string) error {
+	typ, ok := modelNameToType[name]
+	if !ok {
+		return NewModelNameNotRegisteredError(name)
+	}
+	delete(modelNameToType, name)
+	delete(modelTypeToName, typ)
 	return nil
 }
 

@@ -132,21 +132,21 @@ var address *string = flag.String("address", "localhost:6379", "the address of a
 var network *string = flag.String("network", "tcp", "the network to use for the database connection (e.g. 'tcp' or 'unix')")
 var database *int = flag.Int("database", 9, "the redis database number to use for testing")
 
-var testingTypes map[string]interface{} = map[string]interface{}{
-	"basicModel":                      &basicModel{},
-	"modelWithList":                   &modelWithList{},
-	"modelWithSet":                    &modelWithSet{},
-	"oneToOneModelDifferentType":      &oneToOneModelDifferentType{},
-	"oneToOneModelSameType":           &oneToOneModelSameType{},
-	"oneToManyModelDifferentType":     &oneToManyModelDifferentType{},
-	"manyToManyModelDifferentTypeOne": &manyToManyModelDifferentTypeOne{},
-	"manyToManyModelDifferentTypeTwo": &manyToManyModelDifferentTypeTwo{},
-	"manyToManyModelSameType":         &manyToManyModelSameType{},
-	"primativeTypesModel":             &primativeTypesModel{},
-	"pointerPrimativeTypesModel":      &pointersToPrimativeTypesModel{},
-	"incovertibleTypesModel":          &inconvertibleTypesModel{},
-	"embeddedStructModel":             &embeddedStructModel{},
-	"embeddedPointerToStructModel":    &embeddedPointerToStructModel{},
+var testingTypes []Model = []Model{
+	&basicModel{},
+	&modelWithList{},
+	&modelWithSet{},
+	&oneToOneModelDifferentType{},
+	&oneToOneModelSameType{},
+	&oneToManyModelDifferentType{},
+	&manyToManyModelDifferentTypeOne{},
+	&manyToManyModelDifferentTypeTwo{},
+	&manyToManyModelSameType{},
+	&primativeTypesModel{},
+	&pointersToPrimativeTypesModel{},
+	&inconvertibleTypesModel{},
+	&embeddedStructModel{},
+	&embeddedPointerToStructModel{},
 }
 
 func testingSetUp() {
@@ -195,8 +195,8 @@ func testConn(conn redis.Conn) error {
 }
 
 func registerTestingTypes() {
-	for name, in := range testingTypes {
-		if err := Register(in, name); err != nil {
+	for _, m := range testingTypes {
+		if err := Register(m); err != nil {
 			panic(err)
 		}
 	}
@@ -216,8 +216,8 @@ func testingTearDown() {
 }
 
 func unregisterTestingTypes() {
-	for name, _ := range testingTypes {
-		UnregisterName(name)
+	for _, m := range testingTypes {
+		Unregister(m)
 	}
 }
 
