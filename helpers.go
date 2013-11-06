@@ -10,7 +10,6 @@ package zoom
 
 import (
 	"fmt"
-	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
 
@@ -18,12 +17,12 @@ import (
 // used to convert a return value of a MultiModelQuery.
 func Models(in interface{}) []Model {
 	typ := reflect.TypeOf(in)
-	if !util.TypeIsSliceOrArray(typ) {
+	if !typeIsSliceOrArray(typ) {
 		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nArgument must be slice or array.", in)
 		panic(msg)
 	}
 	elemTyp := typ.Elem()
-	if !util.TypeIsPointerToStruct(elemTyp) {
+	if !typeIsPointerToStruct(elemTyp) {
 		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nSlice or array must have elements of type pointer to struct.", in)
 		panic(msg)
 	}

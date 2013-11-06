@@ -10,8 +10,6 @@ package zoom
 import (
 	"errors"
 	"fmt"
-	"github.com/stephenalexbrowne/zoom/blob"
-	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
 
@@ -215,7 +213,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 		} else if redisName == "" {
 			redisName = field.Name
 		}
-		if util.TypeIsPrimative(field.Type) {
+		if typeIsPrimative(field.Type) {
 			// primative
 			p := primative{
 				redisName: redisName,
@@ -224,7 +222,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 			}
 			ms.primatives[field.Name] = p
 		} else if field.Type.Kind() == reflect.Ptr {
-			if util.TypeIsPrimative(field.Type.Elem()) {
+			if typeIsPrimative(field.Type.Elem()) {
 				// pointer to a primative
 				p := pointer{
 					redisName: redisName,
@@ -233,7 +231,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 					elemType:  field.Type.Elem(),
 				}
 				ms.pointers[field.Name] = p
-			} else if util.TypeIsPointerToStruct(field.Type) {
+			} else if typeIsPointerToStruct(field.Type) {
 				if modelTypeIsRegistered(field.Type) {
 					// one-to-one relationship
 					ms.relationships[field.Name] = relationship{
@@ -248,8 +246,8 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 					ms.addInconvertible(field, redisName)
 				}
 			}
-		} else if util.TypeIsSliceOrArray(field.Type) {
-			if util.TypeIsPointerToStruct(field.Type.Elem()) {
+		} else if typeIsSliceOrArray(field.Type) {
+			if typeIsPointerToStruct(field.Type.Elem()) {
 				if modelTypeIsRegistered(field.Type.Elem()) {
 					// one-to-many relationship
 					ms.relationships[field.Name] = relationship{
@@ -415,8 +413,7 @@ func (mr modelRef) mainHashArgs() ([]interface{}, error) {
 	}
 	for _, inc := range ms.inconvertibles {
 		// TODO: account for the possibility of json, msgpack or custom fallbacks
-		b := blob.DefaultMarshalerUnmarshaler{}
-		valBytes, err := b.Marshal(mr.value(inc.fieldName).Interface())
+		valBytes, err := defaultMarshalerUnmarshaler.Marshal(mr.value(inc.fieldName).Interface())
 		if err != nil {
 			return args, err
 		}

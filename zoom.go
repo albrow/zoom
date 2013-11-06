@@ -12,7 +12,6 @@ package zoom
 import (
 	"errors"
 	"fmt"
-	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
 
@@ -25,7 +24,7 @@ func Save(models ...Model) error {
 	for _, m := range models {
 
 		// make sure we'll dealing with a pointer to a struct
-		if !util.TypeIsPointerToStruct(reflect.TypeOf(m)) {
+		if !typeIsPointerToStruct(reflect.TypeOf(m)) {
 			msg := fmt.Sprintf("zoom: Save() requires a pointer to a struct as an argument.\nThe type %T is not a pointer to a struct.", m)
 			return errors.New(msg)
 		}

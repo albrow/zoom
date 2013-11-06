@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
-	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
 
@@ -230,6 +229,9 @@ func (t *transaction) saveModelRelationships(mr modelRef) error {
 
 func (t *transaction) saveModelOneToOneRelationship(mr modelRef, r relationship) error {
 	field := mr.value(r.fieldName)
+	if field.IsNil() {
+		return nil
+	}
 	rModel, ok := field.Interface().(Model)
 	if !ok {
 		msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", field.Type().String())
@@ -251,6 +253,9 @@ func (t *transaction) saveModelOneToOneRelationship(mr modelRef, r relationship)
 
 func (t *transaction) saveModelOneToManyRelationship(mr modelRef, r relationship) error {
 	field := mr.value(r.fieldName)
+	if field.IsNil() {
+		return nil
+	}
 
 	// get a slice of ids from the elements of the field
 	ids := make([]string, 0)
@@ -342,7 +347,7 @@ func (t *transaction) findModel(mr modelRef, includes []string) error {
 func (t *transaction) findModelLists(mr modelRef, includes []string) error {
 	for _, list := range mr.modelSpec.lists {
 		if includes != nil {
-			if !util.StringSliceContains(list.fieldName, includes) {
+			if !stringSliceContains(list.fieldName, includes) {
 				continue // skip field names that are not in includes
 			}
 		}
@@ -362,7 +367,7 @@ func (t *transaction) findModelLists(mr modelRef, includes []string) error {
 func (t *transaction) findModelSets(mr modelRef, includes []string) error {
 	for _, set := range mr.modelSpec.sets {
 		if includes != nil {
-			if !util.StringSliceContains(set.fieldName, includes) {
+			if !stringSliceContains(set.fieldName, includes) {
 				continue // skip field names that are not in includes
 			}
 		}
@@ -382,7 +387,7 @@ func (t *transaction) findModelSets(mr modelRef, includes []string) error {
 func (t *transaction) findModelRelationships(mr modelRef, includes []string) error {
 	for _, r := range mr.modelSpec.relationships {
 		if includes != nil {
-			if !util.StringSliceContains(r.fieldName, includes) {
+			if !stringSliceContains(r.fieldName, includes) {
 				continue // skip field names that are not in includes
 			}
 		}

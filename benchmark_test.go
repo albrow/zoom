@@ -2,25 +2,22 @@
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
-package test
+package zoom
 
 import (
-	"github.com/stephenalexbrowne/zoom"
-	"github.com/stephenalexbrowne/zoom/test_support"
-	"github.com/stephenalexbrowne/zoom/util"
 	"testing"
 )
 
 // just get a connection and close it
 func BenchmarkConnection(b *testing.B) {
 
-	test_support.SetUp()
-	defer test_support.TearDown()
+	testingSetUp()
+	defer testingTearDown()
 
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		conn := zoom.GetConn()
+		conn := GetConn()
 		conn.Close()
 	}
 }
@@ -60,7 +57,7 @@ func BenchmarkSet(b *testing.B) {
 func BenchmarkGet(b *testing.B) {
 
 	setup := func() {
-		conn := zoom.GetConn()
+		conn := GetConn()
 		_, err := conn.Do("SET", "foo", "bar")
 		if err != nil {
 			b.Fatal(err)
@@ -88,24 +85,24 @@ func BenchmarkGet(b *testing.B) {
 // saves the same record repeatedly
 // (after the first save, nothing changes)
 func BenchmarkSave(b *testing.B) {
-	singlePersonSelect := func(i int, persons []*test_support.Person) *test_support.Person {
-		return persons[0]
+	singleModelSelect := func(i int, models []*basicModel) *basicModel {
+		return models[0]
 	}
-	benchmarkSave(b, 1, singlePersonSelect)
+	benchmarkSave(b, 1, singleModelSelect)
 }
 
 // finds the same record over and over
 func BenchmarkFindById(b *testing.B) {
-	test_support.SetUp()
-	defer test_support.TearDown()
+	testingSetUp()
+	defer testingTearDown()
 
-	// create some persons
-	persons, err := test_support.CreatePersons(1000)
+	// create some models
+	ms, err := newBasicModels(1000)
 	if err != nil {
 		b.Error(err)
 	}
-	ids := make([]string, len(persons))
-	for i, p := range persons {
+	ids := make([]string, len(ms))
+	for i, p := range ms {
 		ids[i] = p.Id
 	}
 
@@ -117,22 +114,22 @@ func BenchmarkFindById(b *testing.B) {
 		b.StopTimer()
 		id := ids[i%len(ids)]
 		b.StartTimer()
-		zoom.FindById("person", id)
+		FindById("basicModel", id)
 	}
 }
 
 // scans the same record over and over
 func BenchmarkScanById(b *testing.B) {
-	test_support.SetUp()
-	defer test_support.TearDown()
+	testingSetUp()
+	defer testingTearDown()
 
-	// create some persons
-	persons, err := test_support.CreatePersons(1000)
+	// create some models
+	ms, err := newBasicModels(1000)
 	if err != nil {
 		b.Error(err)
 	}
-	ids := make([]string, len(persons))
-	for i, p := range persons {
+	ids := make([]string, len(ms))
+	for i, p := range ms {
 		ids[i] = p.Id
 	}
 
@@ -143,9 +140,9 @@ func BenchmarkScanById(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		id := ids[i%len(ids)]
-		pCopy := new(test_support.Person)
+		mCopy := new(basicModel)
 		b.StartTimer()
-		zoom.ScanById(id, pCopy)
+		ScanById(id, mCopy)
 	}
 }
 
@@ -161,8 +158,8 @@ func BenchmarkRandomDeleteById(b *testing.B) {
 }
 
 func benchmarkCommand(b *testing.B, setup func(), checkReply func(interface{}, error), cmd string, args ...interface{}) {
-	test_support.SetUp()
-	defer test_support.TearDown()
+	testingSetUp()
+	defer testingTearDown()
 
 	if setup != nil {
 		setup()
@@ -171,7 +168,7 @@ func benchmarkCommand(b *testing.B, setup func(), checkReply func(interface{}, e
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		conn := zoom.GetConn()
+		conn := GetConn()
 		reply, err := conn.Do(cmd, args...)
 		b.StopTimer()
 		if checkReply != nil {
@@ -182,12 +179,12 @@ func benchmarkCommand(b *testing.B, setup func(), checkReply func(interface{}, e
 	}
 }
 
-func benchmarkSave(b *testing.B, num int, personSelect func(int, []*test_support.Person) *test_support.Person) {
-	test_support.SetUp()
-	defer test_support.TearDown()
+func benchmarkSave(b *testing.B, num int, modelSelect func(int, []*basicModel) *basicModel) {
+	testingSetUp()
+	defer testingTearDown()
 
-	// create a sequence of persons to be saved
-	persons, err := test_support.NewPersons(num)
+	// create a sequence of models to be saved
+	ms, err := newBasicModels(num)
 	if err != nil {
 		b.Error(err)
 	}
@@ -198,9 +195,9 @@ func benchmarkSave(b *testing.B, num int, personSelect func(int, []*test_support
 	// run the actual test
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		p := personSelect(i, persons)
+		p := modelSelect(i, ms)
 		b.StartTimer()
-		err := zoom.Save(p)
+		err := Save(p)
 		b.StopTimer()
 		if err != nil {
 			b.Fatal(err)
@@ -210,16 +207,16 @@ func benchmarkSave(b *testing.B, num int, personSelect func(int, []*test_support
 }
 
 func benchmarkDeleteById(b *testing.B, num int, idSelect func(int, []string) string) {
-	test_support.SetUp()
-	defer test_support.TearDown()
+	testingSetUp()
+	defer testingTearDown()
 
-	persons, err := test_support.CreatePersons(num)
+	ms, err := newBasicModels(num)
 	if err != nil {
 		b.Error(err)
 	}
-	ids := make([]string, len(persons))
-	for i, p := range persons {
-		ids[i] = p.Id
+	ids := make([]string, len(ms))
+	for i, m := range ms {
+		ids[i] = m.Id
 	}
 
 	b.ResetTimer()
@@ -229,15 +226,15 @@ func benchmarkDeleteById(b *testing.B, num int, idSelect func(int, []string) str
 		b.StopTimer()
 		id := idSelect(i, ids)
 		b.StartTimer()
-		zoom.DeleteById("person", id)
+		DeleteById("basicModel", id)
 	}
 }
 
-func benchmarkDelete(b *testing.B, num int, personSelect func(int, []*test_support.Person) *test_support.Person) {
-	test_support.SetUp()
-	defer test_support.TearDown()
+func benchmarkDelete(b *testing.B, num int, modelSelect func(int, []*basicModel) *basicModel) {
+	testingSetUp()
+	defer testingTearDown()
 
-	persons, err := test_support.CreatePersons(num)
+	ms, err := newBasicModels(num)
 	if err != nil {
 		b.Error(err)
 	}
@@ -247,9 +244,9 @@ func benchmarkDelete(b *testing.B, num int, personSelect func(int, []*test_suppo
 	// run the actual test
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		p := personSelect(i, persons)
+		m := modelSelect(i, ms)
 		b.StartTimer()
-		zoom.Delete(p)
+		Delete(m)
 	}
 }
 
@@ -262,5 +259,5 @@ func sequentialIdSelect(i int, ids []string) string {
 }
 
 func randomIdSelect(i int, ids []string) string {
-	return ids[util.RandInt(0, len(ids)-1)]
+	return ids[randInt(0, len(ids)-1)]
 }
