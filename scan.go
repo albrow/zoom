@@ -10,8 +10,6 @@ package zoom
 import (
 	"errors"
 	"fmt"
-	"github.com/stephenalexbrowne/zoom/blob"
-	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 	"strconv"
 )
@@ -57,7 +55,7 @@ func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 	if len(srcBytes) == 0 {
 		return nil // skip blanks
 	}
-	if util.TypeIsString(typ) {
+	if typeIsString(typ) {
 		switch typ.Kind() {
 		case reflect.String:
 			// straight up string types
@@ -70,7 +68,7 @@ func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 			msg := fmt.Sprintf("zoom: don't know how to scan primative type: %T.\n", src)
 			return errors.New(msg)
 		}
-	} else if util.TypeIsNumeric(typ) {
+	} else if typeIsNumeric(typ) {
 		srcString := string(srcBytes)
 		switch typ.Kind() {
 		case reflect.Float32, reflect.Float64:
@@ -101,7 +99,7 @@ func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 			msg := fmt.Sprintf("zoom: don't know how to scan primative type: %T.\n", src)
 			return errors.New(msg)
 		}
-	} else if util.TypeIsBool(typ) {
+	} else if typeIsBool(typ) {
 		srcString := string(srcBytes)
 		srcBool, err := strconv.ParseBool(srcString)
 		if err != nil {
@@ -132,8 +130,7 @@ func scanInconvertibleVal(src interface{}, dest reflect.Value) error {
 	}
 
 	// TODO: account for json, msgpack or other custom fallbacks
-	m := blob.DefaultMarshalerUnmarshaler{}
-	if err := m.Unmarshal(srcBytes, dest.Addr().Interface()); err != nil {
+	if err := defaultMarshalerUnmarshaler.Unmarshal(srcBytes, dest.Addr().Interface()); err != nil {
 		return err
 	}
 	return nil
