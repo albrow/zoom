@@ -63,20 +63,24 @@ func removeElementFromStringSlice(list []string, elem string) []string {
 }
 
 func compareAsStringSet(expecteds, gots []string) (bool, string) {
-	for _, got := range gots {
-		index := indexOfStringSlice(got, expecteds)
+	// make sure everything in expecteds is also in gots
+	for _, e := range expecteds {
+		index := indexOfStringSlice(e, gots)
 		if index == -1 {
-			msg := fmt.Sprintf("Found unexpected element: %v", got)
+			msg := fmt.Sprintf("Missing expected element: %v", e)
 			return false, msg
 		}
-		// remove from expecteds. makes sure we have one of each
-		expecteds = removeFromStringSlice(expecteds, index)
 	}
-	// now expecteds should be empty. If it's not, there's a problem
-	if len(expecteds) != 0 {
-		msg := fmt.Sprintf("The following expected elements were not found: %v\n", expecteds)
-		return false, msg
+
+	// make sure everything in gots is also in expecteds
+	for _, g := range gots {
+		index := indexOfStringSlice(g, expecteds)
+		if index == -1 {
+			msg := fmt.Sprintf("Found extra element: %v", g)
+			return false, msg
+		}
 	}
+
 	return true, "ok"
 }
 

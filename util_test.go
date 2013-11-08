@@ -65,14 +65,26 @@ func TestCompareAsStringSet(t *testing.T) {
 	b := []string{"two", "three", "one"}
 	c := []string{"three", "one"}
 	d := []string{"four", "one", "three", "two"}
+
 	if equal, _ := compareAsStringSet(a, b); !equal {
 		t.Errorf("equal was incorrect.\nExpected: %t\nGot: %t\n", true, equal)
 	}
+	if !reflect.DeepEqual(a, []string{"one", "two", "three"}) {
+		t.Error("a was modified after the compareAsStringSet operation!\ncurrent value: ", a)
+	}
+
 	if equal, _ := compareAsStringSet(a, c); equal {
 		t.Errorf("equal was incorrect.\nExpected: %t\nGot: %t\n", false, equal)
 	}
+	if !reflect.DeepEqual(a, []string{"one", "two", "three"}) {
+		t.Error("a was modified after the compareAsStringSet operation!\ncurrent value: ", a)
+	}
+
 	if equal, _ := compareAsStringSet(a, d); equal {
 		t.Errorf("equal was incorrect.\nExpected: %t\nGot: %t\n", false, equal)
+	}
+	if !reflect.DeepEqual(a, []string{"one", "two", "three"}) {
+		t.Error("a was modified after the compareAsStringSet operation!\ncurrent value: ", a)
 	}
 }
 
