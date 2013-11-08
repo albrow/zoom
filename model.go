@@ -177,9 +177,11 @@ func RegisterName(name string, model Model) error {
 	typ := reflect.TypeOf(model)
 	if modelTypeIsRegistered(typ) {
 		return NewTypeAlreadyRegisteredError(typ)
-	}
-	if modelNameIsRegistered(name) {
+	} else if modelNameIsRegistered(name) {
 		return NewNameAlreadyRegisteredError(name)
+	} else if !typeIsPointerToStruct(typ) {
+		msg := fmt.Sprintf("zoom: Register and RegisterName require a pointer to a struct as an argument.\nThe type %T is not a pointer to a struct.", model)
+		return errors.New(msg)
 	}
 
 	modelTypeToName[typ] = name

@@ -28,7 +28,7 @@ func TestSave(t *testing.T) {
 	// TODO: test that the model was saved
 }
 
-func TestVariadicSave(t *testing.T) {
+func TestMSave(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -37,7 +37,7 @@ func TestVariadicSave(t *testing.T) {
 		t.Error(err)
 	}
 
-	if err := Save(Models(models)...); err != nil {
+	if err := MSave(Models(models)); err != nil {
 		t.Error(err)
 	}
 
@@ -116,7 +116,7 @@ func TestDelete(t *testing.T) {
 	checkBasicModelDeleted(t, m.Id, conn)
 }
 
-func TestVariadicDelete(t *testing.T) {
+func TestMDelete(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -125,7 +125,7 @@ func TestVariadicDelete(t *testing.T) {
 		t.Error(err)
 	}
 
-	if err := Save(Models(models)...); err != nil {
+	if err := MSave(Models(models)); err != nil {
 		t.Error(err)
 	}
 
@@ -136,7 +136,7 @@ func TestVariadicDelete(t *testing.T) {
 		checkBasicModelSaved(t, m, conn)
 	}
 
-	if err := Delete(Models(models)...); err != nil {
+	if err := MDelete(Models(models)); err != nil {
 		t.Error(err)
 	}
 
@@ -165,7 +165,7 @@ func TestDeleteById(t *testing.T) {
 	checkBasicModelDeleted(t, m.Id, conn)
 }
 
-func TestVariadicDeleteById(t *testing.T) {
+func TestMDeleteById(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -174,7 +174,7 @@ func TestVariadicDeleteById(t *testing.T) {
 		t.Error(err)
 	}
 
-	if err := Save(Models(models)...); err != nil {
+	if err := MSave(Models(models)); err != nil {
 		t.Error(err)
 	}
 
@@ -189,7 +189,7 @@ func TestVariadicDeleteById(t *testing.T) {
 	for i, m := range models {
 		ids[i] = m.Id
 	}
-	if err := DeleteById("basicModel", ids...); err != nil {
+	if err := MDeleteById([]string{"basicModel", "basicModel", "basicModel"}, ids); err != nil {
 		t.Error(err)
 	}
 

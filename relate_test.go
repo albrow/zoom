@@ -42,7 +42,7 @@ func TestFindOneToOneDifferentType(t *testing.T) {
 
 	bm := &basicModel{Attr: "test"}
 	m := &oneToOneModelDifferentType{Attr: "test", One: bm}
-	Save(bm, m)
+	MSave([]Model{bm, m})
 
 	mCopy := new(oneToOneModelDifferentType)
 	if err := ScanById(m.Id, mCopy); err != nil {
@@ -94,7 +94,7 @@ func TestFindOneToOneSameType(t *testing.T) {
 
 	one := &oneToOneModelSameType{Attr: "test_1"}
 	two := &oneToOneModelSameType{Attr: "test_2", One: one}
-	Save(one, two)
+	MSave([]Model{one, two})
 
 	twoCopy := new(oneToOneModelSameType)
 	if err := ScanById(two.Id, twoCopy); err != nil {
@@ -118,7 +118,7 @@ func setUpOneToManyDifferentyType() ([]*basicModel, *oneToManyModelDifferentType
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := Save(Models(bms)...); err != nil {
+	if err := MSave(Models(bms)); err != nil {
 		return nil, nil, err
 	}
 
@@ -210,7 +210,7 @@ func setUpManyToManyDifferentType() ([]*manyToManyModelDifferentTypeOne, []*many
 	twoA := &manyToManyModelDifferentTypeTwo{Attr: "2A"}
 	twoB := &manyToManyModelDifferentTypeTwo{Attr: "2B"}
 	twoC := &manyToManyModelDifferentTypeTwo{Attr: "2C"}
-	if err := Save(oneA, oneB, oneC, twoA, twoB, twoC); err != nil {
+	if err := MSave([]Model{oneA, oneB, oneC, twoA, twoB, twoC}); err != nil {
 		return nil, nil, err
 	}
 
@@ -238,7 +238,7 @@ func setUpManyToManyDifferentType() ([]*manyToManyModelDifferentTypeOne, []*many
 		oneA,
 		oneB,
 	}
-	if err := Save(oneA, oneB, oneC, twoA, twoB, twoC); err != nil {
+	if err := MSave([]Model{oneA, oneB, oneC, twoA, twoB, twoC}); err != nil {
 		return nil, nil, err
 	}
 
@@ -359,7 +359,7 @@ func setUpManyToManySameType() ([]*manyToManyModelSameType, error) {
 	m2 := &manyToManyModelSameType{Attr: "1B"}
 	m3 := &manyToManyModelSameType{Attr: "1C"}
 	m4 := &manyToManyModelSameType{Attr: "2A"}
-	if err := Save(m1, m2, m3, m4); err != nil {
+	if err := MSave([]Model{m1, m2, m3, m4}); err != nil {
 		return nil, err
 	}
 
@@ -379,7 +379,7 @@ func setUpManyToManySameType() ([]*manyToManyModelSameType, error) {
 	m4.Many = []*manyToManyModelSameType{
 		m1,
 	}
-	if err := Save(m1, m2, m3, m4); err != nil {
+	if err := MSave([]Model{m1, m2, m3, m4}); err != nil {
 		return nil, err
 	}
 
