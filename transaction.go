@@ -126,7 +126,7 @@ func newScanSliceHandler(scanVal reflect.Value) func(interface{}) error {
 // saveModel adds all the necessary commands to save a given model to the redis database
 // this includes indeces and external sets/lists
 func (t *transaction) saveModel(m Model) error {
-	mr, err := newModelRefFromInterface(m)
+	mr, err := newModelRefFromModel(m)
 	if err != nil {
 		return err
 	}
@@ -442,7 +442,7 @@ func (t *transaction) findModelOneToOneRelation(mr modelRef, r relationship) err
 
 	// set id and create modelRef
 	rModel.setId(id)
-	rModelRef, err := newModelRefFromInterface(rModel)
+	rModelRef, err := newModelRefFromModel(rModel)
 	if err != nil {
 		return err
 	}
@@ -494,7 +494,7 @@ func (t *transaction) findModelOneToManyRelation(mr modelRef, r relationship) er
 
 		// set id and create modelRef
 		rModel.setId(id)
-		rModelRef, err := newModelRefFromInterface(rModel)
+		rModelRef, err := newModelRefFromModel(rModel)
 		if err != nil {
 			return err
 		}

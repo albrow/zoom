@@ -119,11 +119,27 @@ func newModelSpec(name string, typ reflect.Type) modelSpec {
 	}
 }
 
-func newModelRefFromInterface(m Model) (modelRef, error) {
+func newModelRefFromModel(m Model) (modelRef, error) {
 	mr := modelRef{
 		model: m,
 	}
 	modelName, err := getRegisteredNameFromInterface(m)
+	if err != nil {
+		return mr, err
+	}
+	mr.modelSpec = modelSpecs[modelName]
+	return mr, nil
+}
+
+func newModelRefFromInterface(in interface{}) (modelRef, error) {
+	mr := modelRef{}
+	m, ok := in.(Model)
+	if !ok {
+		msg := fmt.Sprintf("zoom: could not convert val of type %T to Model", in)
+		return mr, errors.New(msg)
+	}
+	mr.model = m
+	modelName, err := getRegisteredNameFromInterface(in)
 	if err != nil {
 		return mr, err
 	}

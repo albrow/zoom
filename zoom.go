@@ -117,7 +117,7 @@ func MFindById(modelNames, ids []string) ([]Model, error) {
 		results = append(results, m)
 
 		// create a modelRef
-		mr, err := newModelRefFromInterface(m)
+		mr, err := newModelRefFromModel(m)
 		if err != nil {
 			return results, err
 		}
@@ -142,7 +142,7 @@ func MFindById(modelNames, ids []string) ([]Model, error) {
 func ScanById(id string, model Model) error {
 
 	// create a modelRef
-	mr, err := newModelRefFromInterface(model)
+	mr, err := newModelRefFromModel(model)
 	if err != nil {
 		return err
 	}
@@ -159,24 +159,43 @@ func ScanById(id string, model Model) error {
 	return nil
 }
 
-// MScanById is like ScanById but accepts a slice of ids and
-// scannable models. It executes the commands needed to retrieve
-// the models in a single transaction. See http://redis.io/topics/transactions.
+// MScanById is like ScanById but accepts a slice of ids and a pointer to
+// a slice of models. It executes the commands needed to retrieve the models
+// in a single transaction. See http://redis.io/topics/transactions.
 // The slice of ids and models should be properly aligned so that, e.g.,
 // ids[0] corresponds to models[0]. If there is an error in the middle of the
 // transaction, the function will halt and return the error. Any models that
-// were scanned before the error will still be valid.
-func MScanById(ids []string, models []Model) error {
-	if len(ids) != len(models) {
+// were scanned before the error will still be valid. If any of the models in
+// the models slice are nil, MScanById will use reflection to allocate memory
+// for them.
+func MScanById(ids []string, models interface{}) error {
+
+	// since this is somewhat type-unsafe, we need to verify that
+	// models is the correct type
+	modelsVal := reflect.ValueOf(models).Elem()
+	modelType := modelsVal.Type().Elem()
+
+	if len(ids) != modelsVal.Len() {
 		return errors.New("Zoom: error in MScanById: ids and models must be the same length")
+	} else if !typeIsSliceOrArray(modelsVal.Type()) {
+		return errors.New("Zoom: error in MScanById: models should be a pointer to a slice or array of models (models are pointers to structs)")
+	} else if !typeIsPointerToStruct(modelType) {
+		return errors.New("Zoom: error in MScanById: models should be a pointer to a slice of pointers to structs")
+	} else if !modelTypeIsRegistered(modelType) {
+		msg := fmt.Sprintf("Zoom: error in MScanById: the elements in models should be of a registered type\nType %s has not been registered.", modelType.String())
+		return errors.New(msg)
 	}
 
 	t := newTransaction()
 	for i := 0; i < len(ids); i++ {
-		id, m := ids[i], models[i]
+		id, mVal := ids[i], modelsVal.Index(i)
+
+		if mVal.IsNil() {
+			mVal.Set(reflect.New(modelType.Elem()))
+		}
 
 		// create a modelRef
-		mr, err := newModelRefFromInterface(m)
+		mr, err := newModelRefFromInterface(mVal.Interface())
 		if err != nil {
 			return err
 		}
