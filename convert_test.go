@@ -71,42 +71,39 @@ func TestModelWithList(t *testing.T) {
 	}
 }
 
-// func TestModelWithSet(t *testing.T) {
-// 	// test to make sure the field is saved as a redis set type
-// 	testingSetUp()
-// 	defer testingTearDown()
+func TestModelWithSet(t *testing.T) {
+	// test to make sure the field is saved as a redis set type
+	testingSetUp()
+	defer testingTearDown()
 
-// 	m := &modelWithSet{
-// 		Set: []string{"one", "two", "three"},
-// 	}
-// 	if err := Save(m); err != nil {
-// 		t.Error(err)
-// 	}
-// 	fmt.Println(m.Set)
+	m := &modelWithSet{
+		Set: []string{"one", "two", "three"},
+	}
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
 
-// 	conn := GetConn()
-// 	defer conn.Close()
+	conn := GetConn()
+	defer conn.Close()
 
-// 	setKey := "modelWithSet:" + m.Id + ":Set"
-// 	result, err := redis.Strings(conn.Do("SMEMBERS", setKey))
-// 	if err != nil {
-// 		t.Error(err)
-// 	}
-// 	fmt.Println(m.Set)
-// 	if equal, msg := compareAsStringSet(m.Set, result); !equal {
-// 		t.Errorf("Set was not saved correctly.\nExpected: %+v\nGot: %+v\n%s\n", m.Set, result, msg)
-// 	}
-// 	fmt.Println(m.Set)
+	setKey := "modelWithSet:" + m.Id + ":Set"
+	result, err := redis.Strings(conn.Do("SMEMBERS", setKey))
+	if err != nil {
+		t.Error(err)
+	}
+	if equal, msg := compareAsStringSet(m.Set, result); !equal {
+		t.Errorf("Set was not saved correctly.\nExpected: %+v\nGot: %+v\n%s\n", m.Set, result, msg)
+	}
 
-// 	// test to make sure what we put in is what we get out
-// 	mCopy := new(modelWithSet)
-// 	if err := ScanById(m.Id, mCopy); err != nil {
-// 		t.Error(err)
-// 	}
-// 	if equal, msg := compareAsStringSet(m.Set, mCopy.Set); !equal {
-// 		t.Errorf("Set was not retrieved correctly.\nExpected: %+v\nGot: %+v\n%s\n", m.Set, mCopy.Set, msg)
-// 	}
-// }
+	// test to make sure what we put in is what we get out
+	mCopy := new(modelWithSet)
+	if err := ScanById(m.Id, mCopy); err != nil {
+		t.Error(err)
+	}
+	if equal, msg := compareAsStringSet(m.Set, mCopy.Set); !equal {
+		t.Errorf("Set was not retrieved correctly.\nExpected: %+v\nGot: %+v\n%s\n", m.Set, mCopy.Set, msg)
+	}
+}
 
 // TODO:
 //	- ModelWithHash
