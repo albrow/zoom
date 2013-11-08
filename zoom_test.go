@@ -74,6 +74,24 @@ func TestFindById(t *testing.T) {
 	}
 }
 
+func TestMFindById(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, _ := newBasicModels(3)
+	MSave(Models(ms))
+	ids := []string{ms[0].Id, ms[1].Id, ms[2].Id}
+	names := []string{"basicModel", "basicModel", "basicModel"}
+
+	msCopy, err := MFindById(names, ids)
+	if err != nil {
+		t.Error(err)
+	}
+	if equal, msg := compareAsSet(ms, msCopy); !equal {
+		t.Errorf("found models doesn't match expected!\n%s\n", msg)
+	}
+}
+
 func TestScanById(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -92,6 +110,23 @@ func TestScanById(t *testing.T) {
 	// make sure the found model is the same as original
 	if !reflect.DeepEqual(m, mCopy) {
 		t.Errorf("Found model did not match.\nExpected: %+v\nGot: %+v\n", m, mCopy)
+	}
+}
+
+func TestMScanById(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, _ := newBasicModels(3)
+	MSave(Models(ms))
+	ids := []string{ms[0].Id, ms[1].Id, ms[2].Id}
+	msCopy := make([]*basicModel, 3)
+
+	if err := MScanById(ids, &msCopy); err != nil {
+		t.Error(err)
+	}
+	if equal, msg := compareAsSet(ms, msCopy); !equal {
+		t.Errorf("found models doesn't match expected!\n%s\n", msg)
 	}
 }
 
