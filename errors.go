@@ -21,7 +21,7 @@ type NameAlreadyRegisteredError struct {
 }
 
 func (e *NameAlreadyRegisteredError) Error() string {
-	return "zoom: the name '" + e.name + "' has already been registered"
+	return fmt.Sprintf("zoom: the name %s has already been registered", e.name)
 }
 
 func NewNameAlreadyRegisteredError(name string) *NameAlreadyRegisteredError {
@@ -35,7 +35,7 @@ type TypeAlreadyRegisteredError struct {
 }
 
 func (e *TypeAlreadyRegisteredError) Error() string {
-	return "zoom: the type '" + e.typ.String() + "' has already been registered"
+	return fmt.Sprintf("zoom: the type %s has already been registered", e.typ.String())
 }
 
 func NewTypeAlreadyRegisteredError(typ reflect.Type) *TypeAlreadyRegisteredError {
@@ -49,7 +49,7 @@ type ModelTypeNotRegisteredError struct {
 }
 
 func (e *ModelTypeNotRegisteredError) Error() string {
-	return "zoom: the type '" + e.typ.String() + "' has not been registered"
+	return fmt.Sprintf("zoom: the type %s has not been registered", e.typ.String())
 }
 
 func NewModelTypeNotRegisteredError(typ reflect.Type) *ModelTypeNotRegisteredError {
@@ -63,7 +63,7 @@ type ModelNameNotRegisteredError struct {
 }
 
 func (e *ModelNameNotRegisteredError) Error() string {
-	return "zoom: the model name '" + e.name + "' has not been registered"
+	return fmt.Sprintf("zoom: the model name %s has not been registered", e.name)
 }
 
 func NewModelNameNotRegisteredError(name string) *ModelNameNotRegisteredError {
