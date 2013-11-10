@@ -135,36 +135,43 @@ func testConvertType(typ reflect.Type, construct func() (in interface{}, err err
 	testingSetUp()
 	defer testingTearDown()
 
+	// make a model with all nil fields
+	m1Interface := reflect.New(typ).Interface()
+	m1, ok := m1Interface.(Model)
+	if !ok {
+		t.Errorf("couldn't convert type %T to Model", m1Interface)
+	}
+
 	// construct a model using the construct function
-	modelInterface, err := construct()
+	m2Interface, err := construct()
 	if err != nil {
 		t.Error(err)
 	}
-	model, ok := modelInterface.(Model)
+	m2, ok := m2Interface.(Model)
 	if !ok {
-		t.Errorf("couldn't convert type %T to Model", modelInterface)
+		t.Errorf("couldn't convert type %T to Model", m2Interface)
 	}
-	if err := Save(model); err != nil {
+	if err := MSave([]Model{m1, m2}); err != nil {
 		t.Error(err)
 	}
 
 	// create a copy of the same type and use ScanById
-	modelCopyInterface := reflect.New(typ).Interface()
-	modelCopy, ok := modelCopyInterface.(Model)
-	id := model.getId()
+	m2CopyInterface := reflect.New(typ).Interface()
+	m2Copy, ok := m2CopyInterface.(Model)
+	id := m2.getId()
 	if !ok {
-		t.Errorf("couldn't convert type %T to Model", modelCopyInterface)
+		t.Errorf("couldn't convert type %T to Model", m2CopyInterface)
 	}
-	if err := ScanById(id, modelCopy); err != nil {
+	if err := ScanById(id, m2Copy); err != nil {
 		t.Error(err)
 	}
 
 	// make sure the copy equals the original
-	equal, err := looseEquals(model, modelCopy)
+	equal, err := looseEquals(m2, m2Copy)
 	if err != nil {
 		t.Error(err)
 	}
 	if !equal {
-		t.Errorf("model was not saved/retrieved correctly.\nExpected: %+v\nGot %+v\n", model, modelCopy)
+		t.Errorf("model was not saved/retrieved correctly.\nExpected: %+v\nGot %+v\n", m2, m2Copy)
 	}
 }

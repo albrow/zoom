@@ -24,8 +24,6 @@ func TestSave(t *testing.T) {
 	conn := GetConn()
 	defer conn.Close()
 	checkBasicModelSaved(t, m, conn)
-
-	// TODO: test that the model was saved
 }
 
 func TestMSave(t *testing.T) {

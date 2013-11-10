@@ -436,15 +436,19 @@ func (mr modelRef) mainHashArgs() ([]interface{}, error) {
 		args = append(args, p.redisName, mr.value(p.fieldName).Interface())
 	}
 	for _, p := range ms.pointers {
-		args = append(args, p.redisName, mr.value(p.fieldName).Elem().Interface())
+		if !mr.value(p.fieldName).IsNil() {
+			args = append(args, p.redisName, mr.value(p.fieldName).Elem().Interface())
+		}
 	}
 	for _, inc := range ms.inconvertibles {
-		// TODO: account for the possibility of json, msgpack or custom fallbacks
-		valBytes, err := defaultMarshalerUnmarshaler.Marshal(mr.value(inc.fieldName).Interface())
-		if err != nil {
-			return args, err
+		if !(mr.value(inc.fieldName).Type().Kind() == reflect.Ptr && mr.value(inc.fieldName).IsNil()) {
+			// TODO: account for the possibility of json, msgpack or custom fallbacks
+			valBytes, err := defaultMarshalerUnmarshaler.Marshal(mr.value(inc.fieldName).Interface())
+			if err != nil {
+				return args, err
+			}
+			args = append(args, inc.redisName, valBytes)
 		}
-		args = append(args, inc.redisName, valBytes)
 	}
 	return args, nil
 }
