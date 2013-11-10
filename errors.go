@@ -8,6 +8,7 @@
 package zoom
 
 import (
+	"fmt"
 	"reflect"
 )
 
@@ -67,4 +68,19 @@ func (e *ModelNameNotRegisteredError) Error() string {
 
 func NewModelNameNotRegisteredError(name string) *ModelNameNotRegisteredError {
 	return &ModelNameNotRegisteredError{name}
+}
+
+// KeyNotFoundError is returned from Find, Scan, and Query functions if the
+// model you are trying to find does not exist in the database.
+type KeyNotFoundError struct {
+	key       string
+	modelType reflect.Type
+}
+
+func (e *KeyNotFoundError) Error() string {
+	return fmt.Sprintf("zoom: could not find model of type %s with key %s", e.modelType.String(), e.key)
+}
+
+func NewKeyNotFoundError(key string, modelType reflect.Type) *KeyNotFoundError {
+	return &KeyNotFoundError{key, modelType}
 }
