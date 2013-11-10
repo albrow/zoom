@@ -90,6 +90,18 @@ func TestMFindById(t *testing.T) {
 	}
 }
 
+func TestFindByIdWithInvalidIdThrowsError(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	_, err := FindById("basicModel", "invalid_id")
+	if err == nil {
+		t.Error("Expected error when finding a model by an invalid id")
+	} else if _, ok := err.(*KeyNotFoundError); !ok {
+		t.Errorf("Error was not the right type.\nExpected: KeyNotFoundError\nGot: %T\n", err)
+	}
+}
+
 func TestScanById(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -125,6 +137,18 @@ func TestMScanById(t *testing.T) {
 	}
 	if equal, msg := compareAsSet(ms, msCopy); !equal {
 		t.Errorf("found models doesn't match expected!\n%s\n", msg)
+	}
+}
+
+func TestScanByIdWithInvalidIdThrowsError(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	err := ScanById("invalid_id", new(basicModel))
+	if err == nil {
+		t.Error("Expected error when finding a model by an invalid id")
+	} else if _, ok := err.(*KeyNotFoundError); !ok {
+		t.Errorf("Error was not the right type.\nExpected: KeyNotFoundError\nGot: %T\n", err)
 	}
 }
 

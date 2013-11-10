@@ -74,11 +74,14 @@ func (t *transaction) discard() error {
 // Useful Handlers
 
 // newScanHandler invokes redis driver to scan single values into the corresponding scannable
-func newScanHandler(scannables []interface{}) func(interface{}) error {
+func newScanHandler(mr modelRef, scannables []interface{}) func(interface{}) error {
 	return func(reply interface{}) error {
 		replies, err := redis.Values(reply, nil)
 		if err != nil {
 			return err
+		}
+		if len(replies) == 0 {
+			return checkModelExists(mr)
 		}
 		if _, err := redis.Scan(replies, scannables...); err != nil {
 			return err
@@ -93,6 +96,9 @@ func newScanModelHandler(mr modelRef) func(interface{}) error {
 		bulk, err := redis.MultiBulk(reply, nil)
 		if err != nil {
 			return err
+		}
+		if len(bulk) == 0 {
+			return checkModelExists(mr)
 		}
 		if err := scanModel(bulk, mr); err != nil {
 			return err
@@ -316,7 +322,7 @@ func (t *transaction) findModel(mr modelRef, includes []string) error {
 		// use HMGET to get only certain fields for the model
 		if len(fields) != 0 {
 			args := redis.Args{}.Add(mr.key()).AddFlat(includes)
-			if err := t.command("HMGET", args, newScanHandler(fields)); err != nil {
+			if err := t.command("HMGET", args, newScanHandler(mr, fields)); err != nil {
 				return err
 			}
 		}
@@ -539,6 +545,21 @@ func (t *transaction) unindex(key, value string) error {
 	args := redis.Args{}.Add(key).Add(value)
 	if err := t.command("SREM", args, nil); err != nil {
 		return err
+	}
+	return nil
+}
+
+// check to see if the model id exists in the index. If it doesn't
+// return KeyNotFoundError
+func checkModelExists(mr modelRef) error {
+	conn := GetConn()
+	defer conn.Close()
+
+	indexKey := mr.modelSpec.modelName + ":all"
+	if exists, err := redis.Bool(conn.Do("SISMEMBER", indexKey, mr.model.getId())); err != nil {
+		return err
+	} else if !exists {
+		return NewKeyNotFoundError(mr.key(), mr.modelSpec.modelType)
 	}
 	return nil
 }
