@@ -14,6 +14,86 @@ import (
 	"testing"
 )
 
+func TestRedisIgnoreOption(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	type ignored struct {
+		Attr string `redis:"-"`
+		DefaultData
+	}
+	Register(&ignored{})
+	defer Unregister(&ignored{})
+
+	// check the spec
+	spec, found := modelSpecs["ignored"]
+	if !found {
+		t.Error("Could not find spec for model of type ignored")
+	}
+	if len(spec.primatives) != 0 {
+		t.Errorf("Expected no primatives in model spec. Got %d", len(spec.primatives))
+	}
+
+	// save a new model and check redis
+	m := &ignored{
+		Attr: "this should be ignored",
+	}
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+
+	conn := GetConn()
+	defer conn.Close()
+	key := "ignored:" + m.Id
+	gotAttr, err := redis.String(conn.Do("HGET", key, "Attr"))
+	if err != nil && err != redis.ErrNil {
+		t.Error(err)
+	}
+	if gotAttr != "" {
+		t.Errorf("Expected empty attr but got: %s", gotAttr)
+	}
+}
+
+func TestRedisNameOption(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	type customized struct {
+		Attr string `redis:"a"`
+		DefaultData
+	}
+	Register(&customized{})
+	defer Unregister(&customized{})
+
+	// check the spec
+	spec, found := modelSpecs["customized"]
+	if !found {
+		t.Error("Could not find spec for model of type customized")
+	}
+	if spec.primatives["Attr"].redisName != "a" {
+		t.Errorf("Redis name was incorrect.\nExpected: 'a'\nGot: %s\n", spec.primatives["Attr"].redisName)
+	}
+
+	// save a new model and check redis
+	m := &customized{
+		Attr: "test",
+	}
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+
+	conn := GetConn()
+	defer conn.Close()
+	key := "customized:" + m.Id
+	gotAttr, err := redis.String(conn.Do("HGET", key, "a"))
+	if err != nil {
+		t.Error(err)
+	}
+	if gotAttr != "test" {
+		t.Errorf("Expected 'test' but got: %s", gotAttr)
+	}
+}
+
 func TestInvalidOptionThrowsError(t *testing.T) {
 	testingSetUp()
 	testingTearDown()
@@ -22,11 +102,10 @@ func TestInvalidOptionThrowsError(t *testing.T) {
 		Attr string `zoom:"index,poop"`
 		DefaultData
 	}
-	Register(&invalid{})
-	defer Unregister(&invalid{})
 	if err := Register(&invalid{}); err == nil {
 		t.Error("Expected error when registering struct with invalid tag")
 	}
+	Unregister(&invalid{})
 }
 
 func TestIndexedPrimativesModelSpec(t *testing.T) {
