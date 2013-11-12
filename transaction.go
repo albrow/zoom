@@ -164,6 +164,12 @@ func (t *transaction) saveModel(m Model) error {
 	if err := t.saveModelRelationships(mr); err != nil {
 		return err
 	}
+
+	// add operations to save the model indexes
+	if err := t.saveModelIndexes(mr); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -293,6 +299,138 @@ func (t *transaction) saveModelOneToManyRelationship(mr modelRef, r relationship
 		if err := t.command("SADD", args, nil); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func (t *transaction) saveModelIndexes(mr modelRef) error {
+	for _, p := range mr.modelSpec.primativeIndexes {
+		if p.iType == indexNumeric {
+			if err := t.saveModelPrimativeIndexNumeric(mr, p); err != nil {
+				return err
+			}
+		} else if p.iType == indexAlpha {
+			if err := t.saveModelPrimativeIndexAlpha(mr, p); err != nil {
+				return err
+			}
+		} else if p.iType == indexBoolean {
+			if err := t.saveModelPrimativeIndexBoolean(mr, p); err != nil {
+				return err
+			}
+		}
+	}
+
+	for _, p := range mr.modelSpec.pointerIndexes {
+		if p.iType == indexNumeric {
+			if err := t.saveModelPointerIndexNumeric(mr, p); err != nil {
+				return err
+			}
+		} else if p.iType == indexAlpha {
+			if err := t.saveModelPointerIndexAlpha(mr, p); err != nil {
+				return err
+			}
+		} else if p.iType == indexBoolean {
+			if err := t.saveModelPointerIndexBoolean(mr, p); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (t *transaction) saveModelPrimativeIndexNumeric(mr modelRef, p primative) error {
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	score, err := convertNumericToFloat64(mr.value(p.fieldName))
+	if err != nil {
+		return err
+	}
+	id := mr.model.getId()
+	return t.indexNumeric(indexKey, score, id)
+}
+
+func (t *transaction) saveModelPointerIndexNumeric(mr modelRef, p pointer) error {
+	if mr.value(p.fieldName).IsNil() {
+		// TODO: special case for indexing nil pointers?
+		return nil // skip nil pointers for now
+	}
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	score, err := convertNumericToFloat64(mr.value(p.fieldName).Elem())
+	if err != nil {
+		return err
+	}
+	id := mr.model.getId()
+	return t.indexNumeric(indexKey, score, id)
+}
+
+func (t *transaction) indexNumeric(indexKey string, score float64, id string) error {
+	args := redis.Args{}.Add(indexKey).Add(score).Add(id)
+	if err := t.command("ZADD", args, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *transaction) saveModelPrimativeIndexAlpha(mr modelRef, p primative) error {
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	value := mr.value(p.fieldName).String()
+	id := mr.model.getId()
+	return t.indexAlpha(indexKey, value, id)
+}
+
+func (t *transaction) saveModelPointerIndexAlpha(mr modelRef, p pointer) error {
+	if mr.value(p.fieldName).IsNil() {
+		// TODO: special case for indexing nil pointers?
+		return nil // skip nil pointers for now
+	}
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	value := mr.value(p.fieldName).Elem().String()
+	id := mr.model.getId()
+	return t.indexAlpha(indexKey, value, id)
+	return nil
+}
+
+func (t *transaction) indexAlpha(indexKey, value, id string) error {
+	member := value + " " + id
+	args := redis.Args{}.Add(indexKey).Add(0).Add(member)
+	if err := t.command("ZADD", args, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *transaction) saveModelPrimativeIndexBoolean(mr modelRef, p primative) error {
+	value := mr.value(p.fieldName).Bool()
+	id := mr.model.getId()
+	var indexKey string
+	if value == true {
+		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":true"
+	} else {
+		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":false"
+	}
+	return t.indexBoolean(indexKey, id)
+}
+
+func (t *transaction) saveModelPointerIndexBoolean(mr modelRef, p pointer) error {
+	if mr.value(p.fieldName).IsNil() {
+		// TODO: special case for indexing nil pointers?
+		return nil // skip nil pointers for now
+	}
+	value := mr.value(p.fieldName).Elem().Bool()
+	id := mr.model.getId()
+	var indexKey string
+	if value == true {
+		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":true"
+	} else {
+		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":false"
+	}
+	return t.indexBoolean(indexKey, id)
+}
+
+func (t *transaction) indexBoolean(indexKey, id string) error {
+	args := redis.Args{}.Add(indexKey).Add(id)
+	if err := t.command("SADD", args, nil); err != nil {
+		return err
 	}
 	return nil
 }
