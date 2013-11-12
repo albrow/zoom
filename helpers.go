@@ -45,3 +45,15 @@ func Models(in interface{}) []Model {
 	}
 	return results
 }
+
+// Convert interface{} to []interface{}
+func Interfaces(in interface{}) []interface{} {
+	val := reflect.ValueOf(in)
+	length := val.Len()
+	results := make([]interface{}, length)
+	for i := 0; i < length; i++ {
+		elemVal := val.Index(i)
+		results[i] = elemVal.Interface()
+	}
+	return results
+}
