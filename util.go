@@ -89,6 +89,12 @@ func compareAsSet(expecteds, gots interface{}) (bool, string) {
 	eVal := reflect.ValueOf(expecteds)
 	gVal := reflect.ValueOf(gots)
 
+	if !eVal.IsValid() {
+		return false, "expecteds was nil"
+	} else if !gVal.IsValid() {
+		return false, "gots was nil"
+	}
+
 	// make sure everything in expecteds is also in gots
 	for i := 0; i < eVal.Len(); i++ {
 		expected := eVal.Index(i).Interface()

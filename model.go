@@ -107,15 +107,13 @@ type modelRef struct {
 	modelSpec modelSpec
 }
 
-// maps a type to a string identifier. The string is used
-// as a key in the redis database.
+// maps a registered model type to a registered model name
 var modelTypeToName map[reflect.Type]string = make(map[reflect.Type]string)
 
-// maps a string identifier to a type. This is so you can
-// pass in a string for the *ById methods
+// maps a registered model name to a registered model type
 var modelNameToType map[string]reflect.Type = make(map[string]reflect.Type)
 
-// maps a string identifier to a modelSpec
+// maps a registered model name to a modelSpec
 var modelSpecs map[string]modelSpec = make(map[string]modelSpec)
 
 func newModelSpec(name string, typ reflect.Type) modelSpec {
