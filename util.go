@@ -7,6 +7,7 @@
 package zoom
 
 import (
+	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -136,7 +137,7 @@ func typeIsNumeric(typ reflect.Type) bool {
 
 func typeIsBool(typ reflect.Type) bool {
 	k := typ.Kind()
-	return k == reflect.Bool || (k == reflect.Ptr && typ.Elem().Kind() == reflect.Bool)
+	return k == reflect.Bool
 }
 
 func typeIsPrimative(typ reflect.Type) bool {
@@ -174,4 +175,20 @@ func looseEquals(one, two interface{}) (bool, error) {
 	}
 
 	return (string(oneBytes) == string(twoBytes)), nil
+}
+
+func convertNumericToFloat64(val reflect.Value) (float64, error) {
+	switch val.Type().Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		integer := val.Int()
+		return float64(integer), nil
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		uinteger := val.Uint()
+		return float64(uinteger), nil
+	case reflect.Float32, reflect.Float64:
+		return val.Float(), nil
+	default:
+		msg := fmt.Sprintf("zoom: attempt to call convertNumericToFloat64 on non-numeric type %s", val.Type().String())
+		return 0.0, errors.New(msg)
+	}
 }

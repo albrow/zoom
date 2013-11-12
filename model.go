@@ -31,14 +31,16 @@ type Model interface {
 }
 
 type modelSpec struct {
-	modelType      reflect.Type
-	modelName      string
-	primatives     map[string]primative     // primative types: int, float, string, etc.
-	pointers       map[string]pointer       // pointers to primative tyeps: *int, *float, *string, etc.
-	inconvertibles map[string]inconvertible // types which cannot be directly converted. fallback to json/msgpack
-	sets           map[string]externalSet   // separate set entities
-	lists          map[string]externalList  // separate list entities
-	relationships  map[string]relationship  // pointers to structs of registered types
+	modelType        reflect.Type
+	modelName        string
+	primatives       map[string]primative     // primative types: int, float, string, etc.
+	pointers         map[string]pointer       // pointers to primative tyeps: *int, *float, *string, etc.
+	inconvertibles   map[string]inconvertible // types which cannot be directly converted. fallback to json/msgpack
+	sets             map[string]externalSet   // separate set entities
+	lists            map[string]externalList  // separate list entities
+	relationships    map[string]relationship  // pointers to structs of registered types
+	primativeIndexes map[string]primative     // indexes specified with the zoom:"index" tag on primative field types
+	pointerIndexes   map[string]pointer       // indexes specified with the zoom:"index" tag on pointer to primative field types
 	// TODO add external hashes
 }
 
@@ -46,6 +48,7 @@ type primative struct {
 	redisName string
 	fieldName string
 	fieldType reflect.Type
+	iType     indexType
 }
 
 type pointer struct {
@@ -53,6 +56,7 @@ type pointer struct {
 	fieldName string
 	fieldType reflect.Type
 	elemType  reflect.Type
+	iType     indexType
 }
 
 type inconvertible struct {
@@ -90,6 +94,14 @@ const (
 	oneToMany
 )
 
+type indexType int
+
+const (
+	indexNumeric = iota
+	indexAlpha
+	indexBoolean
+)
+
 type modelRef struct {
 	model     Model
 	modelSpec modelSpec
@@ -108,14 +120,16 @@ var modelSpecs map[string]modelSpec = make(map[string]modelSpec)
 
 func newModelSpec(name string, typ reflect.Type) modelSpec {
 	return modelSpec{
-		modelType:      typ,
-		modelName:      name,
-		primatives:     make(map[string]primative),
-		pointers:       make(map[string]pointer),
-		inconvertibles: make(map[string]inconvertible),
-		sets:           make(map[string]externalSet),
-		lists:          make(map[string]externalList),
-		relationships:  make(map[string]relationship),
+		modelType:        typ,
+		modelName:        name,
+		primatives:       make(map[string]primative),
+		pointers:         make(map[string]pointer),
+		inconvertibles:   make(map[string]inconvertible),
+		sets:             make(map[string]externalSet),
+		lists:            make(map[string]externalList),
+		relationships:    make(map[string]relationship),
+		primativeIndexes: make(map[string]primative),
+		pointerIndexes:   make(map[string]pointer),
 	}
 }
 
@@ -239,6 +253,21 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 		} else if redisName == "" {
 			redisName = field.Name
 		}
+		// parse additional options in the zoom tag (e.g. index)
+		zoomTag := tag.Get("zoom")
+		index := false
+		if zoomTag != "" {
+			options := strings.Split(zoomTag, ",")
+			for _, op := range options {
+				switch op {
+				case "index":
+					index = true
+				default:
+					msg := fmt.Sprintf("zoom: unrecognized option specified in struct tag: %s", op)
+					return errors.New(msg)
+				}
+			}
+		}
 		if typeIsPrimative(field.Type) {
 			// primative
 			p := primative{
@@ -247,6 +276,19 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 				fieldType: field.Type,
 			}
 			ms.primatives[field.Name] = p
+			if index {
+				if typeIsNumeric(field.Type) {
+					p.iType = indexNumeric
+				} else if typeIsString(field.Type) {
+					p.iType = indexAlpha
+				} else if typeIsBool(field.Type) {
+					p.iType = indexBoolean
+				} else {
+					msg := fmt.Sprintf("zoom: Requested index on unsupported type %s\n", field.Type.String())
+					return errors.New(msg)
+				}
+				ms.primativeIndexes[field.Name] = p
+			}
 		} else if field.Type.Kind() == reflect.Ptr {
 			if typeIsPrimative(field.Type.Elem()) {
 				// pointer to a primative
@@ -257,6 +299,19 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 					elemType:  field.Type.Elem(),
 				}
 				ms.pointers[field.Name] = p
+				if index {
+					if typeIsNumeric(field.Type.Elem()) {
+						p.iType = indexNumeric
+					} else if typeIsString(field.Type.Elem()) {
+						p.iType = indexAlpha
+					} else if typeIsBool(field.Type.Elem()) {
+						p.iType = indexBoolean
+					} else {
+						msg := fmt.Sprintf("zoom: Requested index on unsupported type %s\n", field.Type.Elem().String())
+						return errors.New(msg)
+					}
+					ms.pointerIndexes[field.Name] = p
+				}
 			} else if typeIsPointerToStruct(field.Type) {
 				if modelTypeIsRegistered(field.Type) {
 					// one-to-one relationship
