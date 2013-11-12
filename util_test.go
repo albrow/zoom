@@ -127,3 +127,5 @@ func TestCompareAsSet(t *testing.T) {
 		t.Errorf("equal was incorrect.\nExpected: %t\nGot: %t\nMsg: %s\n", false, equal, msg)
 	}
 }
+
+// TODO: test other functions which may be mising from here!
