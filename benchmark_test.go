@@ -101,6 +101,7 @@ func BenchmarkFindById(b *testing.B) {
 	if err != nil {
 		b.Error(err)
 	}
+	MSave(Models(ms))
 	ids := make([]string, len(ms))
 	for i, p := range ms {
 		ids[i] = p.Id
@@ -128,6 +129,7 @@ func BenchmarkScanById(b *testing.B) {
 	if err != nil {
 		b.Error(err)
 	}
+	MSave(Models(ms))
 	ids := make([]string, len(ms))
 	for i, p := range ms {
 		ids[i] = p.Id
@@ -195,9 +197,9 @@ func benchmarkSave(b *testing.B, num int, modelSelect func(int, []*basicModel) *
 	// run the actual test
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		p := modelSelect(i, ms)
+		m := modelSelect(i, ms)
 		b.StartTimer()
-		err := Save(p)
+		err := Save(m)
 		b.StopTimer()
 		if err != nil {
 			b.Fatal(err)

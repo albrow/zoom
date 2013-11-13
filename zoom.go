@@ -122,6 +122,7 @@ func MFindById(modelNames, ids []string) ([]Model, error) {
 			return results, err
 		}
 		mr.model.setId(id)
+		fmt.Println("possibleHits inside transaction: ", mr.possibleKeyHits)
 
 		// add a find operation to the transaction
 		t.findModel(mr, nil)
