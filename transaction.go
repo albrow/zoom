@@ -41,7 +41,7 @@ func (t *transaction) command(cmd string, args []interface{}, handler func(inter
 }
 
 func (t *transaction) exec() error {
-	defer t.conn.Close()
+	defer t.discard()
 
 	// invoke redis driver to execute the transaction
 	replies, err := redis.MultiBulk(t.conn.Do("EXEC"))
@@ -81,7 +81,19 @@ func newScanHandler(mr modelRef, scannables []interface{}) func(interface{}) err
 			return err
 		}
 		if len(replies) == 0 {
-			return checkModelExists(mr)
+			// there was a miss
+			mr.possibleKeyHits -= 1
+			if mr.possibleKeyHits == 0 {
+				// if we are out of possible hits (i.e. none of the keys which could have
+				// possibly been storing data for the model returned anything), it means
+				// one of two things: (1) the model is not in the database or (2) all of
+				// the fields/attributes of the model are nil. In case (2) we should
+				// simply return an empty model struct. But for case (1) we should return
+				// a KeyNotFoundError. We need to do one final thing to differentiate between
+				// (1) and (2): check if the model has been indexed in the <modelName>:index
+				// set. If it has, it means (2). If it has not, it means (1).
+				return checkModelExists(mr)
+			}
 		}
 		if _, err := redis.Scan(replies, scannables...); err != nil {
 			return err
@@ -98,7 +110,19 @@ func newScanModelHandler(mr modelRef) func(interface{}) error {
 			return err
 		}
 		if len(bulk) == 0 {
-			return checkModelExists(mr)
+			// there was a miss
+			mr.possibleKeyHits -= 1
+			if mr.possibleKeyHits == 0 {
+				// if we are out of possible hits (i.e. none of the keys which could have
+				// possibly been storing data for the model returned anything), it means
+				// one of two things: (1) the model is not in the database or (2) all of
+				// the fields/attributes of the model are nil. In case (2) we should
+				// simply return an empty model struct. But for case (1) we should return
+				// a KeyNotFoundError. We need to do one final thing to differentiate between
+				// (1) and (2): check if the model has been indexed in the <modelName>:index
+				// set. If it has, it means (2). If it has not, it means (1).
+				return checkModelExists(mr)
+			}
 		}
 		if err := scanModel(bulk, mr); err != nil {
 			return err
@@ -109,11 +133,26 @@ func newScanModelHandler(mr modelRef) func(interface{}) error {
 
 // newScanSliceHandler invokes redis driver to scan multiple values into a single
 // slice or array. The reflect.Value of the slice or array should be passed as an argument.
-func newScanSliceHandler(scanVal reflect.Value) func(interface{}) error {
+func newScanSliceHandler(mr modelRef, scanVal reflect.Value) func(interface{}) error {
 	return func(reply interface{}) error {
 		bulk, err := redis.MultiBulk(reply, nil)
 		if err != nil {
 			return err
+		}
+		if len(bulk) == 0 {
+			// there was a miss
+			mr.possibleKeyHits -= 1
+			if mr.possibleKeyHits == 0 {
+				// if we are out of possible hits (i.e. none of the keys which could have
+				// possibly been storing data for the model returned anything), it means
+				// one of two things: (1) the model is not in the database or (2) all of
+				// the fields/attributes of the model are nil. In case (2) we should
+				// simply return an empty model struct. But for case (1) we should return
+				// a KeyNotFoundError. We need to do one final thing to differentiate between
+				// (1) and (2): check if the model has been indexed in the <modelName>:index
+				// set. If it has, it means (2). If it has not, it means (1).
+				return checkModelExists(mr)
+			}
 		}
 		scanType := scanVal.Type()
 		scanElem := scanType.Elem()
@@ -501,7 +540,7 @@ func (t *transaction) findModelLists(mr modelRef, includes []string) error {
 		// use LRANGE to get all the members of the list
 		listKey := mr.key() + ":" + list.redisName
 		args := redis.Args{listKey, 0, -1}
-		if err := t.command("LRANGE", args, newScanSliceHandler(field)); err != nil {
+		if err := t.command("LRANGE", args, newScanSliceHandler(mr, field)); err != nil {
 			return err
 		}
 	}
@@ -521,7 +560,7 @@ func (t *transaction) findModelSets(mr modelRef, includes []string) error {
 		// use SMEMBERS to get all the members of the set
 		setKey := mr.key() + ":" + set.redisName
 		args := redis.Args{setKey}
-		if err := t.command("SMEMBERS", args, newScanSliceHandler(field)); err != nil {
+		if err := t.command("SMEMBERS", args, newScanSliceHandler(mr, field)); err != nil {
 			return err
 		}
 	}
@@ -687,9 +726,10 @@ func (t *transaction) unindex(key, value string) error {
 	return nil
 }
 
-// check to see if the model id exists in the index. If it doesn't
+// check to see if the model id exists in the index. If it doesn't,
 // return KeyNotFoundError
 func checkModelExists(mr modelRef) error {
+	fmt.Println("checking if model exists...")
 	conn := GetConn()
 	defer conn.Close()
 

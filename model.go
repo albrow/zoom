@@ -41,6 +41,7 @@ type modelSpec struct {
 	relationships    map[string]relationship  // pointers to structs of registered types
 	primativeIndexes map[string]primative     // indexes specified with the zoom:"index" tag on primative field types
 	pointerIndexes   map[string]pointer       // indexes specified with the zoom:"index" tag on pointer to primative field types
+	numKeys          int                      // number of keys which might be used to store the model (useful for determining whether the model was found)
 	// TODO add external hashes
 }
 
@@ -103,8 +104,9 @@ const (
 )
 
 type modelRef struct {
-	model     Model
-	modelSpec modelSpec
+	model           Model
+	modelSpec       modelSpec
+	possibleKeyHits int
 }
 
 // maps a registered model type to a registered model name
@@ -140,6 +142,7 @@ func newModelRefFromModel(m Model) (modelRef, error) {
 		return mr, err
 	}
 	mr.modelSpec = modelSpecs[modelName]
+	mr.possibleKeyHits = mr.modelSpec.numKeys
 	return mr, nil
 }
 
@@ -156,6 +159,7 @@ func newModelRefFromInterface(in interface{}) (modelRef, error) {
 		return mr, err
 	}
 	mr.modelSpec = modelSpecs[modelName]
+	mr.possibleKeyHits = mr.modelSpec.numKeys
 	return mr, nil
 }
 
@@ -163,6 +167,7 @@ func newModelRefFromName(modelName string) (modelRef, error) {
 	mr := modelRef{
 		modelSpec: modelSpecs[modelName],
 	}
+	mr.possibleKeyHits = mr.modelSpec.numKeys
 	// create a new struct of the proper type
 	val := reflect.New(mr.modelSpec.modelType.Elem())
 	m, ok := val.Interface().(Model)
@@ -373,6 +378,19 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 			ms.addInconvertible(field, redisName)
 		}
 	}
+
+	// count up numKeys
+	ms.numKeys = 0
+	if len(ms.primatives) != 0 || len(ms.pointers) != 0 || len(ms.inconvertibles) != 0 {
+		// count 1 key for the main hash object
+		ms.numKeys += 1
+	}
+	// count 1 key for each external list
+	ms.numKeys += len(ms.lists)
+	// count 1 key for each external set
+	ms.numKeys += len(ms.lists)
+	// count 1 key for each relationship
+	ms.numKeys += len(ms.relationships)
 
 	return nil
 }
