@@ -695,7 +695,9 @@ func (t *transaction) findModelOneToManyRelation(mr modelRef, r relationship) er
 	return nil
 }
 
-func (t *transaction) deleteModel(modelName, id string) error {
+func (t *transaction) deleteModel(mr modelRef) error {
+	modelName := mr.modelSpec.modelName
+	id := mr.model.getId()
 
 	// add an operation to delete the model itself
 	key := modelName + ":" + id
@@ -708,6 +710,58 @@ func (t *transaction) deleteModel(modelName, id string) error {
 	if err := t.unindex(indexKey, id); err != nil {
 		return err
 	}
+
+	// add an operation to remove all the field indexes for the model
+	if err := t.removeModelIndexes(mr); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (t *transaction) deleteModelById(modelName, id string) error {
+
+	ms, found := modelSpecs[modelName]
+	if !found {
+		return NewModelNameNotRegisteredError(modelName)
+	}
+
+	// add an operation to remove all the field indexes for the model
+	// we want to do this first because if there is an error or if the model
+	// never existed, there is no need to continue
+	if len(ms.primativeIndexes) != 0 || len(ms.pointerIndexes) != 0 {
+		m, err := FindById(modelName, id)
+		if err != nil {
+			if _, ok := err.(*KeyNotFoundError); ok {
+				// if it was a key not found error, the model we're trying to delete
+				// doesn't exist in the first place. so return nil
+				return nil
+			} else {
+				// this means there was an unexpected error
+				return err
+			}
+		}
+		mr, err := newModelRefFromModel(m)
+		if err != nil {
+			return err
+		}
+		if err := t.removeModelIndexes(mr); err != nil {
+			return err
+		}
+	}
+
+	// add an operation to delete the model itself
+	key := modelName + ":" + id
+	if err := t.delete(key); err != nil {
+		return err
+	}
+
+	// add an operation to remove the model id from the index
+	indexKey := modelName + ":all"
+	if err := t.unindex(indexKey, id); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -720,6 +774,130 @@ func (t *transaction) delete(key string) error {
 
 func (t *transaction) unindex(key, value string) error {
 	args := redis.Args{}.Add(key).Add(value)
+	if err := t.command("SREM", args, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *transaction) removeModelIndexes(mr modelRef) error {
+	for _, p := range mr.modelSpec.primativeIndexes {
+		if p.iType == indexNumeric {
+			if err := t.removeModelPrimativeIndexNumeric(mr, p); err != nil {
+				return err
+			}
+		} else if p.iType == indexAlpha {
+			if err := t.removeModelPrimativeIndexAlpha(mr, p); err != nil {
+				return err
+			}
+		} else if p.iType == indexBoolean {
+			if err := t.removeModelPrimativeIndexBoolean(mr, p); err != nil {
+				return err
+			}
+		}
+	}
+
+	for _, p := range mr.modelSpec.pointerIndexes {
+		if p.iType == indexNumeric {
+			if err := t.removeModelPointerIndexNumeric(mr, p); err != nil {
+				return err
+			}
+		} else if p.iType == indexAlpha {
+			if err := t.removeModelPointerIndexAlpha(mr, p); err != nil {
+				return err
+			}
+		} else if p.iType == indexBoolean {
+			if err := t.removeModelPointerIndexBoolean(mr, p); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (t *transaction) removeModelPrimativeIndexNumeric(mr modelRef, p primative) error {
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	id := mr.model.getId()
+	return t.unindexNumeric(indexKey, id)
+}
+
+func (t *transaction) removeModelPointerIndexNumeric(mr modelRef, p pointer) error {
+	if mr.value(p.fieldName).IsNil() {
+		// TODO: special case for indexing nil pointers?
+		return nil // skip nil pointers for now
+	}
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	id := mr.model.getId()
+	return t.unindexNumeric(indexKey, id)
+}
+
+func (t *transaction) unindexNumeric(indexKey string, id string) error {
+	args := redis.Args{}.Add(indexKey).Add(id)
+	if err := t.command("ZREM", args, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *transaction) removeModelPrimativeIndexAlpha(mr modelRef, p primative) error {
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	value := mr.value(p.fieldName).String()
+	id := mr.model.getId()
+	return t.unindexAlpha(indexKey, value, id)
+}
+
+func (t *transaction) removeModelPointerIndexAlpha(mr modelRef, p pointer) error {
+	if mr.value(p.fieldName).IsNil() {
+		// TODO: special case for indexing nil pointers?
+		return nil // skip nil pointers for now
+	}
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	value := mr.value(p.fieldName).Elem().String()
+	id := mr.model.getId()
+	return t.unindexAlpha(indexKey, value, id)
+	return nil
+}
+
+func (t *transaction) unindexAlpha(indexKey, value, id string) error {
+	member := value + " " + id
+	args := redis.Args{}.Add(indexKey).Add(member)
+	if err := t.command("ZREM", args, nil); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (t *transaction) removeModelPrimativeIndexBoolean(mr modelRef, p primative) error {
+	value := mr.value(p.fieldName).Bool()
+	id := mr.model.getId()
+	var indexKey string
+	if value == true {
+		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":true"
+	} else {
+		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":false"
+	}
+	return t.unindexBoolean(indexKey, id)
+}
+
+func (t *transaction) removeModelPointerIndexBoolean(mr modelRef, p pointer) error {
+	if mr.value(p.fieldName).IsNil() {
+		// TODO: special case for indexing nil pointers?
+		return nil // skip nil pointers for now
+	}
+	value := mr.value(p.fieldName).Elem().Bool()
+	id := mr.model.getId()
+	var indexKey string
+	if value == true {
+		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":true"
+	} else {
+		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":false"
+	}
+	return t.unindexBoolean(indexKey, id)
+}
+
+func (t *transaction) unindexBoolean(indexKey, id string) error {
+	args := redis.Args{}.Add(indexKey).Add(id)
 	if err := t.command("SREM", args, nil); err != nil {
 		return err
 	}

@@ -14,6 +14,7 @@ import (
 	"testing"
 )
 
+// Test that the redis ignore struct tag causes a field to be ignored
 func TestRedisIgnoreOption(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -54,6 +55,7 @@ func TestRedisIgnoreOption(t *testing.T) {
 	}
 }
 
+// Test that the redis name struct tag causes a field's name in redis to be changed
 func TestRedisNameOption(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -108,6 +110,7 @@ func TestInvalidOptionThrowsError(t *testing.T) {
 	Unregister(&invalid{})
 }
 
+// Test that a model spec for a model type with primative indexes is created properly
 func TestIndexedPrimativesModelSpec(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -130,7 +133,7 @@ func TestIndexedPrimativesModelSpec(t *testing.T) {
 				}
 			case typeIsString(field.Type):
 				if index.iType != indexAlpha {
-					t.Errorf("Expected iType to be alpha (%d) but got: %d", indexAlpha, index.iType)
+					t.Errorf("Expected iType to be boolean (%d) but got: %d", indexAlpha, index.iType)
 				}
 			case typeIsBool(field.Type):
 				if index.iType != indexBoolean {
@@ -141,6 +144,7 @@ func TestIndexedPrimativesModelSpec(t *testing.T) {
 	}
 }
 
+// Test that a model spec for a model type with pointer indexes is created properly
 func TestIndexedPointersModelSpec(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -177,6 +181,7 @@ func TestIndexedPointersModelSpec(t *testing.T) {
 	}
 }
 
+// Test that the indexes are actually created in redis for a model with primative indexes
 func TestSaveIndexedPrimativesModel(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -209,17 +214,18 @@ func TestSaveIndexedPrimativesModel(t *testing.T) {
 		val := reflect.ValueOf(m).Elem().FieldByName(field.Name)
 		switch {
 		case typeIsNumeric(field.Type):
-			validateNumericIndex(t, "indexedPrimativesModel", m.Id, field.Name, val, conn)
+			validateNumericIndexExists(t, "indexedPrimativesModel", m.Id, field.Name, val, conn)
 		case typeIsString(field.Type):
-			validateAlphaIndex(t, "indexedPrimativesModel", m.Id, field.Name, val.String(), conn)
+			validateAlphaIndexExists(t, "indexedPrimativesModel", m.Id, field.Name, val.String(), conn)
 		case typeIsBool(field.Type):
-			validateBooleanIndex(t, "indexedPrimativesModel", m.Id, field.Name, val.Bool(), conn)
+			validateBooleanIndexExists(t, "indexedPrimativesModel", m.Id, field.Name, val.Bool(), conn)
 		default:
 			t.Errorf("Unexpected type %s in struct for %s", field.Type.String(), "indexedPrimativesModel")
 		}
 	}
 }
 
+// Test that the indexes are actually created in redis for a model with pointer indexes
 func TestSaveIndexedPointersModel(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -253,45 +259,187 @@ func TestSaveIndexedPointersModel(t *testing.T) {
 		val := ptr.Elem()
 		switch {
 		case typeIsNumeric(field.Type.Elem()):
-			validateNumericIndex(t, "indexedPointersModel", m.Id, field.Name, val, conn)
+			validateNumericIndexExists(t, "indexedPointersModel", m.Id, field.Name, val, conn)
 		case typeIsString(field.Type.Elem()):
-			validateAlphaIndex(t, "indexedPointersModel", m.Id, field.Name, val.String(), conn)
+			validateAlphaIndexExists(t, "indexedPointersModel", m.Id, field.Name, val.String(), conn)
 		case typeIsBool(field.Type.Elem()):
-			validateBooleanIndex(t, "indexedPointersModel", m.Id, field.Name, val.Bool(), conn)
+			validateBooleanIndexExists(t, "indexedPointersModel", m.Id, field.Name, val.Bool(), conn)
 		default:
 			t.Errorf("Unexpected type %s in struct for %s", field.Type.String(), "indexedPrimativesModel")
 		}
 	}
 }
 
-// validate index on a numeric type
-func validateNumericIndex(t *testing.T, modelName string, modelId string, fieldName string, fieldValue reflect.Value, conn redis.Conn) {
-	indexKey := modelName + ":" + fieldName
-	score, err := convertNumericToFloat64(fieldValue)
+// Test that the indexes are removed from redis after a model with primative indexes is deleted
+func TestDeleteIndexedPrimativesModel(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newIndexedPrimativesModels(1)
 	if err != nil {
 		t.Error(err)
 	}
-	results, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
-	if err != nil {
+	m := ms[0]
+
+	if err := Save(m); err != nil {
 		t.Error(err)
 	}
-	if len(results) == 0 {
-		t.Errorf("numeric index was not set.\nExpected %s:%s to have score %f\n", modelName, modelId, score)
+	if err := Delete(m); err != nil {
+		t.Error(err)
+	}
+
+	conn := GetConn()
+	defer conn.Close()
+
+	spec, found := modelSpecs["indexedPrimativesModel"]
+	if !found {
+		t.Error("Could not find modelSpec for indexedPrimativesModel")
+	}
+	numFields := spec.modelType.Elem().NumField()
+
+	// iterate through each field using reflection and validate that the index was set properly
+	for i := 0; i < numFields; i++ {
+		field := spec.modelType.Elem().Field(i)
+		if field.Anonymous {
+			continue // skip embedded structs
+		}
+		val := reflect.ValueOf(m).Elem().FieldByName(field.Name)
+		switch {
+		case typeIsNumeric(field.Type):
+			validateNumericIndexNotExists(t, "indexedPrimativesModel", m.Id, field.Name, val, conn)
+		case typeIsString(field.Type):
+			validateAlphaIndexNotExists(t, "indexedPrimativesModel", m.Id, field.Name, val.String(), conn)
+		case typeIsBool(field.Type):
+			validateBooleanIndexNotExists(t, "indexedPrimativesModel", m.Id, field.Name, val.Bool(), conn)
+		default:
+			t.Errorf("Unexpected type %s in struct for %s", field.Type.String(), "indexedPrimativesModel")
+		}
 	}
 }
 
-// validate index on a string type
-func validateAlphaIndex(t *testing.T, modelName string, modelId string, fieldName string, fieldValue string, conn redis.Conn) {
+// Test that the indexes are removed from redis after a model with pointer indexes is deleted
+func TestDeleteIndexedPointersModel(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newIndexedPointersModels(1)
+	if err != nil {
+		t.Error(err)
+	}
+	m := ms[0]
+
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+	if err := Delete(m); err != nil {
+		t.Error(err)
+	}
+
+	conn := GetConn()
+	defer conn.Close()
+
+	spec, found := modelSpecs["indexedPointersModel"]
+	if !found {
+		t.Error("Could not find modelSpec for indexedPointersModel")
+	}
+	numFields := spec.modelType.Elem().NumField()
+
+	// iterate through each field using reflection and validate that the index was set properly
+	for i := 0; i < numFields; i++ {
+		field := spec.modelType.Elem().Field(i)
+		if field.Anonymous {
+			continue // skip embedded structs
+		}
+		ptr := reflect.ValueOf(m).Elem().FieldByName(field.Name)
+		val := ptr.Elem()
+		switch {
+		case typeIsNumeric(field.Type.Elem()):
+			validateNumericIndexNotExists(t, "indexedPointersModel", m.Id, field.Name, val, conn)
+		case typeIsString(field.Type.Elem()):
+			validateAlphaIndexNotExists(t, "indexedPointersModel", m.Id, field.Name, val.String(), conn)
+		case typeIsBool(field.Type.Elem()):
+			validateBooleanIndexNotExists(t, "indexedPointersModel", m.Id, field.Name, val.Bool(), conn)
+		default:
+			t.Errorf("Unexpected type %s in struct for %s", field.Type.String(), "indexedPrimativesModel")
+		}
+	}
+}
+
+// returns true if the numeric index exists
+// if err is not nil there was an unexpected error
+func numericIndexExists(modelName string, modelId string, fieldName string, fieldValue reflect.Value, conn redis.Conn) (bool, error) {
+	indexKey := modelName + ":" + fieldName
+	score, err := convertNumericToFloat64(fieldValue)
+	if err != nil {
+		return false, err
+	}
+	results, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
+	if err != nil {
+		return false, err
+	}
+	return len(results) != 0, nil
+}
+
+// make sure an alpha index exists
+// uses t.Error or t.Errorf to report an error if the index does not exist
+func validateNumericIndexExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue reflect.Value, conn redis.Conn) {
+	if found, err := numericIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
+		t.Errorf("unexpected error:\n%s", err)
+	} else if !found {
+		t.Errorf("numeric index was not set.\nExpected %s:%s to have valid score\n", modelName, modelId)
+	}
+}
+
+// make sure an numeric index DOES NOT exist
+// uses t.Error or t.Errorf to report an error if the index DOES exist
+func validateNumericIndexNotExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue reflect.Value, conn redis.Conn) {
+	if found, err := numericIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
+		t.Errorf("unexpected error:\n%s", err)
+	} else if found {
+		t.Errorf("numeric index was set.\nExpected %s:%s to be gone, but it was there\n", modelName, modelId)
+	}
+}
+
+// returns true if the alpha index exists
+// if err is not nil there was an unexpected error
+func alphaIndexExists(modelName string, modelId string, fieldName string, fieldValue string, conn redis.Conn) (bool, error) {
 	indexKey := modelName + ":" + fieldName
 	memberKey := fieldValue + " " + modelId
 	_, err := redis.Int(conn.Do("ZRANK", indexKey, memberKey))
 	if err != nil {
-		t.Errorf("alpha index was not set\nExpected to find member %s\n%s", memberKey, err)
+		if err == redis.ErrNil {
+			return false, nil
+		} else {
+			return false, err
+		}
+	} else {
+		return true, nil
 	}
 }
 
-// validate index on a boolean type
-func validateBooleanIndex(t *testing.T, modelName string, modelId string, fieldName string, fieldValue bool, conn redis.Conn) {
+// make sure an alpha index exists
+// uses t.Error or t.Errorf to report an error if the index does not exist
+func validateAlphaIndexExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue string, conn redis.Conn) {
+	if found, err := alphaIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
+		t.Errorf("unexpected error:\n%s", err)
+	} else if !found {
+		t.Errorf("alpha index was not set\nExpected to find member %s %s\n%s", fieldValue, modelId, err)
+	}
+}
+
+// make sure an alpha index DOES NOT exist
+// uses t.Error or t.Errorf to report an error if the index DOES exist
+func validateAlphaIndexNotExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue string, conn redis.Conn) {
+	if found, err := alphaIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
+		t.Errorf("unexpected error:\n%s", err)
+	} else if found {
+		t.Errorf("alpha index was set.\nExpected member %s %s to be gone.\n", fieldValue, modelId)
+	}
+}
+
+// returns true if the boolean index exists
+// if err is not nil there was an unexpected error
+func booleanIndexExists(modelName string, modelId string, fieldName string, fieldValue bool, conn redis.Conn) (bool, error) {
 	var indexKey string
 	if fieldValue == true {
 		indexKey = modelName + ":" + fieldName + ":true"
@@ -299,8 +447,28 @@ func validateBooleanIndex(t *testing.T, modelName string, modelId string, fieldN
 		indexKey = modelName + ":" + fieldName + ":false"
 	}
 	if found, err := redis.Bool(conn.Do("SISMEMBER", indexKey, modelId)); err != nil {
-		t.Error(err)
+		return false, err
+	} else {
+		return found, nil
+	}
+}
+
+// make sure an boolean index exists
+// uses t.Error or t.Errorf to report an error if the index does not exist
+func validateBooleanIndexExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue bool, conn redis.Conn) {
+	if found, err := booleanIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
+		t.Errorf("unexpected error:\n%s", err)
 	} else if !found {
-		t.Errorf("bool index was not set\nExpected to find member %s in set %s\n", modelId, indexKey)
+		t.Errorf("bool index was not set\nExpected to find member %s\n", modelId)
+	}
+}
+
+// make sure an boolean index DOES NOT exist
+// uses t.Error or t.Errorf to report an error if the index DOES exist
+func validateBooleanIndexNotExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue bool, conn redis.Conn) {
+	if found, err := booleanIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
+		t.Errorf("unexpected error:\n%s", err)
+	} else if found {
+		t.Errorf("bool index was set\nExpected member %s to be gone.\n", modelId)
 	}
 }
