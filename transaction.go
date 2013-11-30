@@ -729,7 +729,6 @@ func (t *transaction) unindex(key, value string) error {
 // check to see if the model id exists in the index. If it doesn't,
 // return KeyNotFoundError
 func checkModelExists(mr modelRef) error {
-	fmt.Println("checking if model exists...")
 	conn := GetConn()
 	defer conn.Close()
 
