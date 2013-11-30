@@ -440,17 +440,18 @@ func validateAlphaIndexNotExists(t *testing.T, modelName string, modelId string,
 // returns true if the boolean index exists
 // if err is not nil there was an unexpected error
 func booleanIndexExists(modelName string, modelId string, fieldName string, fieldValue bool, conn redis.Conn) (bool, error) {
-	var indexKey string
+	indexKey := modelName + ":" + fieldName
+	var score float64
 	if fieldValue == true {
-		indexKey = modelName + ":" + fieldName + ":true"
+		score = 1.0
 	} else {
-		indexKey = modelName + ":" + fieldName + ":false"
+		score = 0.0
 	}
-	if found, err := redis.Bool(conn.Do("SISMEMBER", indexKey, modelId)); err != nil {
+	results, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
+	if err != nil {
 		return false, err
-	} else {
-		return found, nil
 	}
+	return len(results) != 0, nil
 }
 
 // make sure an boolean index exists

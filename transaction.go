@@ -441,13 +441,14 @@ func (t *transaction) indexAlpha(indexKey, value, id string) error {
 func (t *transaction) saveModelPrimativeIndexBoolean(mr modelRef, p primative) error {
 	value := mr.value(p.fieldName).Bool()
 	id := mr.model.getId()
-	var indexKey string
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	var score float64
 	if value == true {
-		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":true"
+		score = 1.0
 	} else {
-		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":false"
+		score = 0.0
 	}
-	return t.indexBoolean(indexKey, id)
+	return t.indexNumeric(indexKey, score, id)
 }
 
 func (t *transaction) saveModelPointerIndexBoolean(mr modelRef, p pointer) error {
@@ -457,21 +458,14 @@ func (t *transaction) saveModelPointerIndexBoolean(mr modelRef, p pointer) error
 	}
 	value := mr.value(p.fieldName).Elem().Bool()
 	id := mr.model.getId()
-	var indexKey string
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	var score float64
 	if value == true {
-		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":true"
+		score = 1.0
 	} else {
-		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":false"
+		score = 0.0
 	}
-	return t.indexBoolean(indexKey, id)
-}
-
-func (t *transaction) indexBoolean(indexKey, id string) error {
-	args := redis.Args{}.Add(indexKey).Add(id)
-	if err := t.command("SADD", args, nil); err != nil {
-		return err
-	}
-	return nil
+	return t.indexNumeric(indexKey, score, id)
 }
 
 func (t *transaction) findModel(mr modelRef, includes []string) error {
@@ -869,39 +863,15 @@ func (t *transaction) unindexAlpha(indexKey, value, id string) error {
 }
 
 func (t *transaction) removeModelPrimativeIndexBoolean(mr modelRef, p primative) error {
-	value := mr.value(p.fieldName).Bool()
 	id := mr.model.getId()
-	var indexKey string
-	if value == true {
-		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":true"
-	} else {
-		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":false"
-	}
-	return t.unindexBoolean(indexKey, id)
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	return t.unindexNumeric(indexKey, id)
 }
 
 func (t *transaction) removeModelPointerIndexBoolean(mr modelRef, p pointer) error {
-	if mr.value(p.fieldName).IsNil() {
-		// TODO: special case for indexing nil pointers?
-		return nil // skip nil pointers for now
-	}
-	value := mr.value(p.fieldName).Elem().Bool()
 	id := mr.model.getId()
-	var indexKey string
-	if value == true {
-		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":true"
-	} else {
-		indexKey = mr.modelSpec.modelName + ":" + p.redisName + ":false"
-	}
-	return t.unindexBoolean(indexKey, id)
-}
-
-func (t *transaction) unindexBoolean(indexKey, id string) error {
-	args := redis.Args{}.Add(indexKey).Add(id)
-	if err := t.command("SREM", args, nil); err != nil {
-		return err
-	}
-	return nil
+	indexKey := mr.modelSpec.modelName + ":" + p.redisName
+	return t.unindexNumeric(indexKey, id)
 }
 
 // check to see if the model id exists in the index. If it doesn't,
