@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// just get a connection and close it
+// Just gets a connection and closes it
 func BenchmarkConnection(b *testing.B) {
 
 	testingSetUp()
@@ -22,7 +22,7 @@ func BenchmarkConnection(b *testing.B) {
 	}
 }
 
-// get a connection, call PING, wait for response, and close it
+// Gets a connection, calls PING, waits for response, and closes it
 func BenchmarkPing(b *testing.B) {
 
 	checkReply := func(reply interface{}, err error) {
@@ -41,7 +41,7 @@ func BenchmarkPing(b *testing.B) {
 	benchmarkCommand(b, nil, checkReply, "PING")
 }
 
-// get a connection, call SET, wait for response, and close it
+// Gets a connection, calls SET, waits for response, and closes it
 func BenchmarkSet(b *testing.B) {
 
 	checkReply := func(reply interface{}, err error) {
@@ -53,7 +53,7 @@ func BenchmarkSet(b *testing.B) {
 	benchmarkCommand(b, nil, checkReply, "SET", "foo", "bar")
 }
 
-// get a connection, call GET, wait for response, and close it
+// Gets a connection, calls GET, waits for response, and closes it
 func BenchmarkGet(b *testing.B) {
 
 	setup := func() {
@@ -82,7 +82,7 @@ func BenchmarkGet(b *testing.B) {
 	benchmarkCommand(b, setup, checkReply, "GET", "foo")
 }
 
-// saves the same record repeatedly
+// Saves the same record repeatedly
 // (after the first save, nothing changes)
 func BenchmarkSave(b *testing.B) {
 	singleModelSelect := func(i int, models []*basicModel) *basicModel {
@@ -91,7 +91,26 @@ func BenchmarkSave(b *testing.B) {
 	benchmarkSave(b, 1, singleModelSelect)
 }
 
-// finds the same record over and over
+// Saves 100 models in a single transaction using MSAVE
+// NOTE: divide the reported time/op by 100 to get the time
+// to save per model
+func BenchmarkMSave100(b *testing.B) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newBasicModels(100)
+	if err != nil {
+		b.Error(err)
+	}
+	b.ResetTimer()
+	models := Models(ms)
+
+	for i := 0; i < b.N; i++ {
+		MSave(models)
+	}
+}
+
+// Finds one model at a time randomly from a set of 1000 models
 func BenchmarkFindById(b *testing.B) {
 	testingSetUp()
 	defer testingTearDown()
@@ -113,13 +132,47 @@ func BenchmarkFindById(b *testing.B) {
 	// run the actual test
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		id := ids[i%len(ids)]
+		index := randInt(0, len(ms)-1)
+		id := ids[index]
 		b.StartTimer()
 		FindById("basicModel", id)
 	}
 }
 
-// scans the same record over and over
+// Finds 100 models at a time selected randomly from a set of 10,000 models
+func BenchmarkMFindById100(b *testing.B) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create some models
+	ms, err := newBasicModels(10000)
+	if err != nil {
+		b.Error(err)
+	}
+	MSave(Models(ms))
+	ids := make([]string, len(ms))
+	for i, p := range ms {
+		ids[i] = p.Id
+	}
+
+	// reset the timer
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		selectedIds := selectRandomUniqueIds(100, ids)
+		modelNames := fillStringSlice(100, "basicModel")
+		b.StartTimer()
+		_, err := MFindById(modelNames, selectedIds)
+		b.StopTimer()
+		if err != nil {
+			b.Error(err)
+		}
+	}
+}
+
+// Scans a random model selected from a set of 1000 models
 func BenchmarkScanById(b *testing.B) {
 	testingSetUp()
 	defer testingTearDown()
@@ -141,22 +194,114 @@ func BenchmarkScanById(b *testing.B) {
 	// run the actual test
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		id := ids[i%len(ids)]
+		index := randInt(0, len(ms)-1)
+		id := ids[index]
 		mCopy := new(basicModel)
 		b.StartTimer()
 		ScanById(id, mCopy)
 	}
 }
 
-// repeatedly calls delete on a record
+// Scans 100 models at a time selected randomly from a set of 10,000 models
+func BenchmarkMScanById100(b *testing.B) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create some models
+	ms, err := newBasicModels(10000)
+	if err != nil {
+		b.Error(err)
+	}
+	MSave(Models(ms))
+	ids := make([]string, len(ms))
+	for i, p := range ms {
+		ids[i] = p.Id
+	}
+
+	// reset the timer
+	b.ResetTimer()
+
+	// run the actual test
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		selectedIds := selectRandomUniqueIds(100, ids)
+		models := make([]*basicModel, 100)
+		b.StartTimer()
+		err := MScanById(selectedIds, &models)
+		b.StopTimer()
+		if err != nil {
+			b.Error(err)
+		}
+	}
+}
+
+// Repeatedly calls delete on a record
 // (after the first, the record will have already been deleted)
 func BenchmarkRepeatDeleteById(b *testing.B) {
 	benchmarkDeleteById(b, 1, singleIdSelect)
 }
 
-// randomly calls delete on a list of records
+// Randomly calls delete on a list of records
+// repeated deletes have no effect
 func BenchmarkRandomDeleteById(b *testing.B) {
 	benchmarkDeleteById(b, 1000, randomIdSelect)
+}
+
+// Find all models from a set of 10 models using a query
+func BenchmarkFindAllQuery1(b *testing.B) {
+	benchmarkFindAllQuery(b, 10)
+}
+
+// Find all models from a set of 1,000 models using a query
+func BenchmarkFindAllQuery1000(b *testing.B) {
+	benchmarkFindAllQuery(b, 1000)
+}
+
+// Find all models from a set of 100,000 models using a query
+func BenchmarkFindAllQuery100000(b *testing.B) {
+	benchmarkFindAllQuery(b, 100000)
+}
+
+// Count all models from a set of 10 models using a query
+func BenchmarkCountAllQuery1(b *testing.B) {
+	benchmarkCountAllQuery(b, 10)
+}
+
+// Count all models from a set of 1,000 models using a query
+func BenchmarkCountAllQuery1000(b *testing.B) {
+	benchmarkCountAllQuery(b, 1000)
+}
+
+// Count all models from a set of 100,000 models using a query
+func BenchmarkCountAllQuery100000(b *testing.B) {
+	benchmarkCountAllQuery(b, 100000)
+}
+
+// Deletes 100 models at a time randomly selected from a set of 10,000 models
+// repeated delets have no effect
+func BenchmarkMDeleteById(b *testing.B) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create some models
+	ms, err := newBasicModels(10000)
+	if err != nil {
+		b.Error(err)
+	}
+	MSave(Models(ms))
+	ids := make([]string, len(ms))
+	for i, p := range ms {
+		ids[i] = p.Id
+	}
+
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StopTimer()
+		selectedIds := selectRandomUniqueIds(100, ids)
+		modelNames := fillStringSlice(100, "basicModel")
+		b.StartTimer()
+		MDeleteById(modelNames, selectedIds)
+	}
 }
 
 func benchmarkCommand(b *testing.B, setup func(), checkReply func(interface{}, error), cmd string, args ...interface{}) {
@@ -240,6 +385,9 @@ func benchmarkDelete(b *testing.B, num int, modelSelect func(int, []*basicModel)
 	if err != nil {
 		b.Error(err)
 	}
+	if err := MSave(Models(ms)); err != nil {
+		b.Error(err)
+	}
 
 	b.ResetTimer()
 
@@ -249,6 +397,54 @@ func benchmarkDelete(b *testing.B, num int, modelSelect func(int, []*basicModel)
 		m := modelSelect(i, ms)
 		b.StartTimer()
 		Delete(m)
+	}
+}
+
+func benchmarkFindAllQuery(b *testing.B, num int) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newBasicModels(num)
+	if err != nil {
+		b.Error(err)
+	}
+	if err := MSave(Models(ms)); err != nil {
+		b.Error(err)
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		b.StartTimer()
+		_, err := NewQuery("basicModel").Run()
+		b.StopTimer()
+		if err != nil {
+			b.Error(err)
+		}
+	}
+}
+
+func benchmarkCountAllQuery(b *testing.B, num int) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newBasicModels(num)
+	if err != nil {
+		b.Error(err)
+	}
+	if err := MSave(Models(ms)); err != nil {
+		b.Error(err)
+	}
+
+	b.ResetTimer()
+
+	for i := 0; i < b.N; i++ {
+		b.StartTimer()
+		_, err := NewQuery("basicModel").Count()
+		b.StopTimer()
+		if err != nil {
+			b.Error(err)
+		}
 	}
 }
 
@@ -262,4 +458,30 @@ func sequentialIdSelect(i int, ids []string) string {
 
 func randomIdSelect(i int, ids []string) string {
 	return ids[randInt(0, len(ids)-1)]
+}
+
+// selects num random ids from the set of ids
+func selectRandomUniqueIds(num int, ids []string) []string {
+	selected := make(map[string]bool)
+	for len(selected) < num {
+		index := randInt(0, len(ids)-1)
+		id := ids[index]
+		if _, found := selected[id]; !found {
+			selected[id] = true
+		}
+	}
+	results := make([]string, 0)
+	for key, _ := range selected {
+		results = append(results, key)
+	}
+	return results
+}
+
+// fills a string slice with the num occurences of str and returns it
+func fillStringSlice(num int, str string) []string {
+	results := make([]string, num)
+	for i := 0; i < num; i++ {
+		results[i] = str
+	}
+	return results
 }
