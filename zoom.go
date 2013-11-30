@@ -223,11 +223,11 @@ func Delete(model Model) error {
 	if model.getId() == "" {
 		return errors.New("zoom: cannot delete because model Id field is empty")
 	}
-	modelName, err := getRegisteredNameFromInterface(model)
+	mr, err := newModelRefFromModel(model)
 	if err != nil {
 		return err
 	}
-	if err := t.deleteModel(modelName, model.getId()); err != nil {
+	if err := t.deleteModel(mr); err != nil {
 		return err
 	}
 
@@ -252,11 +252,11 @@ func MDelete(models []Model) error {
 		if m.getId() == "" {
 			return errors.New("zoom: cannot delete because model Id field is empty")
 		}
-		modelName, err := getRegisteredNameFromInterface(m)
+		mr, err := newModelRefFromModel(m)
 		if err != nil {
 			return err
 		}
-		if err := t.deleteModel(modelName, m.getId()); err != nil {
+		if err := t.deleteModel(mr); err != nil {
 			return err
 		}
 	}
@@ -277,7 +277,7 @@ func MDelete(models []Model) error {
 // no effect.
 func DeleteById(modelName string, id string) error {
 	t := newTransaction()
-	if err := t.deleteModel(modelName, id); err != nil {
+	if err := t.deleteModelById(modelName, id); err != nil {
 		return err
 	}
 
@@ -304,7 +304,7 @@ func MDeleteById(modelNames []string, ids []string) error {
 	t := newTransaction()
 	for i := 0; i < len(modelNames); i++ {
 		name, id := modelNames[i], ids[i]
-		if err := t.deleteModel(name, id); err != nil {
+		if err := t.deleteModelById(name, id); err != nil {
 			return err
 		}
 	}
