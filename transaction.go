@@ -181,6 +181,12 @@ func (t *transaction) saveModel(m Model) error {
 		m.setId(generateRandomId())
 	}
 
+	// add operations to save the model indexes
+	// we do this first becuase it may require a read before write :(
+	if err := t.saveModelIndexes(mr); err != nil {
+		return err
+	}
+
 	// add an operation to write data to database
 	if err := t.saveStruct(mr); err != nil {
 		return err
@@ -201,11 +207,6 @@ func (t *transaction) saveModel(m Model) error {
 
 	// add operations to save model relationships
 	if err := t.saveModelRelationships(mr); err != nil {
-		return err
-	}
-
-	// add operations to save the model indexes
-	if err := t.saveModelIndexes(mr); err != nil {
 		return err
 	}
 
@@ -411,6 +412,9 @@ func (t *transaction) indexNumeric(indexKey string, score float64, id string) er
 }
 
 func (t *transaction) saveModelPrimativeIndexAlpha(mr modelRef, p primative) error {
+	if err := t.removeOldAlphaIndex(mr, p.fieldName, p.redisName); err != nil {
+		return err
+	}
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
 	value := mr.value(p.fieldName).String()
 	id := mr.model.getId()
@@ -418,6 +422,9 @@ func (t *transaction) saveModelPrimativeIndexAlpha(mr modelRef, p primative) err
 }
 
 func (t *transaction) saveModelPointerIndexAlpha(mr modelRef, p pointer) error {
+	if err := t.removeOldAlphaIndex(mr, p.fieldName, p.redisName); err != nil {
+		return err
+	}
 	if mr.value(p.fieldName).IsNil() {
 		// TODO: special case for indexing nil pointers?
 		return nil // skip nil pointers for now
@@ -436,6 +443,39 @@ func (t *transaction) indexAlpha(indexKey, value, id string) error {
 		return err
 	}
 	return nil
+}
+
+// Remove the alpha index that may have existed before an update or resave of the model
+// this requires a read before write, which is a performance penalty but unfortunatlely
+// is unavoidable because of the hacky way we're indexing alpha fields.
+func (t *transaction) removeOldAlphaIndex(mr modelRef, fieldName string, redisName string) error {
+	key := mr.key()
+	args := redis.Args{}.Add(key).Add(redisName)
+	return t.command("HGET", args, func(reply interface{}) error {
+		if reply == nil {
+			return nil
+		}
+		oldFieldValue, err := redis.String(reply, nil)
+		if err != nil {
+			return err
+		}
+		if oldFieldValue == "" {
+			return nil
+		}
+		if oldFieldValue != "" && oldFieldValue != mr.value(fieldName).String() {
+			// TODO: Is there a way to do this without creating a new connection?
+			// At the very least can we consolidate these operations into a single transaction
+			// if there are more than one old indexes to be removed?
+			conn := GetConn()
+			defer conn.Close()
+			alphaIndexKey := mr.modelSpec.modelName + ":" + fieldName
+			member := oldFieldValue + " " + mr.model.getId()
+			if _, err := conn.Do("ZREM", alphaIndexKey, member); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (t *transaction) saveModelPrimativeIndexBoolean(mr modelRef, p primative) error {

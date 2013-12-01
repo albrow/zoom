@@ -365,6 +365,81 @@ func TestDeleteIndexedPointersModel(t *testing.T) {
 	}
 }
 
+func TestUpdateIndexedNumericModel(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	conn := GetConn()
+	defer conn.Close()
+
+	m := new(indexedPrimativesModel)
+	m.Int = 123
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+	validateNumericIndexExists(t, "indexedPrimativesModel", m.Id, "Int", reflect.ValueOf(123), conn)
+
+	// now change the Int field and make sure the index was updated
+	m.Int = 456
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+	// index should exist on field value 456 (the new value)
+	validateNumericIndexExists(t, "indexedPrimativesModel", m.Id, "Int", reflect.ValueOf(456), conn)
+	// index should not exist on field value 123 (the old value)
+	validateNumericIndexNotExists(t, "indexedPrimativesModel", m.Id, "Int", reflect.ValueOf(123), conn)
+}
+
+func TestUpdateIndexedAlphaModel(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	conn := GetConn()
+	defer conn.Close()
+
+	m := new(indexedPrimativesModel)
+	m.String = "aaa"
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+	validateAlphaIndexExists(t, "indexedPrimativesModel", m.Id, "String", "aaa", conn)
+
+	// now change the String field and make sure the index was updated
+	m.String = "bbb"
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+	// index should exist on field value "bbb" (the new value)
+	validateAlphaIndexExists(t, "indexedPrimativesModel", m.Id, "String", "bbb", conn)
+	// index should not exist on field value "aaa" (the old value)
+	validateAlphaIndexNotExists(t, "indexedPrimativesModel", m.Id, "String", "aaa", conn)
+}
+
+func TestUpdateIndexedBooleanModel(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	conn := GetConn()
+	defer conn.Close()
+
+	m := new(indexedPrimativesModel)
+	m.Bool = false
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+	validateBooleanIndexExists(t, "indexedPrimativesModel", m.Id, "Bool", false, conn)
+
+	// now change the Bool field and make sure the index was updated
+	m.Bool = true
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+	// index should exist on field value true (the new value)
+	validateBooleanIndexExists(t, "indexedPrimativesModel", m.Id, "Bool", true, conn)
+	// index should not exist on field value false (the old value)
+	validateBooleanIndexNotExists(t, "indexedPrimativesModel", m.Id, "Bool", false, conn)
+}
+
 // returns true if the numeric index exists
 // if err is not nil there was an unexpected error
 func numericIndexExists(modelName string, modelId string, fieldName string, fieldValue reflect.Value, conn redis.Conn) (bool, error) {
