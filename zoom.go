@@ -178,9 +178,9 @@ func MScanById(ids []string, models interface{}) error {
 	if len(ids) != modelsVal.Len() {
 		return errors.New("Zoom: error in MScanById: ids and models must be the same length")
 	} else if !typeIsSliceOrArray(modelsVal.Type()) {
-		return errors.New("Zoom: error in MScanById: models should be a pointer to a slice or array of models (models are pointers to structs)")
+		return errors.New("Zoom: error in MScanById: models should be a pointer to a slice or array of models")
 	} else if !typeIsPointerToStruct(modelType) {
-		return errors.New("Zoom: error in MScanById: models should be a pointer to a slice of pointers to structs")
+		return errors.New("Zoom: error in MScanById: the elements in models should be pointers to structs")
 	} else if !modelTypeIsRegistered(modelType) {
 		msg := fmt.Sprintf("Zoom: error in MScanById: the elements in models should be of a registered type\nType %s has not been registered.", modelType.String())
 		return errors.New(msg)
