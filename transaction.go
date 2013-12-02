@@ -345,15 +345,15 @@ func (t *transaction) saveModelOneToManyRelationship(mr modelRef, r relationship
 
 func (t *transaction) saveModelIndexes(mr modelRef) error {
 	for _, p := range mr.modelSpec.primativeIndexes {
-		if p.iType == indexNumeric {
+		if p.indexType == indexNumeric {
 			if err := t.saveModelPrimativeIndexNumeric(mr, p); err != nil {
 				return err
 			}
-		} else if p.iType == indexAlpha {
+		} else if p.indexType == indexAlpha {
 			if err := t.saveModelPrimativeIndexAlpha(mr, p); err != nil {
 				return err
 			}
-		} else if p.iType == indexBoolean {
+		} else if p.indexType == indexBoolean {
 			if err := t.saveModelPrimativeIndexBoolean(mr, p); err != nil {
 				return err
 			}
@@ -361,15 +361,15 @@ func (t *transaction) saveModelIndexes(mr modelRef) error {
 	}
 
 	for _, p := range mr.modelSpec.pointerIndexes {
-		if p.iType == indexNumeric {
+		if p.indexType == indexNumeric {
 			if err := t.saveModelPointerIndexNumeric(mr, p); err != nil {
 				return err
 			}
-		} else if p.iType == indexAlpha {
+		} else if p.indexType == indexAlpha {
 			if err := t.saveModelPointerIndexAlpha(mr, p); err != nil {
 				return err
 			}
-		} else if p.iType == indexBoolean {
+		} else if p.indexType == indexBoolean {
 			if err := t.saveModelPointerIndexBoolean(mr, p); err != nil {
 				return err
 			}
@@ -816,15 +816,15 @@ func (t *transaction) unindex(key, value string) error {
 
 func (t *transaction) removeModelIndexes(mr modelRef) error {
 	for _, p := range mr.modelSpec.primativeIndexes {
-		if p.iType == indexNumeric {
+		if p.indexType == indexNumeric {
 			if err := t.removeModelPrimativeIndexNumeric(mr, p); err != nil {
 				return err
 			}
-		} else if p.iType == indexAlpha {
+		} else if p.indexType == indexAlpha {
 			if err := t.removeModelPrimativeIndexAlpha(mr, p); err != nil {
 				return err
 			}
-		} else if p.iType == indexBoolean {
+		} else if p.indexType == indexBoolean {
 			if err := t.removeModelPrimativeIndexBoolean(mr, p); err != nil {
 				return err
 			}
@@ -832,15 +832,15 @@ func (t *transaction) removeModelIndexes(mr modelRef) error {
 	}
 
 	for _, p := range mr.modelSpec.pointerIndexes {
-		if p.iType == indexNumeric {
+		if p.indexType == indexNumeric {
 			if err := t.removeModelPointerIndexNumeric(mr, p); err != nil {
 				return err
 			}
-		} else if p.iType == indexAlpha {
+		} else if p.indexType == indexAlpha {
 			if err := t.removeModelPointerIndexAlpha(mr, p); err != nil {
 				return err
 			}
-		} else if p.iType == indexBoolean {
+		} else if p.indexType == indexBoolean {
 			if err := t.removeModelPointerIndexBoolean(mr, p); err != nil {
 				return err
 			}

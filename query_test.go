@@ -7,6 +7,7 @@
 package zoom
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -137,4 +138,105 @@ func TestQueryAllIdsOnly(t *testing.T) {
 	if equal, msg := compareAsSet(expectedIds, gotIds); !equal {
 		t.Errorf("Ids were incorrect.\nExpected: %v\nGot: %v\n%s\n", expectedIds, gotIds, msg)
 	}
+}
+
+func TestOrderNumericAsc(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := []*indexedPrimativesModel{}
+	for i := 0; i < 5; i++ {
+		m := &indexedPrimativesModel{
+			Int: i,
+		}
+		ms = append(ms, m)
+	}
+
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("Int")
+	testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
+}
+
+func TestOrderNumericDesc(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := []*indexedPrimativesModel{}
+	for i := 0; i < 5; i++ {
+		m := &indexedPrimativesModel{
+			Int: i,
+		}
+		ms = append(ms, m)
+	}
+
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	// expected ids is reversed
+	expectedIds := make([]string, len(ms))
+	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
+		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("-Int")
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+}
+
+func testQueryWithExpectedModels(t *testing.T, query RunScanner, expected []Model, orderMatters bool) {
+	queryTester(t, query, func(t *testing.T, results interface{}) {
+		// make sure results is the right length
+		if reflect.ValueOf(results).Len() != len(expected) {
+			t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", reflect.ValueOf(results).Len(), len(expected))
+		}
+
+		// compare expected to results
+		if orderMatters {
+			if !reflect.DeepEqual(expected, results) {
+				t.Errorf("Results were incorrect.\nExpected: %v\nGot: %v\n", modelIds(expected), modelIds(Models(results)))
+			}
+		} else {
+			equal, msg := compareAsSet(expected, results)
+			if !equal {
+				t.Errorf("Results were incorrect\n%s\nExpected: %v\nGot: %v\n", msg, modelIds(expected), modelIds(Models(results)))
+			}
+		}
+	})
+}
+
+func testQueryWithExpectedIds(t *testing.T, query RunScanner, expected []string, orderMatters bool) {
+	queryTester(t, query, func(t *testing.T, results interface{}) {
+		gotIds := modelIds(Models(results))
+
+		// make sure results is the right length
+		if len(gotIds) != len(expected) {
+			t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", len(gotIds), len(expected))
+		}
+
+		// compare expected to results
+		if orderMatters {
+			if !reflect.DeepEqual(expected, gotIds) {
+				t.Errorf("Results were incorrect.\nExpected: %v\nGot: %v\n", expected, gotIds)
+			}
+		} else {
+			equal, msg := compareAsSet(expected, gotIds)
+			if !equal {
+				t.Errorf("Results were incorrect\n%s\nExpected: %v\nGot: %v\n", msg, expected, gotIds)
+			}
+		}
+	})
+}
+
+func queryTester(t *testing.T, query RunScanner, checker func(*testing.T, interface{})) {
+	// execute the query
+	results, err := query.Run()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// run the checker function
+	checker(t, results)
 }
