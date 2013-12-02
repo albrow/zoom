@@ -8,6 +8,7 @@ package zoom
 
 import (
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -229,6 +230,52 @@ func TestOrderBooleanDesc(t *testing.T) {
 	}
 
 	q := NewQuery("indexedPrimativesModel").Order("-Bool")
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+}
+
+func TestOrderAlphaAsc(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := []*indexedPrimativesModel{}
+	for i := 0; i < 5; i++ {
+		m := &indexedPrimativesModel{
+			String: strconv.Itoa(i),
+		}
+		ms = append(ms, m)
+	}
+
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("String")
+	testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
+}
+
+func TestOrderAlphaDesc(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := []*indexedPrimativesModel{}
+	for i := 0; i < 5; i++ {
+		m := &indexedPrimativesModel{
+			String: strconv.Itoa(i),
+		}
+		ms = append(ms, m)
+	}
+
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	// expected ids is reversed
+	expectedIds := make([]string, len(ms))
+	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
+		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("-String")
 	testQueryWithExpectedIds(t, q, expectedIds, true)
 }
 

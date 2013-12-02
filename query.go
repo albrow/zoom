@@ -182,15 +182,17 @@ func (q *Query) getIds() ([]string, error) {
 	defer conn.Close()
 
 	// construct a redis command to get the ids
-	args := redis.Args{}
-	var command string
 	if q.order.fieldName == "" {
-		// without ordering or filters
-		command = "SMEMBERS"
+		// without ordering
 		indexKey := q.modelSpec.modelName + ":all"
-		args = args.Add(indexKey)
+		args := redis.Args{}.Add(indexKey)
+		return redis.Strings(conn.Do("SMEMBERS", args...))
 	} else {
+		// with ordering
 		if q.order.indexType == indexNumeric || q.order.indexType == indexBoolean {
+			// ordered by numeric or boolean index
+			args := redis.Args{}
+			var command string
 			if q.order.orderType == ascending {
 				command = "ZRANGE"
 			} else if q.order.orderType == descending {
@@ -198,10 +200,37 @@ func (q *Query) getIds() ([]string, error) {
 			}
 			indexKey := q.modelSpec.modelName + ":" + q.order.redisName
 			args = args.Add(indexKey).Add(0).Add(-1)
+			return redis.Strings(conn.Do(command, args...))
+		} else {
+			// ordered by alpha index
+			args := redis.Args{}
+			var command string
+			if q.order.orderType == ascending {
+				command = "ZRANGE"
+			} else if q.order.orderType == descending {
+				command = "ZREVRANGE"
+			}
+			indexKey := q.modelSpec.modelName + ":" + q.order.redisName
+			args = args.Add(indexKey).Add(0).Add(-1)
+			ids, err := redis.Strings(conn.Do(command, args...))
+			if err != nil {
+				return nil, err
+			}
+			for i, valueAndId := range ids {
+				ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+			}
+			return ids, nil
 		}
-		// TODO: add support for boolean and alpha index types
 	}
-	return redis.Strings(conn.Do(command, args...))
+}
+
+// Alpha indexes are stored as "<fieldValue> <modelId>", so we need to
+// extract the modelId. While fieldValue may have a space, modelId CANNOT
+// have a space in it, so we can simply take the part of the stored value
+// after the last space.
+func extractModelIdFromAlphaIndexValue(valueAndId string) string {
+	slices := strings.Split(valueAndId, " ")
+	return slices[len(slices)-1]
 }
 
 // NOTE: sliceVal should be the value of a pointer to a slice of pointer to models.
