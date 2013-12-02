@@ -190,7 +190,7 @@ func (q *Query) getIds() ([]string, error) {
 		indexKey := q.modelSpec.modelName + ":all"
 		args = args.Add(indexKey)
 	} else {
-		if q.order.indexType == indexNumeric {
+		if q.order.indexType == indexNumeric || q.order.indexType == indexBoolean {
 			if q.order.orderType == ascending {
 				command = "ZRANGE"
 			} else if q.order.orderType == descending {
