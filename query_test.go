@@ -186,6 +186,52 @@ func TestOrderNumericDesc(t *testing.T) {
 	testQueryWithExpectedIds(t, q, expectedIds, true)
 }
 
+func TestOrderBooleanAsc(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := make([]*indexedPrimativesModel, 2)
+	ms[0] = &indexedPrimativesModel{
+		Bool: false,
+	}
+	ms[1] = &indexedPrimativesModel{
+		Bool: true,
+	}
+
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("Bool")
+	testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
+}
+
+func TestOrderBooleanDesc(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := make([]*indexedPrimativesModel, 2)
+	ms[0] = &indexedPrimativesModel{
+		Bool: false,
+	}
+	ms[1] = &indexedPrimativesModel{
+		Bool: true,
+	}
+
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	// expected ids is reversed
+	expectedIds := make([]string, len(ms))
+	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
+		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("-Bool")
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+}
+
 func testQueryWithExpectedModels(t *testing.T, query RunScanner, expected []Model, orderMatters bool) {
 	queryTester(t, query, func(t *testing.T, results interface{}) {
 		// make sure results is the right length
