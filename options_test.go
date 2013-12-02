@@ -128,16 +128,16 @@ func TestIndexedPrimativesModelSpec(t *testing.T) {
 			index := ms.primativeIndexes[field.Name]
 			switch {
 			case typeIsNumeric(field.Type):
-				if index.iType != indexNumeric {
-					t.Errorf("Expected iType to be numeric (%d) but got: %d", indexNumeric, index.iType)
+				if index.indexType != indexNumeric {
+					t.Errorf("Expected indexType to be numeric (%d) but got: %d", indexNumeric, index.indexType)
 				}
 			case typeIsString(field.Type):
-				if index.iType != indexAlpha {
-					t.Errorf("Expected iType to be boolean (%d) but got: %d", indexAlpha, index.iType)
+				if index.indexType != indexAlpha {
+					t.Errorf("Expected indexType to be boolean (%d) but got: %d", indexAlpha, index.indexType)
 				}
 			case typeIsBool(field.Type):
-				if index.iType != indexBoolean {
-					t.Errorf("Expected iType to be bool (%d) but got: %d", indexBoolean, index.iType)
+				if index.indexType != indexBoolean {
+					t.Errorf("Expected indexType to be bool (%d) but got: %d", indexBoolean, index.indexType)
 				}
 			}
 		}
@@ -164,17 +164,17 @@ func TestIndexedPointersModelSpec(t *testing.T) {
 			index := ms.pointerIndexes[field.Name]
 			switch {
 			case typeIsNumeric(field.Type):
-				if index.iType != indexNumeric {
-					t.Errorf("Expected iType to be numeric (%d) but got: %d", indexNumeric, index.iType)
+				if index.indexType != indexNumeric {
+					t.Errorf("Expected indexType to be numeric (%d) but got: %d", indexNumeric, index.indexType)
 				}
 			case typeIsString(field.Type):
-				if index.iType != indexAlpha {
-					t.Errorf("Expected iType to be alpha (%d) but got: %d", indexAlpha, index.iType)
+				if index.indexType != indexAlpha {
+					t.Errorf("Expected indexType to be alpha (%d) but got: %d", indexAlpha, index.indexType)
 				}
 			case typeIsBool(field.Type):
 				fmt.Println("checking that boolean shit")
-				if index.iType != indexBoolean {
-					t.Errorf("Expected iType to be bool (%d) but got: %d", indexBoolean, index.iType)
+				if index.indexType != indexBoolean {
+					t.Errorf("Expected indexType to be bool (%d) but got: %d", indexBoolean, index.indexType)
 				}
 			}
 		}

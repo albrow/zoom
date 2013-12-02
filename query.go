@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"reflect"
+	"strings"
 )
 
 type RunScanner interface {
@@ -22,17 +23,26 @@ type Query struct {
 	modelSpec modelSpec
 	includes  []string
 	excludes  []string
-	sort      sort
+	order     order
 	limit     uint
 	offset    uint
 	err       error
 }
 
-type sort struct {
+type order struct {
 	fieldName string
-	desc      bool
-	alpha     bool
+	redisName string
+	orderType orderType
+	indexed   bool
+	indexType indexType
 }
+
+type orderType int
+
+const (
+	ascending = iota
+	descending
+)
 
 func NewQuery(modelName string) *Query {
 	q := &Query{}
@@ -42,6 +52,55 @@ func NewQuery(modelName string) *Query {
 	} else {
 		q.modelSpec = spec
 	}
+	return q
+}
+
+// Order specifies a field by which to sort the records and the order in which
+// records should be sorted. fieldName should be a field in the struct type specified by
+// the modelName argument in the query constructor. By default, the records are sorted
+// by ascending order. To sort by descending order, put a negative sign before
+// the field name. Zoom can only sort by fields which have been indexed, i.e. those which
+// have the `zoom:"index"` struct tag. However, in the future this may change.
+// Only one order may be specified per query. However in the future, secondary orders may be
+// allowed, and will take effect when two or more models have the same value for the primary
+// order field. Order will set an error on the query if the fieldName is invalid, if another
+// order has already been applied to the query, or if the fieldName specified does not correspond
+// to an indexed field.
+func (q *Query) Order(fieldName string) *Query {
+	if q.order.fieldName != "" {
+		// TODO: allow secondary sort orders?
+		q.setErrorIfNone(errors.New("zoom: error in Query.Order: previous order already specified. Only one order per query is allowed."))
+	}
+	var ot orderType
+	if strings.HasPrefix(fieldName, "-") {
+		ot = descending
+		// remove the "-" prefix
+		fieldName = fieldName[1:]
+	} else {
+		ot = ascending
+	}
+	if _, found := q.modelSpec.field(fieldName); found {
+		indexType, found := q.modelSpec.indexTypeForField(fieldName)
+		if !found {
+			// the field was not indexed
+			// TODO: add support for ordering unindexed fields in some cases?
+			msg := fmt.Sprintf("zoom: error in Query.Order: field %s in type %s is not indexed. Can only order by indexed fields", fieldName, q.modelSpec.modelType.String())
+			q.setErrorIfNone(errors.New(msg))
+		}
+		redisName, _ := q.modelSpec.redisNameForFieldName(fieldName)
+		q.order = order{
+			fieldName: fieldName,
+			redisName: redisName,
+			orderType: ot,
+			indexType: indexType,
+			indexed:   true,
+		}
+	} else {
+		// fieldName was invalid
+		msg := fmt.Sprintf("zoom: error in Query.Order: could not find field %s in type %s", fieldName, q.modelSpec.modelType.String())
+		q.setErrorIfNone(errors.New(msg))
+	}
+
 	return q
 }
 
@@ -125,14 +184,22 @@ func (q *Query) getIds() ([]string, error) {
 	// construct a redis command to get the ids
 	args := redis.Args{}
 	var command string
-	if q.sort.fieldName == "" {
-		// without sorting or filters
+	if q.order.fieldName == "" {
+		// without ordering or filters
 		command = "SMEMBERS"
 		indexKey := q.modelSpec.modelName + ":all"
 		args = args.Add(indexKey)
 	} else {
-		// TODO: with sorting and/or filters
-		return nil, errors.New("zoom: sorting and filters not implemented yet!")
+		if q.order.indexType == indexNumeric {
+			if q.order.orderType == ascending {
+				command = "ZRANGE"
+			} else if q.order.orderType == descending {
+				command = "ZREVRANGE"
+			}
+			indexKey := q.modelSpec.modelName + ":" + q.order.redisName
+			args = args.Add(indexKey).Add(0).Add(-1)
+		}
+		// TODO: add support for boolean and alpha index types
 	}
 	return redis.Strings(conn.Do(command, args...))
 }
@@ -166,7 +233,7 @@ func (q *Query) getIdCount() (int, error) {
 	// construct a redis command to get the ids
 	args := redis.Args{}
 	var command string
-	if q.sort.fieldName == "" {
+	if q.order.fieldName == "" {
 		// without filtering
 		command = "SCARD"
 		indexKey := q.modelSpec.modelName + ":all"

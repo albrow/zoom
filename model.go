@@ -49,7 +49,7 @@ type primative struct {
 	redisName string
 	fieldName string
 	fieldType reflect.Type
-	iType     indexType
+	indexType indexType
 }
 
 type pointer struct {
@@ -57,7 +57,7 @@ type pointer struct {
 	fieldName string
 	fieldType reflect.Type
 	elemType  reflect.Type
-	iType     indexType
+	indexType indexType
 }
 
 type inconvertible struct {
@@ -281,11 +281,11 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 			ms.primatives[field.Name] = p
 			if index {
 				if typeIsNumeric(field.Type) {
-					p.iType = indexNumeric
+					p.indexType = indexNumeric
 				} else if typeIsString(field.Type) {
-					p.iType = indexAlpha
+					p.indexType = indexAlpha
 				} else if typeIsBool(field.Type) {
-					p.iType = indexBoolean
+					p.indexType = indexBoolean
 				} else {
 					msg := fmt.Sprintf("zoom: Requested index on unsupported type %s\n", field.Type.String())
 					return errors.New(msg)
@@ -304,11 +304,11 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 				ms.pointers[field.Name] = p
 				if index {
 					if typeIsNumeric(field.Type.Elem()) {
-						p.iType = indexNumeric
+						p.indexType = indexNumeric
 					} else if typeIsString(field.Type.Elem()) {
-						p.iType = indexAlpha
+						p.indexType = indexAlpha
 					} else if typeIsBool(field.Type.Elem()) {
-						p.iType = indexBoolean
+						p.indexType = indexBoolean
 					} else {
 						msg := fmt.Sprintf("zoom: Requested index on unsupported type %s\n", field.Type.Elem().String())
 						return errors.New(msg)
@@ -470,30 +470,67 @@ func getRegisteredTypeFromName(name string) (reflect.Type, error) {
 	return typ, nil
 }
 
+// elemVal returns the reflect.ValueOf the model's element
+// i.e. the true type is a struct (not a pointer to a struct)
 func (mr modelRef) elemVal() reflect.Value {
 	return reflect.ValueOf(mr.model).Elem()
 }
 
+// modelVal returns the reflect.ValueOf the model
+// the true type is a pointer to a struct
 func (mr modelRef) modelVal() reflect.Value {
 	return reflect.ValueOf(mr.model)
 }
 
+// value returns the reflect.Value of a model field identified by fieldName
+// If there is no field by that name, causes an error
 func (mr modelRef) value(fieldName string) reflect.Value {
 	return mr.elemVal().FieldByName(fieldName)
 }
 
+// key returns a key which is used in redis to store the model
 func (mr modelRef) key() string {
 	return mr.modelSpec.modelName + ":" + mr.model.getId()
 }
 
 func (mr modelRef) indexKey() string {
-	return mr.modelSpec.modelName + ":all"
+	return mr.modelSpec.indexKey()
 }
 
+// field returns the reflect.StructField corresponding to fieldName if fieldName is valid
+// for the struct type (the second return value would be true). Returns (nil, false)
+// otherwise.
 func (ms modelSpec) field(fieldName string) (reflect.StructField, bool) {
 	return ms.modelType.Elem().FieldByName(fieldName)
 }
 
+// indexTypeForField returns the indexType corresponding to fieldName if fieldName is valid
+// for the struct type and the field is indexed (the second return value would be true).
+// Returns (0, false) otherwise.
+func (ms modelSpec) indexTypeForField(fieldName string) (indexType, bool) {
+	if index, found := ms.primativeIndexes[fieldName]; found {
+		return index.indexType, true
+	} else if index, found := ms.pointerIndexes[fieldName]; found {
+		return index.indexType, true
+	} else {
+		return 0, false
+	}
+}
+
+// redisName returns the redisName for a field identified by fieldName. If there
+// is no field by that name, returns ("", false)
+func (ms modelSpec) redisNameForFieldName(fieldName string) (string, bool) {
+	if f, found := ms.primatives[fieldName]; found {
+		return f.redisName, true
+	} else if f, found := ms.pointers[fieldName]; found {
+		return f.redisName, true
+	} else {
+		return "", false
+	}
+}
+
+// indexKey returns a key which is used in redis to store all the ids of every model of a
+// given type.
 func (ms modelSpec) indexKey() string {
 	return ms.modelName + ":all"
 }

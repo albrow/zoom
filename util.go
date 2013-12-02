@@ -198,3 +198,11 @@ func convertNumericToFloat64(val reflect.Value) (float64, error) {
 		return 0.0, errors.New(msg)
 	}
 }
+
+func modelIds(ms []Model) []string {
+	results := make([]string, len(ms))
+	for i, m := range ms {
+		results[i] = m.getId()
+	}
+	return results
+}
