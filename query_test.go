@@ -141,12 +141,9 @@ func TestQueryAllIdsOnly(t *testing.T) {
 	}
 }
 
-func TestOrderNumericAsc(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
+func createOrderableNumericModels(num int) ([]*indexedPrimativesModel, error) {
 	ms := []*indexedPrimativesModel{}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < num; i++ {
 		m := &indexedPrimativesModel{
 			Int: i,
 		}
@@ -154,26 +151,29 @@ func TestOrderNumericAsc(t *testing.T) {
 	}
 
 	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
+		return ms, err
 	}
+	return ms, nil
+}
 
-	q := NewQuery("indexedPrimativesModel").Order("Int")
-	testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
+func TestOrderNumericAsc(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	if ms, err := createOrderableNumericModels(5); err != nil {
+		t.Error(err)
+	} else {
+		q := NewQuery("indexedPrimativesModel").Order("Int")
+		testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
+	}
 }
 
 func TestOrderNumericDesc(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	ms := []*indexedPrimativesModel{}
-	for i := 0; i < 5; i++ {
-		m := &indexedPrimativesModel{
-			Int: i,
-		}
-		ms = append(ms, m)
-	}
-
-	if err := MSave(Models(ms)); err != nil {
+	ms, err := createOrderableNumericModels(5)
+	if err != nil {
 		t.Error(err)
 	}
 
@@ -187,10 +187,8 @@ func TestOrderNumericDesc(t *testing.T) {
 	testQueryWithExpectedIds(t, q, expectedIds, true)
 }
 
-func TestOrderBooleanAsc(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
+// only create 2 here. It's much easier to test
+func createOrderableBooleanModels() ([]*indexedPrimativesModel, error) {
 	ms := make([]*indexedPrimativesModel, 2)
 	ms[0] = &indexedPrimativesModel{
 		Bool: false,
@@ -200,26 +198,29 @@ func TestOrderBooleanAsc(t *testing.T) {
 	}
 
 	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
+		return ms, err
 	}
+	return ms, nil
+}
 
-	q := NewQuery("indexedPrimativesModel").Order("Bool")
-	testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
+func TestOrderBooleanAsc(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	if ms, err := createOrderableBooleanModels(); err != nil {
+		t.Error(err)
+	} else {
+		q := NewQuery("indexedPrimativesModel").Order("Bool")
+		testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
+	}
 }
 
 func TestOrderBooleanDesc(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	ms := make([]*indexedPrimativesModel, 2)
-	ms[0] = &indexedPrimativesModel{
-		Bool: false,
-	}
-	ms[1] = &indexedPrimativesModel{
-		Bool: true,
-	}
-
-	if err := MSave(Models(ms)); err != nil {
+	ms, err := createOrderableBooleanModels()
+	if err != nil {
 		t.Error(err)
 	}
 
@@ -233,12 +234,9 @@ func TestOrderBooleanDesc(t *testing.T) {
 	testQueryWithExpectedIds(t, q, expectedIds, true)
 }
 
-func TestOrderAlphaAsc(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
+func createOrderableAlphaModels(num int) ([]*indexedPrimativesModel, error) {
 	ms := []*indexedPrimativesModel{}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < num; i++ {
 		m := &indexedPrimativesModel{
 			String: strconv.Itoa(i),
 		}
@@ -246,26 +244,29 @@ func TestOrderAlphaAsc(t *testing.T) {
 	}
 
 	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
+		return ms, err
 	}
+	return ms, nil
+}
 
-	q := NewQuery("indexedPrimativesModel").Order("String")
-	testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
+func TestOrderAlphaAsc(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	if ms, err := createOrderableAlphaModels(5); err != nil {
+		t.Error(err)
+	} else {
+		q := NewQuery("indexedPrimativesModel").Order("String")
+		testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
+	}
 }
 
 func TestOrderAlphaDesc(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	ms := []*indexedPrimativesModel{}
-	for i := 0; i < 5; i++ {
-		m := &indexedPrimativesModel{
-			String: strconv.Itoa(i),
-		}
-		ms = append(ms, m)
-	}
-
-	if err := MSave(Models(ms)); err != nil {
+	ms, err := createOrderableAlphaModels(5)
+	if err != nil {
 		t.Error(err)
 	}
 
