@@ -104,6 +104,20 @@ func (q *Query) Order(fieldName string) *Query {
 	return q
 }
 
+// Limit specifies an upper limit on the number of records to return.
+// If amount is 0, no limit will be applied.
+func (q *Query) Limit(amount uint) *Query {
+	q.limit = amount
+	return q
+}
+
+// Offset specifies a starting index from which to start counting records that
+// will be returned.
+func (q *Query) Offset(amount uint) *Query {
+	q.offset = amount
+	return q
+}
+
 func (q *Query) Run() (interface{}, error) {
 	if q.err != nil {
 		return nil, q.err
@@ -189,29 +203,27 @@ func (q *Query) getIds() ([]string, error) {
 		return redis.Strings(conn.Do("SMEMBERS", args...))
 	} else {
 		// with ordering
+		args := redis.Args{}
+		var command string
+		if q.order.orderType == ascending {
+			command = "ZRANGE"
+		} else if q.order.orderType == descending {
+			command = "ZREVRANGE"
+		}
+		start := q.offset
+		stop := -1
+		if q.limit != 0 {
+			stop = int(start) + int(q.limit) - 1
+		}
+		indexKey := q.modelSpec.modelName + ":" + q.order.redisName
+		args = args.Add(indexKey).Add(start).Add(stop)
 		if q.order.indexType == indexNumeric || q.order.indexType == indexBoolean {
 			// ordered by numeric or boolean index
-			args := redis.Args{}
-			var command string
-			if q.order.orderType == ascending {
-				command = "ZRANGE"
-			} else if q.order.orderType == descending {
-				command = "ZREVRANGE"
-			}
-			indexKey := q.modelSpec.modelName + ":" + q.order.redisName
-			args = args.Add(indexKey).Add(0).Add(-1)
+			// just return results of command directly
 			return redis.Strings(conn.Do(command, args...))
 		} else {
 			// ordered by alpha index
-			args := redis.Args{}
-			var command string
-			if q.order.orderType == ascending {
-				command = "ZRANGE"
-			} else if q.order.orderType == descending {
-				command = "ZREVRANGE"
-			}
-			indexKey := q.modelSpec.modelName + ":" + q.order.redisName
-			args = args.Add(indexKey).Add(0).Add(-1)
+			// we need to parse ids from the result of the command
 			ids, err := redis.Strings(conn.Do(command, args...))
 			if err != nil {
 				return nil, err

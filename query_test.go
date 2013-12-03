@@ -280,11 +280,73 @@ func TestOrderAlphaDesc(t *testing.T) {
 	testQueryWithExpectedIds(t, q, expectedIds, true)
 }
 
+func TestOrderNumericAscLimit(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	if ms, err := createOrderableNumericModels(5); err != nil {
+		t.Error(err)
+	} else {
+		q := NewQuery("indexedPrimativesModel").Order("Int").Limit(3)
+		testQueryWithExpectedIds(t, q, modelIds(Models(ms[:3])), true)
+	}
+}
+
+func TestOrderNumericDescLimit(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := createOrderableNumericModels(5)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// expected ids is reversed
+	expectedIds := make([]string, len(ms))
+	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
+		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("-Int").Limit(3)
+	testQueryWithExpectedIds(t, q, expectedIds[:3], true)
+}
+
+func TestOrderNumericAscLimitOffset(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	if ms, err := createOrderableNumericModels(7); err != nil {
+		t.Error(err)
+	} else {
+		q := NewQuery("indexedPrimativesModel").Order("Int").Limit(3).Offset(2)
+		testQueryWithExpectedIds(t, q, modelIds(Models(ms[2:5])), true)
+	}
+}
+
+func TestOrderNumericDescLimitOffset(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := createOrderableNumericModels(7)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// expected ids is reversed
+	expectedIds := make([]string, len(ms))
+	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
+		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("-Int").Limit(3).Offset(2)
+	testQueryWithExpectedIds(t, q, expectedIds[2:5], true)
+}
+
 func testQueryWithExpectedModels(t *testing.T, query RunScanner, expected []Model, orderMatters bool) {
 	queryTester(t, query, func(t *testing.T, results interface{}) {
 		// make sure results is the right length
 		if reflect.ValueOf(results).Len() != len(expected) {
-			t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", reflect.ValueOf(results).Len(), len(expected))
+			t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", len(expected), reflect.ValueOf(results).Len())
 		}
 
 		// compare expected to results
@@ -307,7 +369,7 @@ func testQueryWithExpectedIds(t *testing.T, query RunScanner, expected []string,
 
 		// make sure results is the right length
 		if len(gotIds) != len(expected) {
-			t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", len(gotIds), len(expected))
+			t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", len(expected), len(gotIds))
 		}
 
 		// compare expected to results
