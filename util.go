@@ -7,6 +7,7 @@
 package zoom
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -166,16 +167,11 @@ func randInt(min int, max int) int {
 // those two things can be considered equal. Differs from reflect.DeepEqual
 // because of the indifference concerning pointer addresses.
 func looseEquals(one, two interface{}) (bool, error) {
-	// first make sure the things are the same type
-	if reflect.TypeOf(one) != reflect.TypeOf(two) {
-		return false, nil
-	}
-
-	oneBytes, err := defaultMarshalerUnmarshaler.Marshal(one)
+	oneBytes, err := json.Marshal(one)
 	if err != nil {
 		return false, err
 	}
-	twoBytes, err := defaultMarshalerUnmarshaler.Marshal(two)
+	twoBytes, err := json.Marshal(two)
 	if err != nil {
 		return false, err
 	}

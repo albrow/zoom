@@ -30,11 +30,62 @@ func TestPointerToPrimativeTypes(t *testing.T) {
 }
 
 func TestInconvertibleTypes(t *testing.T) {
-	construct := func() (interface{}, error) {
-		ms, err := newInconvertibleTypesModels(1)
-		return ms[0], err
+	// we'll have to do this test manually, because looseEquals doesn't
+	// support some of the types here.
+	// make a model with all nil fields
+
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newInconvertibleTypesModels(1)
+	if err != nil {
+		t.Error(err)
 	}
-	testConvertType(reflect.TypeOf(inconvertibleTypesModel{}), construct, t)
+	m := ms[0]
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+	mCopy := new(inconvertibleTypesModel)
+	if err := ScanById(m.Id, mCopy); err != nil {
+		t.Error(err)
+	}
+
+	// make sure the copy equals the original
+	equal := true
+	equal = equal && (m.Complex == mCopy.Complex)
+	for i, mInt := range m.IntSlice {
+		mCopyInt := mCopy.IntSlice[i]
+		equal = equal && (mInt == mCopyInt)
+	}
+	for i, mString := range m.StringSlice {
+		mCopyString := mCopy.StringSlice[i]
+		equal = equal && (mString == mCopyString)
+	}
+	for i, mInt := range m.IntArray {
+		mCopyInt := mCopy.IntArray[i]
+		equal = equal && (mInt == mCopyInt)
+	}
+	for i, mString := range m.StringArray {
+		mCopyString := mCopy.StringArray[i]
+		equal = equal && (mString == mCopyString)
+	}
+	for mKey, mValue := range m.StringMap {
+		if mCopyValue, found := mCopy.StringMap[mKey]; !found {
+			equal = false
+		} else {
+			equal = equal && (mValue == mCopyValue)
+		}
+	}
+	for mKey, mValue := range m.IntMap {
+		if mCopyValue, found := mCopy.IntMap[mKey]; !found {
+			equal = false
+		} else {
+			equal = equal && (mValue == mCopyValue)
+		}
+	}
+	if !equal {
+		t.Errorf("model was not saved/retrieved correctly.\nExpected: %+v\nGot %+v\n", m, mCopy)
+	}
 }
 
 func TestModelWithList(t *testing.T) {
