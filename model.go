@@ -33,6 +33,7 @@ type Model interface {
 type modelSpec struct {
 	modelType        reflect.Type
 	modelName        string
+	fieldNames       []string
 	primatives       map[string]primative     // primative types: int, float, string, etc.
 	pointers         map[string]pointer       // pointers to primative tyeps: *int, *float, *string, etc.
 	inconvertibles   map[string]inconvertible // types which cannot be directly converted. fallback to json/msgpack
@@ -122,6 +123,7 @@ func newModelSpec(name string, typ reflect.Type) modelSpec {
 	return modelSpec{
 		modelType:        typ,
 		modelName:        name,
+		fieldNames:       make([]string, 0),
 		primatives:       make(map[string]primative),
 		pointers:         make(map[string]pointer),
 		inconvertibles:   make(map[string]inconvertible),
@@ -256,6 +258,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 		} else if redisName == "" {
 			redisName = field.Name
 		}
+		ms.fieldNames = append(ms.fieldNames, field.Name)
 		// parse additional options in the zoom tag (e.g. index)
 		zoomTag := tag.Get("zoom")
 		index := false
@@ -497,9 +500,6 @@ func (mr modelRef) indexKey() string {
 	return mr.modelSpec.indexKey()
 }
 
-// field returns the reflect.StructField corresponding to fieldName if fieldName is valid
-// for the struct type (the second return value would be true). Returns (nil, false)
-// otherwise.
 func (ms modelSpec) field(fieldName string) (reflect.StructField, bool) {
 	return ms.modelType.Elem().FieldByName(fieldName)
 }

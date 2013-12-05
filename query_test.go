@@ -253,6 +253,150 @@ func TestQueryAllIdsOnly(t *testing.T) {
 	}
 }
 
+func TestQueryAllIncludes(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newPrimativeTypesModels(1)
+	if err != nil {
+		t.Error(err)
+	}
+	m := ms[0]
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+
+	mCopies := make([]*primativeTypesModel, 0)
+	if err := NewQuery("primativeTypesModel").Include("Int", "String").Scan(&mCopies); err != nil {
+		t.Error(err)
+	}
+	mCopy := mCopies[0]
+
+	// The Int and String fields, which were included, should be the same
+	if m.Int != mCopy.Int {
+		t.Errorf("Int field was incorrect.\nExpected: %d\nGot: %d\n", m.Int, mCopy.Int)
+	}
+	if m.String != mCopy.String {
+		t.Errorf("String field was incorrect.\nExpected: %d\nGot: %d\n", m.String, mCopy.String)
+	}
+
+	// The remaining fields in mCopy should be blank
+	if mCopy.Uint != 0 {
+		t.Errorf("Expected mCopy.Uint to be 0 but was %d", mCopy.Uint)
+	}
+	if mCopy.Uint8 != 0 {
+		t.Errorf("Expected mCopy.Uint8 to be 0 but was %d", mCopy.Uint8)
+	}
+	if mCopy.Uint16 != 0 {
+		t.Errorf("Expected mCopy.Uint16 to be 0 but was %d", mCopy.Uint16)
+	}
+	if mCopy.Uint32 != 0 {
+		t.Errorf("Expected mCopy.Uint32 to be 0 but was %d", mCopy.Uint32)
+	}
+	if mCopy.Uint64 != 0 {
+		t.Errorf("Expected mCopy.Uint64 to be 0 but was %d", mCopy.Uint64)
+	}
+	if mCopy.Int8 != 0 {
+		t.Errorf("Expected mCopy.Int8 to be 0 but was %d", mCopy.Int8)
+	}
+	if mCopy.Int16 != 0 {
+		t.Errorf("Expected mCopy.Int16 to be 0 but was %d", mCopy.Int16)
+	}
+	if mCopy.Int32 != 0 {
+		t.Errorf("Expected mCopy.Int32 to be 0 but was %d", mCopy.Int32)
+	}
+	if mCopy.Int64 != 0 {
+		t.Errorf("Expected mCopy.Int64 to be 0 but was %d", mCopy.Int64)
+	}
+	if mCopy.Float32 != 0.0 {
+		t.Errorf("Expected mCopy.Float32 to be 0 but was %1.1f", mCopy.Float32)
+	}
+	if mCopy.Float64 != 0.0 {
+		t.Errorf("Expected mCopy.Float64 to be 0 but was %1.1f", mCopy.Float64)
+	}
+	if mCopy.Byte != byte(0) {
+		t.Errorf("Expected mCopy.Byte to be 0 but was %d", mCopy.Byte)
+	}
+	if mCopy.Rune != rune(0) {
+		t.Errorf("Expected mCopy.Rune to be 0 but was %d", mCopy.Rune)
+	}
+	if mCopy.Bool != false {
+		t.Errorf("Expected mCopy.Bool to be false but was %t", mCopy.Bool)
+	}
+}
+
+func TestQueryAllExcludes(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newPrimativeTypesModels(1)
+	if err != nil {
+		t.Error(err)
+	}
+	m := ms[0]
+	if err := Save(m); err != nil {
+		t.Error(err)
+	}
+
+	mCopies := make([]*primativeTypesModel, 0)
+	if err := NewQuery("primativeTypesModel").Exclude("Int", "String").Scan(&mCopies); err != nil {
+		t.Error(err)
+	}
+	mCopy := mCopies[0]
+
+	// The Int and String fields, which were excluded, should be blank.
+	if mCopy.Int != 0 {
+		t.Errorf("Expected mCopy.Int to be 0 but was %d", mCopy.Int)
+	}
+	if mCopy.String != "" {
+		t.Errorf("Expected mCopy.String to be '' but was %d", mCopy.String)
+	}
+
+	// The remaining fields in mCopy should be blank
+	if mCopy.Uint != m.Uint {
+		t.Errorf("mCopy.Uint was incorrect.\nExpected: %d\nGot: %d", m.Uint, mCopy.Uint)
+	}
+	if mCopy.Uint8 != m.Uint8 {
+		t.Errorf("mCopy.Uint8 was incorrect.\nExpected: %d\nGot: %d", m.Uint8, mCopy.Uint8)
+	}
+	if mCopy.Uint16 != m.Uint16 {
+		t.Errorf("mCopy.Uint16 was incorrect.\nExpected: %d\nGot: %d", m.Uint16, mCopy.Uint16)
+	}
+	if mCopy.Uint32 != m.Uint32 {
+		t.Errorf("mCopy.Uint32 was incorrect.\nExpected: %d\nGot: %d", m.Uint32, mCopy.Uint32)
+	}
+	if mCopy.Uint64 != m.Uint64 {
+		t.Errorf("mCopy.Uint64 was incorrect.\nExpected: %d\nGot: %d", m.Uint64, mCopy.Uint64)
+	}
+	if mCopy.Int8 != m.Int8 {
+		t.Errorf("mCopy.Int8 was incorrect.\nExpected: %d\nGot: %d", m.Int8, mCopy.Int8)
+	}
+	if mCopy.Int16 != m.Int16 {
+		t.Errorf("mCopy.Int16 was incorrect.\nExpected: %d\nGot: %d", m.Int16, mCopy.Int16)
+	}
+	if mCopy.Int32 != m.Int32 {
+		t.Errorf("mCopy.Int32 was incorrect.\nExpected: %d\nGot: %d", m.Int32, mCopy.Int32)
+	}
+	if mCopy.Int64 != m.Int64 {
+		t.Errorf("mCopy.Int64 was incorrect.\nExpected: %d\nGot: %d", m.Int64, mCopy.Int64)
+	}
+	if mCopy.Float32 != m.Float32 {
+		t.Errorf("mCopy.Float32 was incorrect.\nExpected: %1.1f\nGot: %1.1f\n", m.Float32, mCopy.Float32)
+	}
+	if mCopy.Float64 != m.Float64 {
+		t.Errorf("mCopy.Float64 was incorrect.\nExpected: %1.1f\nGot: %1.1f\n", m.Float64, mCopy.Float64)
+	}
+	if mCopy.Byte != m.Byte {
+		t.Errorf("mCopy.Byte was incorrect.\nExpected: %d\nGot: %d\n", m.Byte, mCopy.Byte)
+	}
+	if mCopy.Rune != m.Rune {
+		t.Errorf("mCopy.Rune was incorrect.\nExpected: %d\nGot: %d\n", m.Rune, mCopy.Rune)
+	}
+	if mCopy.Bool != m.Bool {
+		t.Errorf("mCopy.Bool was incorrect.\nExpected: %t\nGot: %t\n", m.Bool, mCopy.Bool)
+	}
+}
+
 func createOrderableNumericModels(num int) ([]*indexedPrimativesModel, error) {
 	ms := []*indexedPrimativesModel{}
 	for i := 0; i < num; i++ {
