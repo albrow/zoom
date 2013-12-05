@@ -349,7 +349,7 @@ func TestQueryAllExcludes(t *testing.T) {
 		t.Errorf("Expected mCopy.Int to be 0 but was %d", mCopy.Int)
 	}
 	if mCopy.String != "" {
-		t.Errorf("Expected mCopy.String to be '' but was %d", mCopy.String)
+		t.Errorf("Expected mCopy.String to be '' but was %s", mCopy.String)
 	}
 
 	// The remaining fields in mCopy should be blank
