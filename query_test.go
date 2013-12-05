@@ -4,9 +4,13 @@
 
 // File query_test.go tests the query abstraction (query.go)
 
+// TODO: test all edge cases for limit and offset where applicable
+// TODO: fix possible bug with limits and offsets for unordered queries
+
 package zoom
 
 import (
+	"encoding/gob"
 	"reflect"
 	"strconv"
 	"testing"
@@ -112,6 +116,115 @@ func TestQueryAllCount(t *testing.T) {
 
 	if got != 5 {
 		t.Errorf("Model count incorrect. Expected 5 but got %d\n", got)
+	}
+}
+
+// Test all the corner cases for limits on unordered queries
+func TestQueryAllLimit(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	bms, err := newBasicModels(4)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := MSave(Models(bms)); err != nil {
+		t.Error(err)
+	}
+	models := Models(bms)
+
+	limits := []uint{
+		0, 1, 2, 3, 4, 5,
+	}
+	expectedLengths := []int{
+		4, 1, 2, 3, 4, 4,
+	}
+	kCombinations := make(map[int][][]Model)
+	// 4 choose 1
+	kCombinations[1] = [][]Model{
+		[]Model{models[0]},
+		[]Model{models[1]},
+		[]Model{models[2]},
+		[]Model{models[3]},
+	}
+	// 4 choose 2
+	kCombinations[2] = [][]Model{
+		[]Model{models[0], models[1]},
+		[]Model{models[0], models[2]},
+		[]Model{models[0], models[3]},
+		[]Model{models[1], models[2]},
+		[]Model{models[1], models[3]},
+		[]Model{models[2], models[3]},
+	}
+	// 4 choose 3
+	kCombinations[3] = [][]Model{
+		[]Model{models[0], models[1], models[2]},
+		[]Model{models[0], models[1], models[3]},
+		[]Model{models[0], models[2], models[3]},
+		[]Model{models[1], models[2], models[3]},
+	}
+	// 4 choose 4
+	kCombinations[4] = [][]Model{
+		[]Model{models[0], models[1], models[2], models[3]},
+	}
+
+	for i, limit := range limits {
+		expectedLength := expectedLengths[i]
+		if expectedLength == len(models) {
+			q := NewQuery("basicModel").Limit(limit)
+			testQueryWithExpectedModels(t, q, models, false)
+		} else {
+			results, err := NewQuery("basicModel").Limit(limit).Run()
+			if err != nil {
+				t.Error(err)
+			}
+			// We expect that at most N unique models will be returned, where
+			// N is the limit. Since the query is unordered, there is no definition
+			// of which N models zoom will return. So we have to check all possibilities
+			// of choosing N models from the slice of models. If one matches, then the
+			// test should pass. If none of the possible combinations match, it should fail
+			for _, expected := range kCombinations[int(limit)] {
+				if equal, _ := compareAsSet(expected, results); equal {
+					return
+				}
+			}
+			// if we reached here, none of the possible combinations passed
+			t.Errorf("results were invalid on iteration %d\nExpected some combination of %d unique models\nGot: ", i, expectedLength, modelIds(Models(results)))
+		}
+	}
+
+}
+
+// Tests all the corner cases for counting with limits
+func TestQueryAllLimitCount(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	limits := []uint{
+		0, 2, 4,
+	}
+	expecteds := []int{
+		3, 2, 3,
+	}
+
+	ms, err := newBasicModels(3)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	for i, limit := range limits {
+		expected := expecteds[i]
+		got, err := NewQuery("basicModel").Limit(limit).Count()
+		if err != nil {
+			t.Error(err)
+		}
+
+		if got != expected {
+			t.Errorf("Model count incorrect on iteration %d. Expected %d but got %d\n", i, expected, got)
+		}
 	}
 }
 
@@ -280,66 +393,138 @@ func TestOrderAlphaDesc(t *testing.T) {
 	testQueryWithExpectedIds(t, q, expectedIds, true)
 }
 
-func TestOrderNumericAscLimit(t *testing.T) {
+func TestNumericOrderAscLimitOffset(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	if ms, err := createOrderableNumericModels(5); err != nil {
+	testNumericOrderLimitOffset(t, ascending)
+}
+
+func TestNumericOrderDescLimitOffset(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	testNumericOrderLimitOffset(t, descending)
+}
+
+func testNumericOrderLimitOffset(t *testing.T, typ orderType) {
+	// register with gob
+	gob.Register(indexedPrimativesModel{})
+
+	onms, err := createOrderableNumericModels(4)
+	if err != nil {
 		t.Error(err)
-	} else {
-		q := NewQuery("indexedPrimativesModel").Order("Int").Limit(3)
-		testQueryWithExpectedIds(t, q, modelIds(Models(ms[:3])), true)
+	}
+	models := Models(onms)
+
+	limits := []uint{
+		0, 0, 0, 0, 1, 1, 1, 1, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
+	}
+	offsets := []uint{
+		0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5,
+	}
+	empty := Models([]*basicModel{})
+
+	if typ == descending {
+		// reverse models
+		for i, j := 0, len(models)-1; i <= j; i, j = i+1, j-1 {
+			models[i], models[j] = models[j], models[i]
+		}
+	}
+	expecteds := [][]Model{
+		models,
+		models[1:],
+		models[3:],
+		empty,
+		models[0:1],
+		models[1:2],
+		models[3:4],
+		empty,
+		models[0:3],
+		models[1:4],
+		models[3:4],
+		empty,
+		models,
+		models[1:4],
+		models[3:4],
+		empty,
+		models,
+		models[1:4],
+		models[3:4],
+		empty,
+	}
+
+	for i, limit := range limits {
+		offset := offsets[i]
+		expected := expecteds[i]
+		var q *Query
+		if typ == ascending {
+			q = NewQuery("indexedPrimativesModel").Order("Int").Limit(limit).Offset(offset)
+		} else if typ == descending {
+			q = NewQuery("indexedPrimativesModel").Order("-Int").Limit(limit).Offset(offset)
+		}
+		if results, err := q.Run(); err != nil {
+			t.Error(err)
+		} else {
+			if len(expected) == 0 && len(Models(results)) == 0 {
+				continue
+			}
+			if equal, err := looseEquals(expected, results); err != nil {
+				t.Error(err)
+			} else if !equal {
+				t.Errorf("Fail on iteration %d\nLimit = %d, Offset = %d\nExpected: %v\nGot %v\n", i, limit, offset, modelIds(expected), modelIds(Models(results)))
+			}
+		}
 	}
 }
 
-func TestOrderNumericDescLimit(t *testing.T) {
+func TestNumericOrderAscLimitOffsetCount(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	ms, err := createOrderableNumericModels(5)
+	testNumericOrderLimitOffsetCount(t, ascending)
+}
+
+func TestNumericOrderDescLimitOffsetCount(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	testNumericOrderLimitOffsetCount(t, descending)
+}
+
+func testNumericOrderLimitOffsetCount(t *testing.T, typ orderType) {
+	_, err := createOrderableNumericModels(4)
 	if err != nil {
 		t.Error(err)
 	}
 
-	// expected ids is reversed
-	expectedIds := make([]string, len(ms))
-	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+	limits := []uint{
+		0, 0, 0, 0, 1, 1, 1, 1, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
+	}
+	offsets := []uint{
+		0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5,
+	}
+	expecteds := []int{
+		4, 3, 1, 0, 1, 1, 1, 0, 3, 3, 1, 0, 4, 3, 1, 0, 4, 3, 1, 0,
 	}
 
-	q := NewQuery("indexedPrimativesModel").Order("-Int").Limit(3)
-	testQueryWithExpectedIds(t, q, expectedIds[:3], true)
-}
-
-func TestOrderNumericAscLimitOffset(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	if ms, err := createOrderableNumericModels(7); err != nil {
-		t.Error(err)
-	} else {
-		q := NewQuery("indexedPrimativesModel").Order("Int").Limit(3).Offset(2)
-		testQueryWithExpectedIds(t, q, modelIds(Models(ms[2:5])), true)
+	for i, limit := range limits {
+		offset := offsets[i]
+		expected := expecteds[i]
+		var q *Query
+		if typ == ascending {
+			q = NewQuery("indexedPrimativesModel").Order("Int").Limit(limit).Offset(offset)
+		} else if typ == descending {
+			q = NewQuery("indexedPrimativesModel").Order("-Int").Limit(limit).Offset(offset)
+		}
+		if count, err := q.Count(); err != nil {
+			t.Error(err)
+		} else {
+			if count != expected {
+				t.Errorf("Fail on iteration %d\nLimit = %d, Offset = %d\nExpected count to be %d, but got %d\n", i, limit, offset, expected, count)
+			}
+		}
 	}
-}
-
-func TestOrderNumericDescLimitOffset(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := createOrderableNumericModels(7)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// expected ids is reversed
-	expectedIds := make([]string, len(ms))
-	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
-	}
-
-	q := NewQuery("indexedPrimativesModel").Order("-Int").Limit(3).Offset(2)
-	testQueryWithExpectedIds(t, q, expectedIds[2:5], true)
 }
 
 func testQueryWithExpectedModels(t *testing.T, query RunScanner, expected []Model, orderMatters bool) {
