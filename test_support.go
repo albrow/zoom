@@ -348,7 +348,6 @@ func newInconvertibleTypesModels(num int) ([]*inconvertibleTypesModel, error) {
 	results := make([]*inconvertibleTypesModel, num)
 	for i := 0; i < num; i++ {
 		m := &inconvertibleTypesModel{
-			Complex:     complex128(1 + 2i),
 			IntSlice:    []int{3, 4, 5},
 			StringSlice: []string{"6", "7", "8"},
 			IntArray:    [3]int{9, 10, 11},

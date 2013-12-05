@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
+	"math"
 	"reflect"
 	"strings"
 )
@@ -198,9 +199,19 @@ func (q *Query) getIds() ([]string, error) {
 	// construct a redis command to get the ids
 	if q.order.fieldName == "" {
 		// without ordering
+		if q.offset != 0 {
+			return nil, errors.New("zoom: offset cannot be applied to queries without an order.")
+		}
 		indexKey := q.modelSpec.modelName + ":all"
 		args := redis.Args{}.Add(indexKey)
-		return redis.Strings(conn.Do("SMEMBERS", args...))
+		var command string
+		if q.limit == 0 {
+			command = "SMEMBERS"
+		} else {
+			command = "SRANDMEMBER"
+			args = args.Add(q.limit)
+		}
+		return redis.Strings(conn.Do(command, args...))
 	} else {
 		// with ordering
 		args := redis.Args{}
@@ -271,17 +282,59 @@ func (q *Query) getIdCount() (int, error) {
 	conn := GetConn()
 	defer conn.Close()
 
-	// construct a redis command to get the ids
 	args := redis.Args{}
 	var command string
 	if q.order.fieldName == "" {
-		// without filtering
+		// without ordering
+		if q.offset != 0 {
+			return 0, errors.New("zoom: offset cannot be applied to queries without an order.")
+		}
 		command = "SCARD"
 		indexKey := q.modelSpec.modelName + ":all"
 		args = args.Add(indexKey)
+		count, err := redis.Int(conn.Do("SCARD", args...))
+		if err != nil {
+			return 0, err
+		}
+		if q.limit == 0 {
+			// limit of 0 is the same as unlimited
+			return count, nil
+		} else {
+			limitInt := int(q.limit)
+			if count > limitInt {
+				return limitInt, nil
+			} else {
+				return count, nil
+			}
+		}
 	} else {
-		// TODO: with filtering
-		return 0, errors.New("zoom: filters not implemented yet!")
+		// with ordering
+		// this is a little more complicated
+		command = "ZCARD"
+		indexKey := q.modelSpec.modelName + ":" + q.order.redisName
+		args = args.Add(indexKey)
+		count, err := redis.Int(conn.Do(command, args...))
+		if err != nil {
+			return 0, err
+		}
+		if q.limit == 0 && q.offset == 0 {
+			// simple case (no limit, no offset)
+			return count, nil
+		} else {
+			// we need to take limit and offset into account
+			// in order to return the correct number of models which
+			// would have been returned by running the query
+			if q.offset > uint(count) {
+				// special case for offset > count
+				return 0, nil
+			} else if q.limit == 0 {
+				// special case if limit = 0 (really means unlimited)
+				return count - int(q.offset), nil
+			} else {
+				// holy type coercion, batman!
+				// it's ugly but it works
+				return int(math.Min(float64(count-int(q.offset)), float64(q.limit))), nil
+			}
+		}
 	}
-	return redis.Int(conn.Do(command, args...))
 }
