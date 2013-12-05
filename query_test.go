@@ -10,7 +10,6 @@
 package zoom
 
 import (
-	"encoding/gob"
 	"reflect"
 	"strconv"
 	"testing"
@@ -408,9 +407,6 @@ func TestNumericOrderDescLimitOffset(t *testing.T) {
 }
 
 func testNumericOrderLimitOffset(t *testing.T, typ orderType) {
-	// register with gob
-	gob.Register(indexedPrimativesModel{})
-
 	onms, err := createOrderableNumericModels(4)
 	if err != nil {
 		t.Error(err)
