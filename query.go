@@ -119,6 +119,32 @@ func (q *Query) Offset(amount uint) *Query {
 	return q
 }
 
+// Include specifies one or more field names which will be read from the database
+// and scanned into the resulting models when the query is run. Field names which
+// are not specified in Include will not be read or scanned. You can only use one
+// of Include or Exclude, not both on the same query.
+func (q *Query) Include(fields ...string) *Query {
+	if len(q.excludes) > 0 {
+		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
+		return q
+	}
+	q.includes = append(q.includes, fields...)
+	return q
+}
+
+// Exclude specifies one or more field names which will *not* be read from the
+// database and scanned. Any other fields *will* be read and scanned into the
+// resulting models when the query is run. You can only use one of Include or
+// Exclude, not both on the same query.
+func (q *Query) Exclude(fields ...string) *Query {
+	if len(q.includes) > 0 {
+		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
+		return q
+	}
+	q.excludes = append(q.excludes, fields...)
+	return q
+}
+
 func (q *Query) Run() (interface{}, error) {
 	if q.err != nil {
 		return nil, q.err
@@ -134,7 +160,7 @@ func (q *Query) Run() (interface{}, error) {
 	resultsVal := reflect.New(reflect.SliceOf(q.modelSpec.modelType))
 	resultsVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(q.modelSpec.modelType), 0, 0))
 
-	if err := scanModelsByIds(resultsVal, q.modelSpec.modelName, ids); err != nil {
+	if err := scanModelsByIds(resultsVal, q.modelSpec.modelName, ids, q.getIncludes()); err != nil {
 		return resultsVal.Elem().Interface(), err
 	}
 	return resultsVal.Elem().Interface(), nil
@@ -169,7 +195,7 @@ func (q *Query) Scan(in interface{}) error {
 	resultsVal := reflect.ValueOf(in)
 	resultsVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(q.modelSpec.modelType), 0, 0))
 
-	return scanModelsByIds(resultsVal, q.modelSpec.modelName, ids)
+	return scanModelsByIds(resultsVal, q.modelSpec.modelName, ids, q.getIncludes())
 }
 
 func (q *Query) Count() (int, error) {
@@ -192,6 +218,24 @@ func (q *Query) setErrorIfNone(e error) {
 	}
 }
 
+// getIncludes parses the includes and excludes properties to return
+// a list of fieldNames which should be included in all find operations.
+// a return value of nil means that all fields should be considered.
+func (q *Query) getIncludes() []string {
+	if len(q.includes) != 0 {
+		return q.includes
+	} else if len(q.excludes) != 0 {
+		results := q.modelSpec.fieldNames
+		for _, name := range q.excludes {
+			results = removeElementFromStringSlice(results, name)
+		}
+		return results
+	}
+	return nil
+}
+
+// getIds() executes a single command and returns the ids of every
+// model which should be found for the query.
 func (q *Query) getIds() ([]string, error) {
 	conn := GetConn()
 	defer conn.Close()
@@ -259,7 +303,7 @@ func extractModelIdFromAlphaIndexValue(valueAndId string) string {
 // NOTE: sliceVal should be the value of a pointer to a slice of pointer to models.
 // It's type should be *[]*<T>, where <T> is some type which satisfies the Model
 // interface. The type *[]*Model is not equivalent and will not work.
-func scanModelsByIds(sliceVal reflect.Value, modelName string, ids []string) error {
+func scanModelsByIds(sliceVal reflect.Value, modelName string, ids []string, includes []string) error {
 	t := newTransaction()
 	for _, id := range ids {
 		mr, err := newModelRefFromName(modelName)
@@ -267,7 +311,7 @@ func scanModelsByIds(sliceVal reflect.Value, modelName string, ids []string) err
 			return err
 		}
 		mr.model.setId(id)
-		if err := t.findModel(mr, nil); err != nil {
+		if err := t.findModel(mr, includes); err != nil {
 			if _, ok := err.(*KeyNotFoundError); ok {
 				continue // key not found errors are fine
 				// TODO: update the index in this case? Or maybe if it keeps happening?
@@ -278,6 +322,8 @@ func scanModelsByIds(sliceVal reflect.Value, modelName string, ids []string) err
 	return t.exec()
 }
 
+// getIdCount returns the number of models that would be found if the
+// query were executed, but does not actually find them.
 func (q *Query) getIdCount() (int, error) {
 	conn := GetConn()
 	defer conn.Close()
