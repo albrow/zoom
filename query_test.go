@@ -814,7 +814,7 @@ func TestBooleanFilterNotEqual(t *testing.T) {
 
 func TestAlphaFilterNotEqual(t *testing.T) {
 	testingSetUp()
-	//defer testingTearDown()
+	defer testingTearDown()
 
 	ms := make([]*indexedPrimativesModel, 4)
 	ms[0] = &indexedPrimativesModel{String: "a"}
