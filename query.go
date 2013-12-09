@@ -446,7 +446,7 @@ func (q *Query) getIdsWithFilters() ([]string, error) {
 	idSets := []stringSet{}
 	// get a set of ids for each filter
 	for _, filter := range q.filters {
-		ids, err := filter.getIds(q.modelSpec.modelName)
+		ids, err := filter.getIds(q.modelSpec.modelName, q.order)
 		if err != nil {
 			return nil, err
 		}
@@ -467,40 +467,52 @@ func (q *Query) getIdsWithFilters() ([]string, error) {
 	}
 }
 
-func (f filter) getIds(modelName string) (stringSet, error) {
+func (f filter) getIds(modelName string, o order) (stringSet, error) {
 	// special case for id filters
 	if f.byId {
 		id := f.filterValue.String()
 		return newStringSet(id), nil
 	} else {
 		setKey := modelName + ":" + f.redisName
+		reverse := o.orderType == descending && o.fieldName != ""
 		switch f.indexType {
 
 		case indexNumeric:
 			args := redis.Args{}.Add(setKey)
 			switch f.filterType {
 			case equal, less, greater, lessOrEqual, greaterOrEqual:
+				var min, max interface{}
 				switch f.filterType {
 				case equal:
-					args = args.Add(f.filterValue.Interface()).Add(f.filterValue.Interface())
+					min, max = f.filterValue.Interface(), f.filterValue.Interface()
 				case less:
+					min = "-inf"
 					// use "(" for exclusive
-					max := fmt.Sprintf("(%v", f.filterValue.Interface())
-					args = args.Add("-inf").Add(max)
+					max = fmt.Sprintf("(%v", f.filterValue.Interface())
 				case greater:
 					// use "(" for exclusive
-					min := fmt.Sprintf("(%v", f.filterValue.Interface())
-					args = args.Add(min).Add("+inf")
+					min = fmt.Sprintf("(%v", f.filterValue.Interface())
+					max = "+inf"
 				case lessOrEqual:
-					args = args.Add("-inf").Add(f.filterValue.Interface())
+					min = "-inf"
+					max = f.filterValue.Interface()
 				case greaterOrEqual:
-					args = args.Add(f.filterValue.Interface()).Add("+inf")
+					min = f.filterValue.Interface()
+					max = "+inf"
 				}
 				// execute command to get the ids
 				// TODO: try and do this inside of a transaction
+				var command string
+				if !reverse {
+					command = "ZRANGEBYSCORE"
+					args = args.Add(min).Add(max)
+				} else {
+					command = "ZREVRANGEBYSCORE"
+					args = args.Add(max).Add(min)
+				}
 				conn := GetConn()
 				defer conn.Close()
-				idSlice, err := redis.Strings(conn.Do("ZRANGEBYSCORE", args...))
+				idSlice, err := redis.Strings(conn.Do(command, args...))
 				if err != nil {
 					return nil, err
 				}
@@ -511,42 +523,58 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 				// use union to combine the results
 				t := newTransaction()
 				max := fmt.Sprintf("(%v", f.filterValue.Interface())
-				lessArgs := args.Add("-inf").Add(max)
 				lessIds := []string{}
+				lessArgs := args.Add("-inf").Add(max)
+				fmt.Println("lessArgs: ", lessArgs)
 				if err := t.command("ZRANGEBYSCORE", lessArgs, newScanSliceHandler(&lessIds)); err != nil {
 					return nil, err
 				}
 				min := fmt.Sprintf("(%v", f.filterValue.Interface())
-				greaterArgs := args.Add(min).Add("+inf")
 				greaterIds := []string{}
+				greaterArgs := args.Add(min).Add("+inf")
+				fmt.Println("greaterArgs: ", greaterArgs)
 				if err := t.command("ZRANGEBYSCORE", greaterArgs, newScanSliceHandler(&greaterIds)); err != nil {
 					return nil, err
 				}
+
 				// execute the transaction to scan in values for lessIds and greaterIds
 				if err := t.exec(); err != nil {
 					return nil, err
 				}
-				lessSet := newStringSetFromSlice(lessIds)
-				greaterSet := newStringSetFromSlice(greaterIds)
-				return lessSet.union(greaterSet), nil
+				if !reverse {
+					lessSet := newStringSetFromSlice(lessIds)
+					greaterSet := newStringSetFromSlice(greaterIds)
+					return lessSet.union(greaterSet), nil
+				} else {
+					for i, j := 0, len(lessIds)-1; i <= j; i, j = i+1, j-1 {
+						lessIds[i], lessIds[j] = lessIds[j], lessIds[i]
+					}
+					for i, j := 0, len(greaterIds)-1; i <= j; i, j = i+1, j-1 {
+						greaterIds[i], greaterIds[j] = greaterIds[j], greaterIds[i]
+					}
+					lessSet := newStringSetFromSlice(lessIds)
+					greaterSet := newStringSetFromSlice(greaterIds)
+					return greaterSet.union(lessSet), nil
+				}
 			}
 
 		case indexBoolean:
 			args := redis.Args{}.Add(setKey)
+			var min, max interface{}
 			switch f.filterType {
 			case equal:
 				if f.filterValue.Bool() == true {
 					// use 1 for true
-					args = args.Add(1).Add(1)
+					min, max = 1, 1
 				} else {
 					// use 0 for false
-					args = args.Add(0).Add(0)
+					min, max = 0, 0
 				}
 			case less:
 				if f.filterValue.Bool() == true {
 					// false is less than true
 					// 0 < 1
-					args = args.Add(0).Add(0)
+					min, max = 0, 0
 				} else {
 					// can't be less than false (0)
 					return newStringSet(), nil
@@ -558,37 +586,39 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 				} else {
 					// true is greater than false
 					// 1 > 0
-					args = args.Add(1).Add(1)
+					min, max = 1, 1
 				}
 			case lessOrEqual:
 				if f.filterValue.Bool() == true {
 					// true and false are <= true
 					// 1 <= 1 and 0 <= 1
-					args = args.Add(0).Add(1)
+					min = 0
+					max = 1
 				} else {
 					// false <= false
 					// 0 <= 0
-					args = args.Add(0).Add(0)
+					min, max = 0, 0
 				}
 			case greaterOrEqual:
 				if f.filterValue.Bool() == true {
 					// true >= true
 					// 1 >= 1
-					args = args.Add(1).Add(1)
+					min, max = 1, 1
 				} else {
 					// false and true are >= false
 					// 0 >= 0 and 1 >= 0
-					args = args.Add(0).Add(1)
+					min = 0
+					max = 1
 				}
 			case notEqual:
 				if f.filterValue.Bool() == true {
 					// not true means false
 					// false == 0
-					args = args.Add(0).Add(0)
+					min, max = 0, 0
 				} else {
 					// not false means true
 					// true == 1
-					args = args.Add(1).Add(1)
+					min, max = 1, 1
 				}
 			default:
 				msg := fmt.Sprintf("zoom: Filter operator out of range. Got: %d", f.filterType)
@@ -596,15 +626,25 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 			}
 			// execute command to get the ids
 			// TODO: try and do this inside of a transaction
+			var command string
+			reverse := o.orderType == descending && o.fieldName != ""
+			if !reverse {
+				command = "ZRANGEBYSCORE"
+				args = args.Add(min).Add(max)
+			} else {
+				command = "ZREVRANGEBYSCORE"
+				args = args.Add(max).Add(min)
+			}
 			conn := GetConn()
 			defer conn.Close()
-			idSlice, err := redis.Strings(conn.Do("ZRANGEBYSCORE", args...))
+			idSlice, err := redis.Strings(conn.Do(command, args...))
 			if err != nil {
 				return nil, err
 			}
 			return newStringSetFromSlice(idSlice), nil
 
 		case indexAlpha:
+			reverse := o.orderType == descending && o.fieldName != ""
 			conn := GetConn()
 			defer conn.Close()
 			beforeRank, afterRank, err := f.getAlphaRanks(conn, setKey)
@@ -612,6 +652,7 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 				return nil, err
 			}
 			args := redis.Args{}.Add(setKey)
+			var start, stop int
 			switch f.filterType {
 			case equal, less, greater, lessOrEqual, greaterOrEqual:
 				switch f.filterType {
@@ -620,30 +661,41 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 						// no models with value equal to target
 						return newStringSet(), nil
 					}
-					args = args.Add(beforeRank).Add(afterRank - 2)
+					start = beforeRank
+					stop = afterRank - 2
 				case less:
 					if afterRank <= 2 {
 						// no models with value less than target
 						return newStringSet(), nil
 					}
-					args = args.Add(0).Add(afterRank - (afterRank - beforeRank) - 1)
+					start = 0
+					stop = afterRank - (afterRank - beforeRank) - 1
 				case greater:
-					args = args.Add(beforeRank + (afterRank - beforeRank) - 1).Add(-1)
+					start = beforeRank + (afterRank - beforeRank) - 1
+					stop = -1
 				case lessOrEqual:
 					if afterRank <= 1 {
 						// no models with value less than or equal to target
 						return newStringSet(), nil
 					}
-					args = args.Add(0).Add(afterRank - 2)
+					start = 0
+					stop = afterRank - 2
 				case greaterOrEqual:
-					args = args.Add(beforeRank).Add(-1)
+					start = beforeRank
+					stop = -1
 				}
+				args = args.Add(start).Add(stop)
 				ids, err := redis.Strings(conn.Do("ZRANGE", args...))
 				if err != nil {
 					return nil, err
 				}
 				for i, valueAndId := range ids {
 					ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+				}
+				if reverse {
+					for i, j := 0, len(ids)-1; i <= j; i, j = i+1, j-1 {
+						ids[i], ids[j] = ids[j], ids[i]
+					}
 				}
 				return newStringSetFromSlice(ids), nil
 			case notEqual:
@@ -673,9 +725,22 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 				for i, valueAndId := range greaterIds {
 					greaterIds[i] = extractModelIdFromAlphaIndexValue(valueAndId)
 				}
-				lessSet := newStringSetFromSlice(lessIds)
-				greaterSet := newStringSetFromSlice(greaterIds)
-				return lessSet.union(greaterSet), nil
+				if !reverse {
+					lessSet := newStringSetFromSlice(lessIds)
+					greaterSet := newStringSetFromSlice(greaterIds)
+					return lessSet.union(greaterSet), nil
+				} else {
+					for i, j := 0, len(lessIds)-1; i <= j; i, j = i+1, j-1 {
+						lessIds[i], lessIds[j] = lessIds[j], lessIds[i]
+					}
+					for i, j := 0, len(greaterIds)-1; i <= j; i, j = i+1, j-1 {
+						greaterIds[i], greaterIds[j] = greaterIds[j], greaterIds[i]
+					}
+					lessSet := newStringSetFromSlice(lessIds)
+					greaterSet := newStringSetFromSlice(greaterIds)
+					return greaterSet.union(lessSet), nil
+				}
+
 			}
 
 		default:

@@ -7,7 +7,6 @@
 package zoom
 
 import (
-	"fmt"
 	"reflect"
 	"strconv"
 	"testing"
@@ -993,7 +992,6 @@ func TestAlphaRangeFilters(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	fmt.Println(ms[:4])
 
 	// less
 	q := NewQuery("indexedPrimativesModel").Filter("String <", "5")
@@ -1029,6 +1027,143 @@ func TestAlphaRangeFilters(t *testing.T) {
 	q = NewQuery("indexedPrimativesModel").Filter("String >=", "5")
 	testQueryWithExpectedModels(t, q, []Model{}, false)
 
+}
+
+func TestNumericOrderDescRangeFilter(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := createOrderableNumericModels(5)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// expected ids is reversed
+	expectedIds := make([]string, len(ms))
+	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
+		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+	}
+
+	// less
+	q := NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <", 5)
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <", 3)
+	testQueryWithExpectedIds(t, q, expectedIds[2:], true)
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <", 0)
+	testQueryWithExpectedIds(t, q, []string{}, true)
+
+	// greater
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >", -1)
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >", 2)
+	testQueryWithExpectedIds(t, q, expectedIds[:2], true)
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >", 5)
+	testQueryWithExpectedIds(t, q, []string{}, true)
+
+	// lessOrEqual
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <=", 4)
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <=", 3)
+	testQueryWithExpectedIds(t, q, expectedIds[1:], true)
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <=", -1)
+	testQueryWithExpectedIds(t, q, []string{}, true)
+
+	// greaterOrEqual
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >=", 0)
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >=", 2)
+	testQueryWithExpectedIds(t, q, expectedIds[:3], true)
+	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >=", 5)
+	testQueryWithExpectedIds(t, q, []string{}, true)
+}
+
+func TestBooleanOrderDescRangeFilters(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := createOrderableBooleanModels()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// expected ids is reversed
+	expectedIds := make([]string, len(ms))
+	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
+		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+	}
+
+	// less
+	q := NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool <", false)
+	testQueryWithExpectedIds(t, q, []string{}, true)
+	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool <", true)
+	testQueryWithExpectedIds(t, q, expectedIds[1:2], true)
+
+	// greater
+	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool >", false)
+	testQueryWithExpectedIds(t, q, expectedIds[0:1], true)
+	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool >", true)
+	testQueryWithExpectedIds(t, q, []string{}, true)
+
+	// lessOrEqual
+	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool <=", false)
+	testQueryWithExpectedIds(t, q, expectedIds[1:2], true)
+	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool <=", true)
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+
+	// greaterOrEqual
+	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool >=", false)
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool >=", true)
+	testQueryWithExpectedIds(t, q, expectedIds[0:1], true)
+}
+
+func TestAlphaDescOrderRangeFilters(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := createOrderableAlphaModels(5)
+	if err != nil {
+		t.Error(err)
+	}
+	// expected ids is reversed
+	expectedIds := make([]string, len(ms))
+	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
+		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+	}
+
+	// less
+	q := NewQuery("indexedPrimativesModel").Order("-String").Filter("String <", "5")
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <", "3")
+	testQueryWithExpectedIds(t, q, expectedIds[2:], true)
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <", "1")
+	testQueryWithExpectedIds(t, q, expectedIds[4:5], true)
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <", "0")
+	testQueryWithExpectedIds(t, q, []string{}, true)
+
+	// greater
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >", "-")
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >", "2")
+	testQueryWithExpectedIds(t, q, expectedIds[:2], true)
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >", "5")
+	testQueryWithExpectedIds(t, q, []string{}, true)
+
+	// lessOrEqual
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <=", "4")
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <=", "3")
+	testQueryWithExpectedIds(t, q, expectedIds[1:], true)
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <=", "-")
+	testQueryWithExpectedIds(t, q, []string{}, true)
+
+	// greaterOrEqual
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >=", "0")
+	testQueryWithExpectedIds(t, q, expectedIds, true)
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >=", "2")
+	testQueryWithExpectedIds(t, q, expectedIds[:3], true)
+	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >=", "5")
+	testQueryWithExpectedIds(t, q, []string{}, true)
 }
 
 func testNumericOrderLimitOffsetCount(t *testing.T, typ orderType) {
