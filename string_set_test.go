@@ -63,6 +63,20 @@ func TestSize(t *testing.T) {
 	}
 }
 
+func TestCopy(t *testing.T) {
+	s0 := newStringSet("one", "two", "three")
+	s1 := s0.copy()
+	s1.add("four", "five")
+	e0 := newStringSet("one", "two", "three")
+	if !s0.equals(e0) {
+		t.Errorf("s0 changed! changing a copy should not change the original.\nExpected: %v\nGot: %v", e0.slice(), s0.slice())
+	}
+	e1 := newStringSet("one", "two", "three", "four", "five")
+	if !s1.equals(e1) {
+		t.Errorf("s1 was not correct.\nExpected: %v\nGot: %v", e1.slice(), s1.slice())
+	}
+}
+
 func TestEquals(t *testing.T) {
 	s0 := newStringSet()
 	s1 := newStringSet("one", "two", "three")
@@ -121,6 +135,37 @@ func TestIntersect(t *testing.T) {
 	e123 := newStringSet("one", "three", "five")
 	if !s123.equals(e123) {
 		t.Errorf("intersection of 1, 2, and 3 was incorrect. Expected %v but got %v", e123, s123)
+	}
+}
+
+func TestUnion(t *testing.T) {
+	s0 := newStringSet()
+	s1 := newStringSet("one", "two", "three", "four", "five")
+	s2 := newStringSet("one", "three", "four", "five")
+	s3 := newStringSet("one", "three", "five", "six")
+
+	s0x := s0.union(newStringSet())
+	if !s0x.equals(s0) {
+		t.Errorf("union of 0 and [] was incorrect. Expected [] but got %v", s0x)
+	}
+	s01 := s0.union(s1)
+	if !s01.equals(s1) {
+		t.Errorf("union of 0 and 1 was incorrect. Expected %v but got %v", s1.slice(), s01.slice())
+	}
+	s0123 := s0.union(s1, s2, s3)
+	e0123 := newStringSet("one", "two", "three", "four", "five", "six")
+	if !s0123.equals(e0123) {
+		t.Errorf("union of 0, 1, 2, and 3 was incorrect. Expected %v but got %v", e0123.slice(), s0123.slice())
+	}
+	s12 := s1.union(s2)
+	e12 := newStringSet("one", "two", "three", "four", "five")
+	if !s12.equals(e12) {
+		t.Errorf("union of 1 and 2 was incorrect. Expected %v but got %v", e12.slice(), s12.slice())
+	}
+	s23 := s2.union(s3)
+	e23 := newStringSet("one", "three", "four", "five", "six")
+	if !s23.equals(e23) {
+		t.Errorf("union of 1, 2, and 3 was incorrect. Expected %v but got %v", e23.slice(), s23.slice())
 	}
 }
 
