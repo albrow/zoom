@@ -15,11 +15,17 @@ import (
 	"strings"
 )
 
+// RunScanner is an interface implemented by Query
+// It may also be implemented by other types in the future.
 type RunScanner interface {
 	Run() (interface{}, error)
 	Scan(interface{}) error
 }
 
+// Query represents a query which will retrieve some models from
+// the database. A Query may consist of one or more query modifiers
+// and can be run in several different ways with different query
+// finishers.
 type Query struct {
 	modelSpec modelSpec
 	includes  []string
@@ -79,6 +85,14 @@ var filterSymbols = map[string]filterType{
 // this is a string which equals ASCII DEL
 var delString string = string([]byte{byte(127)})
 
+// NewQuery is used to construct a query. modelName should be the
+// name of a registered model. The query returned can be chained
+// together with one or more query modifiers, and then run using
+// the Run, Scan, Count, or Ids only methods. If no query modifiers
+// are used, running the query will return all models that match the
+// type corresponding to modelName in uspecified order. Will return
+// an error if modelName is not the name of some registered model
+// type.
 func NewQuery(modelName string) *Query {
 	q := &Query{}
 	spec, found := modelSpecs[modelName]
@@ -100,7 +114,8 @@ func NewQuery(modelName string) *Query {
 // allowed, and will take effect when two or more models have the same value for the primary
 // order field. Order will set an error on the query if the fieldName is invalid, if another
 // order has already been applied to the query, or if the fieldName specified does not correspond
-// to an indexed field.
+// to an indexed field. There is currently a bug where Order may not work correctly when
+// combined with filters.
 func (q *Query) Order(fieldName string) *Query {
 	if q.order.fieldName != "" {
 		// TODO: allow secondary sort orders?
@@ -140,14 +155,16 @@ func (q *Query) Order(fieldName string) *Query {
 }
 
 // Limit specifies an upper limit on the number of records to return.
-// If amount is 0, no limit will be applied.
+// If amount is 0, no limit will be applied. There is currently a bug
+// where Limit may not work correctly when combined with filters.
 func (q *Query) Limit(amount uint) *Query {
 	q.limit = amount
 	return q
 }
 
 // Offset specifies a starting index from which to start counting records that
-// will be returned.
+// will be returned. There is currently a bug where Offset may not work correctly
+// when combined with filters.
 func (q *Query) Offset(amount uint) *Query {
 	q.offset = amount
 	return q
@@ -185,9 +202,9 @@ func (q *Query) Exclude(fields ...string) *Query {
 // order. Operators must be one of "=", "!=", ">", "<", ">=", or "<=". If multiple
 // filters are applied to the same query, the query will only return models which
 // have matches for ALL of the filters. I.e. applying multiple filters is logially
-// equivalent to combining them with a AND or INTERSECT operator.
-
-// TODO: finish da shits
+// equivalent to combining them with a AND or INTERSECT operator. There are currently
+// some bugs, and Filter may not work correctly when combined with Count, Order,
+// Limit, or Offset.
 func (q *Query) Filter(filterString string, value interface{}) *Query {
 	fieldName, operator, err := splitFilterString(filterString)
 	if err != nil {
@@ -251,10 +268,6 @@ func (q *Query) Filter(filterString string, value interface{}) *Query {
 	return q
 }
 
-func (q *Query) expandAlphaNotEqualsFilter(f filter) {
-
-}
-
 func splitFilterString(filterString string) (fieldName string, operator string, err error) {
 	split := strings.Split(filterString, " ")
 	if len(split) != 2 {
@@ -285,6 +298,11 @@ func (q *Query) filterById(operator string, value interface{}) *Query {
 	return q
 }
 
+// Run is a query finisher. It runs the query and returns the results in
+// the form of an interface. The true type of the return value will be
+// a slice of pointers to some regestired model type. If you need a type-safe
+// way to run queries, look at the Scan method. Any errors that were caused
+// by invalid arguments to query modifiers will be returned here.
 func (q *Query) Run() (interface{}, error) {
 	if q.err != nil {
 		return nil, q.err
@@ -306,6 +324,11 @@ func (q *Query) Run() (interface{}, error) {
 	return resultsVal.Elem().Interface(), nil
 }
 
+// Scan is a query finisher. It runs the query and attempts
+// to scan the results into in. The type of in should be a pointer
+// to a slice of pointers to a registered model type. Any errors that
+// were caused by invalid arguments to query modifiers will be returned
+// here.
 func (q *Query) Scan(in interface{}) error {
 	if q.err != nil {
 		return q.err
@@ -338,6 +361,11 @@ func (q *Query) Scan(in interface{}) error {
 	return scanModelsByIds(resultsVal, q.modelSpec.modelName, ids, q.getIncludes())
 }
 
+// Count is a query finisher. It counts the number of models that would
+// be returned by the query without actually running the query. Any errors
+// that were caused by invalid arguments to query modifiers will be returned
+// here. There is currently a bug where Count may not work correctly for queries
+// with Filter modifiers.
 func (q *Query) Count() (int, error) {
 	if q.err != nil {
 		return 0, q.err
@@ -345,6 +373,9 @@ func (q *Query) Count() (int, error) {
 	return q.getIdCount()
 }
 
+// IdsOnly is a query finisher. It returns only the ids of the models
+// and doesn't actually retrieve all of their fields. Any errors that were caused
+// by invalid arguments to query modifiers will be returned here.
 func (q *Query) IdsOnly() ([]string, error) {
 	if q.err != nil {
 		return nil, q.err
