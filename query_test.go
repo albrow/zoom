@@ -4,9 +4,6 @@
 
 // File query_test.go tests the query abstraction (query.go)
 
-// TODO: test all edge cases for limit and offset where applicable
-// TODO: fix possible bug with limits and offsets for unordered queries
-
 package zoom
 
 import (
