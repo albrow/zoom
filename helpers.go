@@ -14,7 +14,8 @@ import (
 )
 
 // Models converts an interface to a slice of Model. It is typically
-// used to convert a return value of a Query.
+// used to convert a return value of a Query. Will panic if the type
+// is invalid.
 func Models(in interface{}) []Model {
 	typ := reflect.TypeOf(in)
 	if !typeIsSliceOrArray(typ) {
@@ -46,7 +47,8 @@ func Models(in interface{}) []Model {
 	return results
 }
 
-// Convert interface{} to []interface{}
+// Interfaces convert interface{} to []interface{}
+// Will panic if the type is invalid.
 func Interfaces(in interface{}) []interface{} {
 	val := reflect.ValueOf(in)
 	length := val.Len()
