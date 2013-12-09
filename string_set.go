@@ -52,6 +52,14 @@ func (s stringSet) size() int {
 	return len(s)
 }
 
+func (s stringSet) copy() stringSet {
+	results := newStringSet()
+	for elem, _ := range s {
+		results.add(elem)
+	}
+	return results
+}
+
 func (s stringSet) equals(other stringSet) bool {
 	if s.size() != other.size() {
 		return false
@@ -85,6 +93,21 @@ func (s stringSet) intersect(others ...stringSet) stringSet {
 		results := s.intersect(others[0])
 		for i := 1; i < len(others); i++ {
 			results = results.intersect(others[i])
+		}
+		return results
+	}
+}
+
+func (s stringSet) union(others ...stringSet) stringSet {
+	switch len(others) {
+	case 0:
+		return s
+	default:
+		results := s.copy()
+		for _, other := range others {
+			for elem, _ := range other {
+				results.add(elem)
+			}
 		}
 		return results
 	}
