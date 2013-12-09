@@ -10,6 +10,7 @@
 package zoom
 
 import (
+	"fmt"
 	"reflect"
 	"strconv"
 	"testing"
@@ -490,6 +491,8 @@ func TestOrderBooleanDesc(t *testing.T) {
 	testQueryWithExpectedIds(t, q, expectedIds, true)
 }
 
+// NOTE: numbers > 9 might not work the way you'd expect
+// From an alphanumeric perspective 123 < 2
 func createOrderableAlphaModels(num int) ([]*indexedPrimativesModel, error) {
 	ms := []*indexedPrimativesModel{}
 	for i := 0; i < num; i++ {
@@ -826,6 +829,128 @@ func TestFilterEqualIntersect(t *testing.T) {
 		q := NewQuery("indexedPrimativesModel").Filter("Int =", intFilter).Filter("Bool =", boolFilter).Filter("String =", stringFilter)
 		testQueryWithExpectedModels(t, q, expected, false)
 	}
+}
+
+func TestNumericRangeFilters(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := createOrderableNumericModels(5)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// less
+	q := NewQuery("indexedPrimativesModel").Filter("Int <", 5)
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Int <", 3)
+	testQueryWithExpectedModels(t, q, Models(ms[:3]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Int <", 0)
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// greater
+	q = NewQuery("indexedPrimativesModel").Filter("Int >", -1)
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Int >", 2)
+	testQueryWithExpectedModels(t, q, Models(ms[3:]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Int >", 5)
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// lessOrEqual
+	q = NewQuery("indexedPrimativesModel").Filter("Int <=", 4)
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Int <=", 3)
+	testQueryWithExpectedModels(t, q, Models(ms[:4]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Int <=", -1)
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// greaterOrEqual
+	q = NewQuery("indexedPrimativesModel").Filter("Int >=", 0)
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Int >=", 2)
+	testQueryWithExpectedModels(t, q, Models(ms[2:]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Int >=", 5)
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+}
+
+func TestBooleanRangeFilters(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := createOrderableBooleanModels()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// less
+	q := NewQuery("indexedPrimativesModel").Filter("Bool <", false)
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+	q = NewQuery("indexedPrimativesModel").Filter("Bool <", true)
+	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
+
+	// greater
+	q = NewQuery("indexedPrimativesModel").Filter("Bool >", false)
+	testQueryWithExpectedModels(t, q, Models(ms[1:2]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Bool >", true)
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// lessOrEqual
+	q = NewQuery("indexedPrimativesModel").Filter("Bool <=", false)
+	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Bool <=", true)
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+
+	// greaterOrEqual
+	q = NewQuery("indexedPrimativesModel").Filter("Bool >=", false)
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Bool >=", true)
+	testQueryWithExpectedModels(t, q, Models(ms[1:2]), false)
+}
+
+func TestAlphaRangeFilters(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := createOrderableAlphaModels(5)
+	if err != nil {
+		t.Error(err)
+	}
+	fmt.Println(ms[:4])
+
+	// less
+	q := NewQuery("indexedPrimativesModel").Filter("String <", "5")
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String <", "3")
+	testQueryWithExpectedModels(t, q, Models(ms[:3]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String <", "1")
+	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String <", "0")
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// greater
+	q = NewQuery("indexedPrimativesModel").Filter("String >", "-")
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String >", "2")
+	testQueryWithExpectedModels(t, q, Models(ms[3:]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String >", "5")
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// lessOrEqual
+	q = NewQuery("indexedPrimativesModel").Filter("String <=", "4")
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String <=", "3")
+	testQueryWithExpectedModels(t, q, Models(ms[:4]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String <=", "-")
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// greaterOrEqual
+	q = NewQuery("indexedPrimativesModel").Filter("String >=", "0")
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String >=", "2")
+	testQueryWithExpectedModels(t, q, Models(ms[2:]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String >=", "5")
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
 }
 
 func testNumericOrderLimitOffsetCount(t *testing.T, typ orderType) {

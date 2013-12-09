@@ -479,6 +479,22 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 			case equal:
 				command = "ZRANGEBYSCORE"
 				args = args.Add(f.filterValue.Interface()).Add(f.filterValue.Interface())
+			case less:
+				command = "ZRANGEBYSCORE"
+				// use "(" for exclusive
+				max := fmt.Sprintf("(%v", f.filterValue.Interface())
+				args = args.Add("-inf").Add(max)
+			case greater:
+				command = "ZRANGEBYSCORE"
+				// use "(" for exclusive
+				min := fmt.Sprintf("(%v", f.filterValue.Interface())
+				args = args.Add(min).Add("+inf")
+			case lessOrEqual:
+				command = "ZRANGEBYSCORE"
+				args = args.Add("-inf").Add(f.filterValue.Interface())
+			case greaterOrEqual:
+				command = "ZRANGEBYSCORE"
+				args = args.Add(f.filterValue.Interface()).Add("+inf")
 			default:
 				return nil, errors.New("zoom: other operators not implemented yet!")
 			}
@@ -505,6 +521,48 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 					// use 0 for false
 					args = args.Add(0).Add(0)
 				}
+			case less:
+				command = "ZRANGEBYSCORE"
+				if f.filterValue.Bool() == true {
+					// false is less than true
+					// 0 < 1
+					args = args.Add(0).Add(0)
+				} else {
+					// can't be less than false (0)
+					return newStringSet(), nil
+				}
+			case greater:
+				command = "ZRANGEBYSCORE"
+				if f.filterValue.Bool() == true {
+					// can't be greater than true (1)
+					return newStringSet(), nil
+				} else {
+					// true is greater than false
+					// 1 > 0
+					args = args.Add(1).Add(1)
+				}
+			case lessOrEqual:
+				command = "ZRANGEBYSCORE"
+				if f.filterValue.Bool() == true {
+					// true and false are <= true
+					// 1 <= 1 and 0 <= 1
+					args = args.Add(0).Add(1)
+				} else {
+					// false <= false
+					// 0 <= 0
+					args = args.Add(0).Add(0)
+				}
+			case greaterOrEqual:
+				command = "ZRANGEBYSCORE"
+				if f.filterValue.Bool() == true {
+					// true >= true
+					// 1 >= 1
+					args = args.Add(1).Add(1)
+				} else {
+					// false and true are >= false
+					// 0 >= 0 and 1 >= 0
+					args = args.Add(0).Add(1)
+				}
 			default:
 				return nil, errors.New("zoom: other operators not implemented yet!")
 			}
@@ -525,25 +583,42 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 			if err != nil {
 				return nil, err
 			}
-
+			args := redis.Args{}.Add(setKey)
 			switch f.filterType {
 			case equal:
 				if beforeRank+1 == afterRank {
 					// no models with value equal to target
 					return newStringSet(), nil
 				}
-				args := redis.Args{}.Add(setKey).Add(beforeRank).Add(afterRank - 2)
-				ids, err := redis.Strings(conn.Do("ZRANGE", args...))
-				if err != nil {
-					return nil, err
+				args = args.Add(beforeRank).Add(afterRank - 2)
+			case less:
+				if afterRank <= 2 {
+					// no models with value less than target
+					return newStringSet(), nil
 				}
-				for i, valueAndId := range ids {
-					ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+				args = args.Add(0).Add(afterRank - (afterRank - beforeRank) - 1)
+			case greater:
+				args = args.Add(beforeRank + (afterRank - beforeRank) - 1).Add(-1)
+			case lessOrEqual:
+				if afterRank <= 1 {
+					// no models with value less than or equal to target
+					return newStringSet(), nil
 				}
-				return newStringSetFromSlice(ids), nil
+				args = args.Add(0).Add(afterRank - 2)
+			case greaterOrEqual:
+				args = args.Add(beforeRank).Add(-1)
 			default:
 				return nil, errors.New("zoom: other operators not implemented yet!")
 			}
+			fmt.Println("args:", args)
+			ids, err := redis.Strings(conn.Do("ZRANGE", args...))
+			if err != nil {
+				return nil, err
+			}
+			for i, valueAndId := range ids {
+				ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+			}
+			return newStringSetFromSlice(ids), nil
 
 		default:
 			msg := fmt.Sprintf("zoom: cannot use filters on unindexed field %s for model name %s.", f.fieldName, modelName)
