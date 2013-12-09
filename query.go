@@ -188,7 +188,7 @@ func (q *Query) Exclude(fields ...string) *Query {
 // equivalent to combining them with a AND or INTERSECT operator.
 
 // TODO: finish da shits
-func (q *Query) Fitler(filterString string, value interface{}) *Query {
+func (q *Query) Filter(filterString string, value interface{}) *Query {
 	fieldName, operator, err := splitFilterString(filterString)
 	if err != nil {
 		q.setErrorIfNone(err)

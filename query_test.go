@@ -644,7 +644,7 @@ func TestFilterById(t *testing.T) {
 		t.Error(err)
 	}
 
-	q := NewQuery("basicModel").Fitler("Id =", ms[0].Id)
+	q := NewQuery("basicModel").Filter("Id =", ms[0].Id)
 	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
 }
 
@@ -663,13 +663,13 @@ func TestNumericFilterEqual(t *testing.T) {
 		t.Error(err)
 	}
 	// run some test queries
-	q := NewQuery("indexedPrimativesModel").Fitler("Int =", 0)
+	q := NewQuery("indexedPrimativesModel").Filter("Int =", 0)
 	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-	q = NewQuery("indexedPrimativesModel").Fitler("Int =", 2)
+	q = NewQuery("indexedPrimativesModel").Filter("Int =", 2)
 	testQueryWithExpectedModels(t, q, Models(ms[2:3]), false)
-	q = NewQuery("indexedPrimativesModel").Fitler("Int =", 3)
+	q = NewQuery("indexedPrimativesModel").Filter("Int =", 3)
 	testQueryWithExpectedModels(t, q, []Model{}, false)
-	q = NewQuery("indexedPrimativesModel").Fitler("Int =", -1)
+	q = NewQuery("indexedPrimativesModel").Filter("Int =", -1)
 	testQueryWithExpectedModels(t, q, []Model{}, false)
 
 	// now save the 4th model
@@ -677,7 +677,7 @@ func TestNumericFilterEqual(t *testing.T) {
 		t.Error(err)
 	}
 	// now there should be two models with Int = 2
-	q = NewQuery("indexedPrimativesModel").Fitler("Int =", 2)
+	q = NewQuery("indexedPrimativesModel").Filter("Int =", 2)
 	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
 }
 
@@ -695,7 +695,7 @@ func TestBooleanFilterEqual(t *testing.T) {
 		t.Error(err)
 	}
 	// run some test queries
-	q := NewQuery("indexedPrimativesModel").Fitler("Bool =", true)
+	q := NewQuery("indexedPrimativesModel").Filter("Bool =", true)
 	testQueryWithExpectedModels(t, q, []Model{}, false)
 
 	// only save the 2nd model
@@ -703,9 +703,9 @@ func TestBooleanFilterEqual(t *testing.T) {
 		t.Error(err)
 	}
 	// run some test queries
-	q = NewQuery("indexedPrimativesModel").Fitler("Bool =", false)
+	q = NewQuery("indexedPrimativesModel").Filter("Bool =", false)
 	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-	q = NewQuery("indexedPrimativesModel").Fitler("Bool =", true)
+	q = NewQuery("indexedPrimativesModel").Filter("Bool =", true)
 	testQueryWithExpectedModels(t, q, Models(ms[1:2]), false)
 
 	// now save the 3rd model
@@ -713,7 +713,7 @@ func TestBooleanFilterEqual(t *testing.T) {
 		t.Error(err)
 	}
 	// now there should be two models with Bool = true
-	q = NewQuery("indexedPrimativesModel").Fitler("Bool =", true)
+	q = NewQuery("indexedPrimativesModel").Filter("Bool =", true)
 	testQueryWithExpectedModels(t, q, Models(ms[1:3]), false)
 }
 
@@ -732,13 +732,13 @@ func TestAlphaFilterEqual(t *testing.T) {
 		t.Error(err)
 	}
 	// run some test queries
-	q := NewQuery("indexedPrimativesModel").Fitler("String =", "a")
+	q := NewQuery("indexedPrimativesModel").Filter("String =", "a")
 	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-	q = NewQuery("indexedPrimativesModel").Fitler("String =", "c")
+	q = NewQuery("indexedPrimativesModel").Filter("String =", "c")
 	testQueryWithExpectedModels(t, q, Models(ms[2:3]), false)
-	q = NewQuery("indexedPrimativesModel").Fitler("String =", "d")
+	q = NewQuery("indexedPrimativesModel").Filter("String =", "d")
 	testQueryWithExpectedModels(t, q, []Model{}, false)
-	q = NewQuery("indexedPrimativesModel").Fitler("String =", "å")
+	q = NewQuery("indexedPrimativesModel").Filter("String =", "å")
 	testQueryWithExpectedModels(t, q, []Model{}, false)
 
 	// now save the 4th model
@@ -746,7 +746,7 @@ func TestAlphaFilterEqual(t *testing.T) {
 		t.Error(err)
 	}
 	// now there should be two models with String = "c"
-	q = NewQuery("indexedPrimativesModel").Fitler("String =", "c")
+	q = NewQuery("indexedPrimativesModel").Filter("String =", "c")
 	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
 }
 
