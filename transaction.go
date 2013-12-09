@@ -113,7 +113,7 @@ func newSingleScanHandler(scannable interface{}) func(interface{}) error {
 	}
 }
 
-// newScanStructHandler invokes redis driver to scan multiple values into scannable (a struct)
+// newScanModelHandler invokes redis driver to scan multiple values into scannable (a struct)
 func newScanModelHandler(mr modelRef) func(interface{}) error {
 	return func(reply interface{}) error {
 		bulk, err := redis.MultiBulk(reply, nil)
@@ -142,9 +142,11 @@ func newScanModelHandler(mr modelRef) func(interface{}) error {
 	}
 }
 
-// newScanSliceHandler invokes redis driver to scan multiple values into a single
+// newScanModelSliceHandler invokes redis driver to scan multiple values into a single
 // slice or array. The reflect.Value of the slice or array should be passed as an argument.
-func newScanSliceHandler(mr modelRef, scanVal reflect.Value) func(interface{}) error {
+// it requires a passed in mr and keeps track of miss counts. Will return an error
+// if the model does not exist. Use this for scanning into a struct field.
+func newScanModelSliceHandler(mr modelRef, scanVal reflect.Value) func(interface{}) error {
 	return func(reply interface{}) error {
 		bulk, err := redis.MultiBulk(reply, nil)
 		if err != nil {
@@ -165,6 +167,30 @@ func newScanSliceHandler(mr modelRef, scanVal reflect.Value) func(interface{}) e
 				return checkModelExists(mr)
 			}
 		}
+		scanType := scanVal.Type()
+		scanElem := scanType.Elem()
+		for _, el := range bulk {
+			srcElem := reflect.ValueOf(el)
+			converted := srcElem.Convert(scanElem)
+			scanVal.Set(reflect.Append(scanVal, converted))
+		}
+
+		return nil
+	}
+}
+
+// newScanSliceHandler invokes redis driver to scan multiple values into a single
+// slice or array. The reflect.Value of the slice or array should be passed as an argument.
+// it defers from newScanModelSliceHandler in that it does not require a modelRef argument
+// and does not keep track of misses. Use this internally for anything that is not part
+// of a model.
+func newScanSliceHandler(scannable interface{}) func(interface{}) error {
+	return func(reply interface{}) error {
+		bulk, err := redis.MultiBulk(reply, nil)
+		if err != nil {
+			return err
+		}
+		scanVal := reflect.ValueOf(scannable).Elem()
 		scanType := scanVal.Type()
 		scanElem := scanType.Elem()
 		for _, el := range bulk {
@@ -585,7 +611,7 @@ func (t *transaction) findModelLists(mr modelRef, includes []string) error {
 		// use LRANGE to get all the members of the list
 		listKey := mr.key() + ":" + list.redisName
 		args := redis.Args{listKey, 0, -1}
-		if err := t.command("LRANGE", args, newScanSliceHandler(mr, field)); err != nil {
+		if err := t.command("LRANGE", args, newScanModelSliceHandler(mr, field)); err != nil {
 			return err
 		}
 	}
@@ -605,7 +631,7 @@ func (t *transaction) findModelSets(mr modelRef, includes []string) error {
 		// use SMEMBERS to get all the members of the set
 		setKey := mr.key() + ":" + set.redisName
 		args := redis.Args{setKey}
-		if err := t.command("SMEMBERS", args, newScanSliceHandler(mr, field)); err != nil {
+		if err := t.command("SMEMBERS", args, newScanModelSliceHandler(mr, field)); err != nil {
 			return err
 		}
 	}

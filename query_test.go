@@ -753,6 +753,87 @@ func TestAlphaFilterEqual(t *testing.T) {
 	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
 }
 
+func TestNumericFilterNotEqual(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := make([]*indexedPrimativesModel, 4)
+	ms[0] = &indexedPrimativesModel{Int: 0}
+	ms[1] = &indexedPrimativesModel{Int: 0}
+	ms[2] = &indexedPrimativesModel{Int: 2}
+	ms[3] = &indexedPrimativesModel{Int: 3}
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	// run some test queries
+	q := NewQuery("indexedPrimativesModel").Filter("Int !=", 0)
+	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Int !=", 2)
+	testQueryWithExpectedModels(t, q, []Model{ms[0], ms[1], ms[3]}, false)
+	q = NewQuery("indexedPrimativesModel").Filter("Int !=", -1)
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+
+}
+
+func TestBooleanFilterNotEqual(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := make([]*indexedPrimativesModel, 3)
+	ms[0] = &indexedPrimativesModel{Bool: false}
+	ms[1] = &indexedPrimativesModel{Bool: true}
+	ms[2] = &indexedPrimativesModel{Bool: true}
+
+	// save the first model
+	if err := Save(ms[0]); err != nil {
+		t.Error(err)
+	}
+	// run some test queries
+	q := NewQuery("indexedPrimativesModel").Filter("Bool !=", false)
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// only save the 2nd model
+	if err := Save(ms[1]); err != nil {
+		t.Error(err)
+	}
+	// run some test queries
+	q = NewQuery("indexedPrimativesModel").Filter("Bool !=", true)
+	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("Bool !=", false)
+	testQueryWithExpectedModels(t, q, Models(ms[1:2]), false)
+
+	// now save the 3rd model
+	if err := Save(ms[2]); err != nil {
+		t.Error(err)
+	}
+	// now there should be two models with Bool = true
+	q = NewQuery("indexedPrimativesModel").Filter("Bool !=", false)
+	testQueryWithExpectedModels(t, q, Models(ms[1:3]), false)
+}
+
+func TestAlphaFilterNotEqual(t *testing.T) {
+	testingSetUp()
+	//defer testingTearDown()
+
+	ms := make([]*indexedPrimativesModel, 4)
+	ms[0] = &indexedPrimativesModel{String: "a"}
+	ms[1] = &indexedPrimativesModel{String: "a"}
+	ms[2] = &indexedPrimativesModel{String: "b"}
+	ms[3] = &indexedPrimativesModel{String: "c"}
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	// run some test queries
+	q := NewQuery("indexedPrimativesModel").Filter("String !=", "a")
+	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String !=", "c")
+	testQueryWithExpectedModels(t, q, Models(ms[0:3]), false)
+	q = NewQuery("indexedPrimativesModel").Filter("String !=", "d")
+	testQueryWithExpectedModels(t, q, Models(ms), false)
+}
+
 func TestFilterEqualIntersect(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
