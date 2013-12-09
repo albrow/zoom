@@ -750,6 +750,84 @@ func TestAlphaFilterEqual(t *testing.T) {
 	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
 }
 
+func TestFilterEqualIntersect(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := make([]*indexedPrimativesModel, 6)
+	ms[0] = &indexedPrimativesModel{Int: 1, Bool: true, String: "a"}
+	ms[1] = &indexedPrimativesModel{Int: 1, Bool: false, String: "b"}
+	ms[2] = &indexedPrimativesModel{Int: 1, Bool: true, String: "c"}
+	ms[3] = &indexedPrimativesModel{Int: 2, Bool: false, String: "a"}
+	ms[4] = &indexedPrimativesModel{Int: 2, Bool: true, String: "b"}
+	ms[5] = &indexedPrimativesModel{Int: 2, Bool: false, String: "c"}
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	// run some test queries with 2 attributes
+	ints := []int{1, 1, 2, 2, 3}
+	bools := []bool{true, false, true, false, true}
+	expecteds := [][]Model{
+		[]Model{ms[0], ms[2]},
+		[]Model{ms[1]},
+		[]Model{ms[4]},
+		[]Model{ms[3], ms[5]},
+		[]Model{},
+	}
+	for i, intFilter := range ints {
+		boolFilter := bools[i]
+		expected := expecteds[i]
+		q := NewQuery("indexedPrimativesModel").Filter("Int =", intFilter).Filter("Bool =", boolFilter)
+		testQueryWithExpectedModels(t, q, expected, false)
+	}
+	ints = []int{1, 1, 1, 2, 2, 2, 1, 3}
+	strings := []string{"a", "b", "c", "a", "b", "c", "e", "a"}
+	expecteds = [][]Model{
+		[]Model{ms[0]},
+		[]Model{ms[1]},
+		[]Model{ms[2]},
+		[]Model{ms[3]},
+		[]Model{ms[4]},
+		[]Model{ms[5]},
+		[]Model{},
+		[]Model{},
+	}
+	for i, intFilter := range ints {
+		stringFilter := strings[i]
+		expected := expecteds[i]
+		q := NewQuery("indexedPrimativesModel").Filter("Int =", intFilter).Filter("String =", stringFilter)
+		testQueryWithExpectedModels(t, q, expected, false)
+	}
+
+	ints = []int{1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 1}
+	bools = []bool{true, false, true, false, true, false, true, false, true, false, true, false, true, true}
+	strings = []string{"a", "a", "b", "b", "c", "c", "a", "a", "b", "b", "c", "c", "a", "d"}
+	expecteds = [][]Model{
+		[]Model{ms[0]},
+		[]Model{},
+		[]Model{},
+		[]Model{ms[1]},
+		[]Model{ms[2]},
+		[]Model{},
+		[]Model{},
+		[]Model{ms[3]},
+		[]Model{ms[4]},
+		[]Model{},
+		[]Model{},
+		[]Model{ms[5]},
+		[]Model{},
+		[]Model{},
+	}
+	for i, intFilter := range ints {
+		boolFilter := bools[i]
+		stringFilter := strings[i]
+		expected := expecteds[i]
+		q := NewQuery("indexedPrimativesModel").Filter("Int =", intFilter).Filter("Bool =", boolFilter).Filter("String =", stringFilter)
+		testQueryWithExpectedModels(t, q, expected, false)
+	}
+}
+
 func testNumericOrderLimitOffsetCount(t *testing.T, typ orderType) {
 	_, err := createOrderableNumericModels(4)
 	if err != nil {
