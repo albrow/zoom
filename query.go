@@ -526,8 +526,6 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 				if err := t.exec(); err != nil {
 					return nil, err
 				}
-				fmt.Println("less: ", lessIds)
-				fmt.Println("greater: ", greaterIds)
 				lessSet := newStringSetFromSlice(lessIds)
 				greaterSet := newStringSetFromSlice(greaterIds)
 				return lessSet.union(greaterSet), nil
@@ -652,8 +650,6 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 				// special case for not equals
 				// split into two different queries (less and greater) and
 				// use union to combine the results
-				fmt.Println("before rank: ", beforeRank)
-				fmt.Println("after rank: ", afterRank)
 				t := newTransaction()
 				lessIds := []string{}
 				if afterRank > 3 {
@@ -677,8 +673,6 @@ func (f filter) getIds(modelName string) (stringSet, error) {
 				for i, valueAndId := range greaterIds {
 					greaterIds[i] = extractModelIdFromAlphaIndexValue(valueAndId)
 				}
-				fmt.Println("less: ", lessIds)
-				fmt.Println("greater: ", greaterIds)
 				lessSet := newStringSetFromSlice(lessIds)
 				greaterSet := newStringSetFromSlice(greaterIds)
 				return lessSet.union(greaterSet), nil
