@@ -563,7 +563,6 @@ func (f filter) getAlphaRanks(conn redis.Conn, setKey string) (beforeRank int, a
 	before := target
 	baseArgs := redis.Args{}.Add(setKey)
 	beforeArgs := baseArgs.Add(0).Add(before)
-	fmt.Println("beforeArgs: ", beforeArgs)
 	if err := t.command("ZADD", beforeArgs, nil); err != nil {
 		return 0, 0, err
 	}
@@ -571,7 +570,6 @@ func (f filter) getAlphaRanks(conn redis.Conn, setKey string) (beforeRank int, a
 	// target value when sorted
 	after := target + delString
 	afterArgs := baseArgs.Add(0).Add(after)
-	fmt.Println("afterArgs: ", afterArgs)
 	if err := t.command("ZADD", afterArgs, nil); err != nil {
 		return 0, 0, err
 	}
