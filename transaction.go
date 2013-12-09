@@ -102,6 +102,17 @@ func newScanHandler(mr modelRef, scannables []interface{}) func(interface{}) err
 	}
 }
 
+// newSingleScanHandler scans a single value (such as an int or string) into scannable
+func newSingleScanHandler(scannable interface{}) func(interface{}) error {
+	return func(reply interface{}) error {
+		replies := []interface{}{reply}
+		if _, err := redis.Scan(replies, scannable); err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
 // newScanStructHandler invokes redis driver to scan multiple values into scannable (a struct)
 func newScanModelHandler(mr modelRef) func(interface{}) error {
 	return func(reply interface{}) error {

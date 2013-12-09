@@ -27,6 +27,7 @@ type Query struct {
 	order     order
 	limit     uint
 	offset    uint
+	filters   []filter
 	err       error
 }
 
@@ -44,6 +45,39 @@ const (
 	ascending = iota
 	descending
 )
+
+type filter struct {
+	fieldName   string
+	redisName   string
+	filterType  filterType
+	filterValue reflect.Value
+	indexType   indexType
+	byId        bool
+}
+
+type filterType int
+
+const (
+	equal = iota
+	notEqual
+	greater
+	less
+	greaterOrEqual
+	lessOrEqual
+)
+
+var filterSymbols = map[string]filterType{
+	"=":  equal,
+	"!=": notEqual,
+	">":  greater,
+	"<":  less,
+	">=": greaterOrEqual,
+	"<=": lessOrEqual,
+}
+
+// used as a prefix for alpha index tricks
+// this is a string which equals ASCII DEL
+var delString string = string([]byte{byte(127)})
 
 func NewQuery(modelName string) *Query {
 	q := &Query{}
@@ -145,6 +179,108 @@ func (q *Query) Exclude(fields ...string) *Query {
 	return q
 }
 
+// Filter applies a filter to the query, which will cause the query to only
+// return models with attributes matching the expression. filterString should be
+// an expression which includes a fieldName, a space, and an operator in that
+// order. Operators must be one of "=", "!=", ">", "<", ">=", or "<=". If multiple
+// filters are applied to the same query, the query will only return models which
+// have matches for ALL of the filters. I.e. applying multiple filters is logially
+// equivalent to combining them with a AND or INTERSECT operator.
+
+// TODO: finish da shits
+func (q *Query) Fitler(filterString string, value interface{}) *Query {
+	fieldName, operator, err := splitFilterString(filterString)
+	if err != nil {
+		q.setErrorIfNone(err)
+		return q
+	}
+	if fieldName == "Id" {
+		// special case for Id
+		return q.filterById(operator, value)
+	}
+	f := filter{
+		fieldName: fieldName,
+	}
+	// get the filterType based on the operator
+	if typ, found := filterSymbols[operator]; !found {
+		q.setErrorIfNone(errors.New("zoom: invalid operator in fieldStr. should be one of =, !=, >, <, >=, or <=."))
+		return q
+	} else {
+		f.filterType = typ
+	}
+	// get the redisName based on the fieldName
+	if redisName, found := q.modelSpec.redisNameForFieldName(fieldName); !found {
+		msg := fmt.Sprintf("zoom: invalid fieldName in filterString.\nType %s has no field %s", q.modelSpec.modelType.String(), fieldName)
+		q.setErrorIfNone(errors.New(msg))
+		return q
+	} else {
+		f.redisName = redisName
+	}
+	// get the indexType based on the fieldName
+	if indexType, found := q.modelSpec.indexTypeForField(fieldName); !found {
+		msg := fmt.Sprintf("zoom: filters are only allowed on indexed fields.\n%s.%s is not indexed.", q.modelSpec.modelType.String(), fieldName)
+		q.setErrorIfNone(errors.New(msg))
+		return q
+	} else {
+		f.indexType = indexType
+	}
+	// get type of the field and make sure it matches type of value arg
+	// Here we iterate through pointer inderections. This is so you can
+	// just pass in a primative instead of a pointer to a primative for
+	// filtering on fields which have pointer values.
+	structField, _ := q.modelSpec.field(fieldName)
+	fieldType := structField.Type
+	valueType := reflect.TypeOf(value)
+	valueVal := reflect.ValueOf(value)
+	for valueType.Kind() == reflect.Ptr {
+		valueType = valueType.Elem()
+		valueVal = valueVal.Elem()
+		if !valueVal.IsValid() {
+			q.setErrorIfNone(errors.New("zoom: invalid value arg for Filter. Is it a nil pointer?"))
+			return q
+		}
+	}
+	if valueType != fieldType {
+		msg := fmt.Sprintf("zoom: invalid value arg for Filter. Parsed type of value (%s) does not match type of field (%s).", valueType.String(), fieldType.String())
+		q.setErrorIfNone(errors.New(msg))
+		return q
+	} else {
+		f.filterValue = valueVal
+	}
+	q.filters = append(q.filters, f)
+	return q
+}
+
+func splitFilterString(filterString string) (fieldName string, operator string, err error) {
+	split := strings.Split(filterString, " ")
+	if len(split) != 2 {
+		return "", "", errors.New("zoom: too many spaces in fieldStr argument. should be a field name, a space, and an operator.")
+	}
+	return split[0], split[1], nil
+}
+
+func (q *Query) filterById(operator string, value interface{}) *Query {
+	if operator != "=" {
+		q.setErrorIfNone(errors.New("zoom: only the = operator can be used with Filter on Id field."))
+		return q
+	}
+	idVal := reflect.ValueOf(value)
+	if idVal.Kind() != reflect.String {
+		msg := fmt.Sprintf("zoom: for a Filter on Id field, value must be a string type. Was type %s", idVal.Kind().String())
+		q.setErrorIfNone(errors.New(msg))
+		return q
+	}
+	f := filter{
+		fieldName:   "Id",
+		redisName:   "Id",
+		filterType:  equal,
+		filterValue: idVal,
+		byId:        true,
+	}
+	q.filters = append(q.filters, f)
+	return q
+}
+
 func (q *Query) Run() (interface{}, error) {
 	if q.err != nil {
 		return nil, q.err
@@ -240,7 +376,18 @@ func (q *Query) getIds() ([]string, error) {
 	conn := GetConn()
 	defer conn.Close()
 
-	// construct a redis command to get the ids
+	if len(q.filters) == 0 {
+		return q.getIdsWithoutFilters()
+	} else {
+		return q.getIdsWithFilters()
+	}
+
+}
+
+func (q *Query) getIdsWithoutFilters() ([]string, error) {
+	conn := GetConn()
+	defer conn.Close()
+
 	if q.order.fieldName == "" {
 		// without ordering
 		if q.offset != 0 {
@@ -289,6 +436,166 @@ func (q *Query) getIds() ([]string, error) {
 			return ids, nil
 		}
 	}
+}
+
+func (q *Query) getIdsWithFilters() ([]string, error) {
+	idSets := []stringSet{}
+	// get a set of ids for each filter
+	for _, filter := range q.filters {
+		ids, err := filter.getIds(q.modelSpec.modelName)
+		if err != nil {
+			return nil, err
+		}
+		idSets = append(idSets, ids)
+	}
+	// get the intersection of all the id sets
+	// the resulting ids will only be those which
+	// pass ALL the filters.
+	// TODO: add set intersection here!
+	switch len(idSets) {
+	case 0:
+		return []string{}, nil
+	case 1:
+		return idSets[0].slice(), nil
+	default:
+		final := idSets[0].intersect(idSets[1:]...)
+		return final.slice(), nil
+	}
+}
+
+func (f filter) getIds(modelName string) (stringSet, error) {
+	// special case for id filters
+	if f.byId {
+		id := f.filterValue.String()
+		return newStringSet(id), nil
+	} else {
+		setKey := modelName + ":" + f.redisName
+		switch f.indexType {
+
+		case indexNumeric:
+			var command string
+			args := redis.Args{}.Add(setKey)
+			switch f.filterType {
+			case equal:
+				command = "ZRANGEBYSCORE"
+				args = args.Add(f.filterValue.Interface()).Add(f.filterValue.Interface())
+			default:
+				return nil, errors.New("zoom: other operators not implemented yet!")
+			}
+			// execute command to get the ids
+			// TODO: try and do this inside of a transaction
+			conn := GetConn()
+			defer conn.Close()
+			idSlice, err := redis.Strings(conn.Do(command, args...))
+			if err != nil {
+				return nil, err
+			}
+			return newStringSetFromSlice(idSlice), nil
+
+		case indexBoolean:
+			var command string
+			args := redis.Args{}.Add(setKey)
+			switch f.filterType {
+			case equal:
+				command = "ZRANGEBYSCORE"
+				if f.filterValue.Bool() == true {
+					// use 1 for true
+					args = args.Add(1).Add(1)
+				} else {
+					// use 0 for false
+					args = args.Add(0).Add(0)
+				}
+			default:
+				return nil, errors.New("zoom: other operators not implemented yet!")
+			}
+			// execute command to get the ids
+			// TODO: try and do this inside of a transaction
+			conn := GetConn()
+			defer conn.Close()
+			idSlice, err := redis.Strings(conn.Do(command, args...))
+			if err != nil {
+				return nil, err
+			}
+			return newStringSetFromSlice(idSlice), nil
+
+		case indexAlpha:
+			conn := GetConn()
+			defer conn.Close()
+			beforeRank, afterRank, err := f.getAlphaRanks(conn, setKey)
+			if err != nil {
+				return nil, err
+			}
+
+			switch f.filterType {
+			case equal:
+				if beforeRank+1 == afterRank {
+					// no models with value equal to target
+					return newStringSet(), nil
+				}
+				args := redis.Args{}.Add(setKey).Add(beforeRank).Add(afterRank - 2)
+				ids, err := redis.Strings(conn.Do("ZRANGE", args...))
+				if err != nil {
+					return nil, err
+				}
+				for i, valueAndId := range ids {
+					ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+				}
+				return newStringSetFromSlice(ids), nil
+			default:
+				return nil, errors.New("zoom: other operators not implemented yet!")
+			}
+
+		default:
+			msg := fmt.Sprintf("zoom: cannot use filters on unindexed field %s for model name %s.", f.fieldName, modelName)
+			return nil, errors.New(msg)
+		}
+	}
+	return nil, nil
+}
+
+func (f filter) getAlphaRanks(conn redis.Conn, setKey string) (beforeRank int, afterRank int, err error) {
+	// TODO: try and do this inside of a single transaction
+	// or (better yet) implement some server-side lua
+	t := newTransaction()
+	target := f.filterValue.String()
+	// add a value to the sorted set which is garunteed to come before the
+	// target value when sorted
+	before := target
+	baseArgs := redis.Args{}.Add(setKey)
+	beforeArgs := baseArgs.Add(0).Add(before)
+	fmt.Println("beforeArgs: ", beforeArgs)
+	if err := t.command("ZADD", beforeArgs, nil); err != nil {
+		return 0, 0, err
+	}
+	// add a value to the sorted set which is garunteed to come after the
+	// target value when sorted
+	after := target + delString
+	afterArgs := baseArgs.Add(0).Add(after)
+	fmt.Println("afterArgs: ", afterArgs)
+	if err := t.command("ZADD", afterArgs, nil); err != nil {
+		return 0, 0, err
+	}
+	// get the rank of the value inserted before and remember it
+	beforeRankArgs := baseArgs.Add(before)
+	if err := t.command("ZRANK", beforeRankArgs, newSingleScanHandler(&beforeRank)); err != nil {
+		return 0, 0, err
+	}
+	// get the rank of the value inserted after and remember it
+	afterRankArgs := baseArgs.Add(after)
+	if err := t.command("ZRANK", afterRankArgs, newSingleScanHandler(&afterRank)); err != nil {
+		return 0, 0, err
+	}
+	// now remove both of the values we had added
+	removeArgs := baseArgs.Add(before).Add(after)
+	if err := t.command("ZREM", removeArgs, nil); err != nil {
+		return 0, 0, err
+	}
+	// execute the transaction to scan in the values for beforeRank and afterRank
+	if err := t.exec(); err != nil {
+		return 0, 0, err
+	}
+
+	return beforeRank, afterRank, nil
 }
 
 // Alpha indexes are stored as "<fieldValue> <modelId>", so we need to

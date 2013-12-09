@@ -632,6 +632,124 @@ func TestNumericOrderDescLimitOffsetCount(t *testing.T) {
 	testNumericOrderLimitOffsetCount(t, descending)
 }
 
+func TestFilterById(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newBasicModels(2)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	q := NewQuery("basicModel").Fitler("Id =", ms[0].Id)
+	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
+}
+
+func TestNumericFilterEqual(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := make([]*indexedPrimativesModel, 4)
+	ms[0] = &indexedPrimativesModel{Int: 0}
+	ms[1] = &indexedPrimativesModel{Int: 1}
+	ms[2] = &indexedPrimativesModel{Int: 2}
+	ms[3] = &indexedPrimativesModel{Int: 2}
+
+	// only save the first 3 models
+	if err := MSave(Models(ms[0:3])); err != nil {
+		t.Error(err)
+	}
+	// run some test queries
+	q := NewQuery("indexedPrimativesModel").Fitler("Int =", 0)
+	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
+	q = NewQuery("indexedPrimativesModel").Fitler("Int =", 2)
+	testQueryWithExpectedModels(t, q, Models(ms[2:3]), false)
+	q = NewQuery("indexedPrimativesModel").Fitler("Int =", 3)
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+	q = NewQuery("indexedPrimativesModel").Fitler("Int =", -1)
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// now save the 4th model
+	if err := Save(ms[3]); err != nil {
+		t.Error(err)
+	}
+	// now there should be two models with Int = 2
+	q = NewQuery("indexedPrimativesModel").Fitler("Int =", 2)
+	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
+}
+
+func TestBooleanFilterEqual(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := make([]*indexedPrimativesModel, 3)
+	ms[0] = &indexedPrimativesModel{Bool: false}
+	ms[1] = &indexedPrimativesModel{Bool: true}
+	ms[2] = &indexedPrimativesModel{Bool: true}
+
+	// save the first model
+	if err := Save(ms[0]); err != nil {
+		t.Error(err)
+	}
+	// run some test queries
+	q := NewQuery("indexedPrimativesModel").Fitler("Bool =", true)
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// only save the 2nd model
+	if err := Save(ms[1]); err != nil {
+		t.Error(err)
+	}
+	// run some test queries
+	q = NewQuery("indexedPrimativesModel").Fitler("Bool =", false)
+	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
+	q = NewQuery("indexedPrimativesModel").Fitler("Bool =", true)
+	testQueryWithExpectedModels(t, q, Models(ms[1:2]), false)
+
+	// now save the 3rd model
+	if err := Save(ms[2]); err != nil {
+		t.Error(err)
+	}
+	// now there should be two models with Bool = true
+	q = NewQuery("indexedPrimativesModel").Fitler("Bool =", true)
+	testQueryWithExpectedModels(t, q, Models(ms[1:3]), false)
+}
+
+func TestAlphaFilterEqual(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms := make([]*indexedPrimativesModel, 4)
+	ms[0] = &indexedPrimativesModel{String: "a"}
+	ms[1] = &indexedPrimativesModel{String: "b"}
+	ms[2] = &indexedPrimativesModel{String: "c"}
+	ms[3] = &indexedPrimativesModel{String: "c"}
+
+	// only save the first 3 models
+	if err := MSave(Models(ms[0:3])); err != nil {
+		t.Error(err)
+	}
+	// run some test queries
+	q := NewQuery("indexedPrimativesModel").Fitler("String =", "a")
+	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
+	q = NewQuery("indexedPrimativesModel").Fitler("String =", "c")
+	testQueryWithExpectedModels(t, q, Models(ms[2:3]), false)
+	q = NewQuery("indexedPrimativesModel").Fitler("String =", "d")
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+	q = NewQuery("indexedPrimativesModel").Fitler("String =", "å")
+	testQueryWithExpectedModels(t, q, []Model{}, false)
+
+	// now save the 4th model
+	if err := Save(ms[3]); err != nil {
+		t.Error(err)
+	}
+	// now there should be two models with String = "c"
+	q = NewQuery("indexedPrimativesModel").Fitler("String =", "c")
+	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
+}
+
 func testNumericOrderLimitOffsetCount(t *testing.T, typ orderType) {
 	_, err := createOrderableNumericModels(4)
 	if err != nil {
