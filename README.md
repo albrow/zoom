@@ -528,11 +528,7 @@ go test ./test
 
 If everything passes, you should see something like:
 
-    ?       github.com/stephenalexbrowne/zoom   [no test files]
-    ok      github.com/stephenalexbrowne/zoom/redis 1.338s
-    ok      github.com/stephenalexbrowne/zoom/test  0.367s
-    ?       github.com/stephenalexbrowne/zoom/test_support  [no test files]
-    ok      github.com/stephenalexbrowne/zoom/util  0.101s
+    ok  	github.com/stephenalexbrowne/zoom	0.355s
     
 If any of the tests fail, please [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new) and
 describe what happened.
