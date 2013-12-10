@@ -451,7 +451,7 @@ Testing & Benchmarking
 To run the tests, make sure you're in the root directory for Zoom and run:
 
 ```
-go test ./test
+go test .
 ```   
 
 If everything passes, you should see something like:
@@ -470,7 +470,7 @@ network, and database used with flags. So to run on a unix socket at /tmp/redis.
 you could use:
 
 ```
-go test ./test -network unix -address /tmp/redis.sock -database 3
+go test . -network unix -address /tmp/redis.sock -database 3
 ```
 
 ### Running the Benchmarks:
@@ -478,7 +478,7 @@ go test ./test -network unix -address /tmp/redis.sock -database 3
 To run the benchmarks, again make sure you're in the root directory and run:
 
 ```
-go test ./test -bench .
+go test . -bench .
 ```   
 
 You can use the same flags as above to change the network, address, and database used.
@@ -491,44 +491,33 @@ Here are the results from my laptop (2.3GHz intel i7, 8GB ram) with Redis set to
 NOTE: for the development branch, these benchmarks may not be up to date.
 
 ```
-BenchmarkConnection      20000000          99.2 ns/op
-BenchmarkPing               50000         40761 ns/op
-BenchmarkSet                50000         48653 ns/op
-BenchmarkGet                50000         42537 ns/op
-BenchmarkSave               50000         70305 ns/op
-BenchmarkFindById           50000         55120 ns/op
-BenchmarkScanById           50000         54960 ns/op
-BenchmarkFindByIdExclude    50000         57914 ns/op
-BenchmarkRepeatDeleteById   50000         63256 ns/op
-BenchmarkRandomDeleteById   50000         64386 ns/op
-BenchmarkFindAll10          10000        208239 ns/op
-BenchmarkFindAll100          2000        987973 ns/op
-BenchmarkFindAll1000          200       7915705 ns/op
-BenchmarkFindAll10000          20      83554133 ns/op
-BenchmarkScanAll10          10000        204737 ns/op
-BenchmarkScanAll100          2000        935378 ns/op
-BenchmarkScanAll1000          200       7834456 ns/op
-BenchmarkScanAll10000          20      84332092 ns/op
-BenchmarkSortNumeric10      10000        219864 ns/op
-BenchmarkSortNumeric100      2000       1022086 ns/op
-BenchmarkSortNumeric1000      200       8935983 ns/op
-BenchmarkSortNumeric10000      20      93927469 ns/op
-BenchmarkSortNumeric10000Limit1      100      11256255 ns/op
-BenchmarkSortNumeric10000Limit10     100      11289648 ns/op
-BenchmarkSortNumeric10000Limit100    100      11982038 ns/op
-BenchmarkSortNumeric10000Limit1000    50      20232813 ns/op
-BenchmarkSortAlpha10       10000        225211 ns/op
-BenchmarkSortAlpha100       2000       1074775 ns/op
-BenchmarkSortAlpha1000       200       9372886 ns/op
-BenchmarkSortAlpha10000       20     100336418 ns/op
+BenchmarkConnection	20000000      95.4 ns/op
+BenchmarkPing	   	50000	     48033 ns/op
+BenchmarkSet	   	50000	     57117 ns/op
+BenchmarkGet	   	50000	     48612 ns/op
+BenchmarkSave	   	20000	     96096 ns/op
+BenchmarkMSave100	    2000	    837420 ns/op
+BenchmarkFindById	   20000	     87540 ns/op
+BenchmarkMFindById100	    5000	    618841 ns/op
+BenchmarkScanById	   20000	     88400 ns/op
+BenchmarkMScanById100	    2000	    624335 ns/op
+BenchmarkRepeatDeleteById	   20000	     90814 ns/op
+BenchmarkRandomDeleteById	   20000	     90636 ns/op
+BenchmarkFindAllQuery1	   	   10000	    229207 ns/op
+BenchmarkFindAllQuery1000	     500	   5878403 ns/op
+BenchmarkFindAllQuery100000	       2	 660701316 ns/op
+BenchmarkCountAllQuery1	   	   50000	     52983 ns/op
+BenchmarkCountAllQuery1000	   50000	     53110 ns/op
+BenchmarkCountAllQuery100000	   50000	     54126 ns/op
+BenchmarkMDeleteById	    	    2000	    603538 ns/op
 ```
 
-Currently, there are not many benchmarks for queries, especially those using Filters. I'm working 
-on this.
+Currently, there are not many benchmarks for queries; I'm working on adding more.
 
-You should run your own benchmarks that are closer to your use case to get a real sense of how Zoom
-will perform for you. The speeds above are already pretty fast, but improving them is one of the top
-priorities for this project.
+The results of the benchmark can vary widely from system to system. You should run your
+own benchmarks that are closer to your use case to get a real sense of how Zoom
+will perform for you. The speeds above are already pretty fast, but improving them is
+one of the top priorities for this project.
     
 Example Usage
 -------------
