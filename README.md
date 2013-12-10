@@ -554,7 +554,8 @@ You can use the same flags as above to change the network, address, and database
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new).
 
-Here are the results from my laptop (2.3GHz intel i7, 8GB ram) with Redis set to append-only mode:
+Here are the results from my laptop (2.3GHz intel i7, 8GB ram) using a socket connection with Redis set
+to append-only mode:
 
 ```
 BenchmarkConnection      20000000          99.2 ns/op
