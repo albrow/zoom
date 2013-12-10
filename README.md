@@ -482,8 +482,6 @@ You should see some runtimes for various operations. If you see an error or if t
 Here are the results from my laptop (2.3GHz intel i7, 8GB ram) using a socket connection with Redis set
 to append-only mode:
 
-NOTE: for the development branch, these benchmarks may not be up to date.
-
 ```
 BenchmarkConnection		20000000	      95.4 ns/op
 BenchmarkPing	   		   50000	     48033 ns/op
