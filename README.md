@@ -9,7 +9,7 @@ Full documentation is available on
 [godoc.org](http://godoc.org/github.com/stephenalexbrowne/zoom).
 
 **WARNING:** this isn't done yet and may change significantly before the official release. There is no
-promise of backwards compatibility until version 1.0.I do not advise using Zoom for production or
+promise of backwards compatibility until version 1.0. I do not advise using Zoom for production or
 mission-critical applications. Feedback and pull requests are welcome :)
 
 
@@ -39,7 +39,7 @@ Zoom allows you to:
 - Persistently save structs of any type
 - Retrieve structs from the database
 - Preserve relationships between structs
-- Preform *limited* SQL-like queries
+- Preform *limited* queries
 
 Zoom consciously makes the trade off of using more memory in order to increase performance. However,
 you can configure it to use less memory if you want. Zoom does not do sharding (but might in the future),
@@ -57,7 +57,8 @@ Installation
 ------------
 
 First, you must install Redis on your system. [See installation instructions](http://redis.io/download).
-By default, Zoom will use a tcp/http connection on localhost:6379 (same as the Redis default).
+By default, Zoom will use a tcp/http connection on localhost:6379 (same as the Redis default). The latest
+version of Redis is recommended.
 
 To install Zoom itself:
 
@@ -139,16 +140,19 @@ type Person struct {
 }
 ```
 
-You must also call zoom.Register so that Zoom knows what name to assign to a given type. You only
-need to do this once per type. For example, somewhere in your initialization sequence (e.g. in the main
+You must also call zoom.Register so that Zoom can spec out the different model types and the relations between them.
+You only need to do this once per type. For example, somewhere in your initialization sequence (e.g. in the main
 function) put the following:
 
 ``` go
-// register the *Person type as "person"
-if err := zoom.Register(&Person{}, "person"); err != nil {
+// register the *Person type under the default name "Person"
+if err := zoom.Register(&Person{}); err != nil {
     // handle error
 }
 ```
+
+Now the *Person type will be associated with the string name "Person." You can also use the RegisterName
+funcion to specify a custom name for the model type.
 
 ### Saving Models
 
@@ -157,6 +161,36 @@ To persistently save a Person model to the databse, simply call zoom.Save.
 ``` go
 p := NewPerson("Alice")
 if err := zoom.Save(p); err != nil {
+    // handle error
+}
+```
+
+
+### Finding a Single Model
+
+Zoom will automatically assign a random, unique id to each saved model. To retrieve a the model with
+a certain id, use the FindById method. You must also pass in the name of the model.
+The return type is the Model interface, so you may need to type assert. Here's an example:
+
+``` go
+result, err := zoom.FindById("person", "a_valid_person_id")
+if err != nil {
+    // handle error
+}
+
+// type assert
+person, ok := result.(*Person)
+if !ok {
+    // handle !ok
+}
+```
+
+You can avoid the type assertion by using the ScanById method, whichexpects a pointer to a struct
+of registered type as an argument:
+
+``` go
+p := &Person{}
+if err := zoom.ScanById("a_valid_person_id", p); err != nil {
     // handle error
 }
 ```
@@ -174,7 +208,7 @@ if err := zoom.Delete(person); err != nil {
 Or if you know the model's id, use the DeleteById function:
 
 ``` go
-if err := zoom.DeleteById("some_person_id"); err != nil {
+if err := zoom.DeleteById("Person", "some_person_id"); err != nil {
 	// handle err
 }
 ```
@@ -184,63 +218,28 @@ Running Queries
 
 ### The Query Object
 
-Zoom provides a useful abstraction for querying the database. Queries read nicely and are easy to write.
-The Query interface consists of only one method:
+Zoom provides a useful abstraction for querying the database. Every query starts with a query constructor,
+where you pass in the modelName corresponding to the model type you want to query. Currently queries can
+only be preformed on a single model type at a time.
+
+You can chain one or more query modifiers to the query. Modifiers include: Order, Limit, Offset, Include,
+Exclude, and Filter. Each of the query modifiers returns the query itself, so you can chain the methods together.
+Any errors caused by invalid arguments to query modifiers will be remembered and returned when you try to run
+the query.
+
+Finally, to run a query, you call a query finisher. These include Run, Scan, Count, and IdsOnly. A query finisher
+returns the result of the query and any errors (including those which may have been caused by invalid arguments
+to query modifiers).
+
+
+### Finding All Models of a Given Type 
+
+Here's an example of using a query to find all Person models. The return type of Run is
+interface{}, but the underlying type is a slice of Model, i.e. a slice of pointers to structs.
+You may need a type assertion.
 
 ``` go
-type Query interface {
-	Run() (interface{}, error)
-}
-```
-
-There are two different types of queries satisfying the query interface: ModelQuery and MultiModelQuery.
-ModelQuery is used for finding a single record, while MultiModelQuery is used for finding one or more
-records. There are two different constructors for each type of query, one (the Find* constructor) involves
-depending on a type-unsafe return value, and (the Scan* constructor) the other requires passing in a pointer
-to a scannable Model or array of models.
-
-### Finding a Single Model
-
-Zoom will automatically assign a random, unique id to each saved model. To retrieve a model by id,
-create a ModelQuery object using the FindById or ScanById constructor. Then call Run() on the query object.
-
-Here's an example of using FindById. You must use the same string name you used in zoom.Register.
-The return type of Run is interface{} so you may need to type assert.
-
-``` go
-result, err := zoom.FindById("person", "a_valid_person_id").Run()
-if err != nil {
-    // handle error
-}
-
-// type assert
-person, ok := result.(*Person)
-if !ok {
-    // handle !ok
-}
-```
-
-The ScanById constructor expects a pointer to a struct of registered type as an argument. It is
-sometimes easier to use because it doesn't require type assertion.
-
-``` go
-p := &Person{}
-if err := zoom.ScanById("a_valid_person_id", p).Run(); err != nil {
-    // handle error
-}
-```
-
-### Finding One or More Models of a Given Type 
-
-To retrieve a list of all persons, we need a FindAll query. You can use either the FindAll constructor
-or the ScanAll constructor.
-
-Here's an example of using FindAll. You must use the same string name you used in zoom.Register.
-The return type of Run is interface{}, but the underlying type is a slice of Model, i.e. a slice
-of pointers to structs. You may need a type assertion.
-
-``` go
-results, err := zoom.FindAll("person").Run()
+results, err := zoom.NewQuery("Person").Run()
 if err != nil {
     // handle error
 }
@@ -255,12 +254,12 @@ for i, result := range results {
 }
 ```
 
-You can use the ScanAll constructor if you want to avoid a type assertion. ScanAll expects a pointer to
-a slice or array of Model.
+You can use the Scan method if you want to avoid a type assertion. Scan expects a pointer to
+a slice of pointers to some model type.
 
 ``` go
 persons := make([]*Person, 0)
-if _, err := zoom.ScanAll(persons).Run(); err != nil {
+if _, err := zoom.NewQuery("Person").Scan(persons); err != nil {
 	// handle err
 }
 ```
@@ -268,16 +267,19 @@ if _, err := zoom.ScanAll(persons).Run(); err != nil {
 ### Using Query Modifiers
 
 You can chain a query object together with one or more different modifiers and then call Run
-when you are ready to run the query. 
+when you are ready to run the query. Here's a full list of available modifiers:
 
-The modifiers for a ModelQuery are: Include and Exclude.
-
-The modifiers for a MultiModelQuery are: Include, Exclude, SortBy, Order, Limit, and Offset. 
+- Order
+- Limit
+- Offset
+- Include
+- Exclude
+- Filter
 
 Here's an example of a more complicated query using several modifiers:
 
 ``` go
-q := zoom.FindAll("person").SortBy("Name").Order("DESC").Limit(10)
+q := zoom.NewQuery("Person").Order("-Name").Filter("Age >=", 25).Limit(10)
 result, err := q.Run()
 ```
 
@@ -341,8 +343,7 @@ you would have to manually set up both relationships.
 
 ``` go
 ownerCopy := &PetOwner{}
-q := zoom.ScanById("the_id_of_above_pet_owner", ownerCopy)
-if _, err := q.Run(); err != nil {
+if err := zoom.ScanById("the_id_of_above_pet_owner", ownerCopy); err != nil {
 	// handle err
 }
 
@@ -352,77 +353,6 @@ fmt.Println(ownerCopy.Pet.Name)
 // Output:
 //	Spot
 ```
-
-**Possible Gotcha:** Zoom does not remember the address of pointers accross multiple model references. If you
-have two different references to a model (i.e. two Model interfaces with the same Id), the relationships of
-those models will point to different addresses. To account for this, you should never be dealing with two references
-to a model with the same id. Here's an example illustrating this gotcha:
-
-``` go
-// Note: error handling is hidden for brevity
-
-// create and save a new PetOwner and a Pet
-owner := &PetOwner{Name: "Bob"}
-pet := &Pet{Name: "Spot"}
-zoom.Save(pet)
-owner.Pet = pet
-zoom.Save(owner)
-
-// retrieve a copy of PetOwner from the database
-ownerCopy := &PetOwner{}
-q := zoom.ScanById("the_id_of_above_pet_owner", ownerCopy).Run()
-
-// modify ownerCopy's Pet
-ownerCopy.Pet.Name = "Fido"
-
-// the orignal pet's name is unchanged
-fmt.Println("original: ", pet.Name, "\nnew: ", ownerCopy.Pet.Name)
-
-// Output:
-//	original: Spot
-//      new: Fido
-
-```
-
-**Another Possible Gotcha:** Zoom will not automatically save a model's relationships. So if you want to modify
-a PetOwner's pet, you should save the Pet explicitly. Here's an example:
-
-``` go
-// create and save a new PetOwner and a Pet
-owner := &PetOwner{Name: "Bob"}
-pet := &Pet{Name: "Spot"}
-zoom.Save(pet)
-owner.Pet = pet
-zoom.Save(owner)
-
-// retrieve a copy of PetOwner from the database
-ownerCopy := &PetOwner{}
-q := zoom.ScanById("the_id_of_above_pet_owner", ownerCopy).Run()
-
-// modify ownerCopy's Pet
-ownerCopy.Pet.Name = "Cupcake"
-
-// resave ownerCopy
-zoom.Save(ownerCopy)
-
-// get a copy of the pet model from the database
-petCopy := &Pet{}
-q := zoom.ScanById(ownerCopy.Pet.Id, petCopy).Run()
-
-// the database record was not updated
-fmt.Println("pet name: ", petCopy.Name)
-
-// if we explicitly save ownerCopy.Pet, the database record will be updated
-zoom.Save(ownerCopy.Pet)
-q := zoom.ScanById(ownerCopy.Pet.Id, petCopy).Run()
-fmt.Println("pet name after save: ", petCopy.Name)
-
-// Output:
-//	pet name: Spot
-//	pet name after save: Cupcake
-
-```
-
 
 ### One-to-Many Relationships
 
@@ -474,8 +404,7 @@ the children again is straight forward.
 
 ``` go
 parentCopy := &Parent{}
-q := zoom.ScanById("the_id_of_above_parent", parentCopy)
-if _, err := q.Run(); err != nil {
+if err := zoom.ScanById("the_id_of_above_parent", parentCopy); err != nil {
 	// handle error
 }
 
@@ -491,17 +420,18 @@ for _, child := range parentCopy.Children {
 ```
 
 For a Parent with a lot of children, it may take a long time to get each Child from the database. If
-this is the case, it's a good idea to use the Exclude modifier when you don't intend to use the children.
+this is the case, it's a good idea to use a query with the Exclude modifier when you don't intend to
+use the children.
 
 ``` go
-parentCopyNoChildren := &Parent{}
-q := zoom.ScanById("the_id_of_above_parent", parentCopyNoChildren).Exclude("Children")
+parents := make([]*Parent, 0)
+q := zoom.NewQuery("Parent").Filter("Id = ", "the_id_of_above_parent").Exclude("Children")
 if _, err := q.Run(); err != nil {
 	// handle error
 }
 
 // Since it was excluded, Children is empty.
-fmt.Println(parentCopyNoChildren.Children)
+fmt.Println(parents[0].Children)
 
 // Output:
 //	[]
@@ -558,6 +488,8 @@ You should see some runtimes for various operations. If you see an error or if t
 
 Here are the results from my laptop (2.3GHz intel i7, 8GB ram) with Redis set to append-only mode:
 
+NOTE: for the development branch, these benchmarks may not be up to date.
+
 ```
 BenchmarkConnection      20000000          99.2 ns/op
 BenchmarkPing               50000         40761 ns/op
@@ -591,6 +523,9 @@ BenchmarkSortAlpha1000       200       9372886 ns/op
 BenchmarkSortAlpha10000       20     100336418 ns/op
 ```
 
+Currently, there are not many benchmarks for queries, especially those using Filters. I'm working 
+on this.
+
 You should run your own benchmarks that are closer to your use case to get a real sense of how Zoom
 will perform for you. The speeds above are already pretty fast, but improving them is one of the top
 priorities for this project.
@@ -598,8 +533,9 @@ priorities for this project.
 Example Usage
 -------------
 
-The [zoom_example repository](https://github.com/stephenalexbrowne/zoom_example) is an up-to-date
-example of how to use Zoom in a json/rest application.
+The [zoom_example repository](https://github.com/stephenalexbrowne/zoom_example) is an
+example of how to use Zoom in a json/rest application. NOTE: currently the example
+repository uses Zoom v0.3.3 and may not be compatible with the newest version.
 
 
 TODO
@@ -607,8 +543,8 @@ TODO
 
 Ordered generally by priority, here's what I'm working on:
 
-- Improve sort/limit/offset performance by using custom indeces
-- Add Filter and Count modifiers to MultiModelQuery
+- Bug fixes and reliability improvements
+- Examples in the godoc documentation and an updated example repository.
 - Support AND and OR operators on Filters
 - Support combining queries into a single transaction
 - Use scripting to reduce round-trip latencies in queries
