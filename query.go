@@ -556,14 +556,12 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 				max := fmt.Sprintf("(%v", f.filterValue.Interface())
 				lessIds := []string{}
 				lessArgs := args.Add("-inf").Add(max)
-				fmt.Println("lessArgs: ", lessArgs)
 				if err := t.command("ZRANGEBYSCORE", lessArgs, newScanSliceHandler(&lessIds)); err != nil {
 					return nil, err
 				}
 				min := fmt.Sprintf("(%v", f.filterValue.Interface())
 				greaterIds := []string{}
 				greaterArgs := args.Add(min).Add("+inf")
-				fmt.Println("greaterArgs: ", greaterArgs)
 				if err := t.command("ZRANGEBYSCORE", greaterArgs, newScanSliceHandler(&greaterIds)); err != nil {
 					return nil, err
 				}
