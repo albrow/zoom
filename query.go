@@ -3,440 +3,916 @@
 // license, which can be found in the LICENSE file.
 
 // File query.go contains code related to the query abstraction.
-// This includes the Find* and Scan* functions and their modifiers.
 
 package zoom
 
 import (
 	"errors"
 	"fmt"
-	"github.com/stephenalexbrowne/zoom/redis"
-	"github.com/stephenalexbrowne/zoom/util"
+	"github.com/garyburd/redigo/redis"
+	"math"
 	"reflect"
+	"strings"
 )
 
-// A Query is an interface which is intended encapsulate sophisticated requests to
-// the database. All queries are executed as redis transactions when possible. You
-// must call Run on the query when you are ready for the query to be run. Depending
-// on the type of the query, certain "modifier" methods may be chained to the
-// constructor. Modifiers are Include, Exclude, Sort, Limit, and Offset. A query
-// will remember any errors that occur and return the first one when you call Run.
-type Query interface {
+// RunScanner is an interface implemented by Query
+// It may also be implemented by other types in the future.
+type RunScanner interface {
 	Run() (interface{}, error)
+	Scan(interface{}) error
 }
 
-// A ModelQuery is a query which returns a single item from the database.
-// It can be chained with query modifiers.
-type ModelQuery struct {
-	scannable Model
+// Query represents a query which will retrieve some models from
+// the database. A Query may consist of one or more query modifiers
+// and can be run in several different ways with different query
+// finishers.
+type Query struct {
+	modelSpec modelSpec
 	includes  []string
 	excludes  []string
-	modelName string
-	id        string
+	order     order
+	limit     uint
+	offset    uint
+	filters   []filter
 	err       error
 }
 
-// A MultiModelQuery is a query wich returns one or more items from the database.
-// It can be chained with query modifiers.
-type MultiModelQuery struct {
-	scannables interface{}
-	includes   []string
-	excludes   []string
-	modelName  string
-	modelType  reflect.Type
-	sort       sort
-	limit      uint
-	offset     uint
-	err        error
-}
-
-type sort struct {
+type order struct {
 	fieldName string
-	desc      bool
-	alpha     bool
+	redisName string
+	orderType orderType
+	indexed   bool
+	indexType indexType
 }
 
-type includerExcluder interface {
-	getIncludes() []string
-	getExcludes() []string
+type orderType int
+
+const (
+	ascending = iota
+	descending
+)
+
+type filter struct {
+	fieldName   string
+	redisName   string
+	filterType  filterType
+	filterValue reflect.Value
+	indexType   indexType
+	byId        bool
 }
 
-type namedIncluderExcluder interface {
-	includerExcluder
-	name() string
+type filterType int
+
+const (
+	equal = iota
+	notEqual
+	greater
+	less
+	greaterOrEqual
+	lessOrEqual
+)
+
+var filterSymbols = map[string]filterType{
+	"=":  equal,
+	"!=": notEqual,
+	">":  greater,
+	"<":  less,
+	">=": greaterOrEqual,
+	"<=": lessOrEqual,
 }
 
-func (q *ModelQuery) getIncludes() []string {
-	return q.includes
-}
+// used as a prefix for alpha index tricks
+// this is a string which equals ASCII DEL
+var delString string = string([]byte{byte(127)})
 
-func (q *ModelQuery) getExcludes() []string {
-	return q.excludes
-}
-
-func (q *MultiModelQuery) getIncludes() []string {
-	return q.includes
-}
-
-func (q *MultiModelQuery) getExcludes() []string {
-	return q.excludes
-}
-
-func (q *ModelQuery) name() string {
-	return q.modelName
-}
-
-func (q *MultiModelQuery) name() string {
-	return q.modelName
-}
-
-// FindById returns a ModelQuery which can be chained with additional modifiers.
-func FindById(modelName, id string) *ModelQuery {
-
-	// create a query object
-	q := &ModelQuery{
-		modelName: modelName,
-		id:        id,
-	}
-
-	// get the type corresponding to the modelName
-	typ, err := getRegisteredTypeFromName(modelName)
-	if err != nil {
-		q.setErrorIfNone(err)
-		return q
-	}
-
-	// create a new struct of type typ
-	val := reflect.New(typ.Elem())
-	m, ok := val.Interface().(Model)
-	if !ok {
-		msg := fmt.Sprintf("zoom: could not convert val of type %T to Model", val.Interface())
-		q.setErrorIfNone(errors.New(msg))
-		return q
-	}
-
-	// set scannable and return the query
-	q.scannable = m
-	return q
-}
-
-// ScanById returns a ModelQuery which can be chained with additional modifiers.
-// It expects Model as an argument, which should be a pointer to a struct of a
-// registered type. ScanById will mutate the struct, filling in its fields.
-func ScanById(id string, m Model) *ModelQuery {
-
-	// create a query object
-	q := &ModelQuery{
-		id:        id,
-		scannable: m,
-	}
-
-	// get the name corresponding to the type of m
-	modelName, err := getRegisteredNameFromInterface(m)
-	if err != nil {
-		q.setErrorIfNone(err)
-		return q
-	}
-
-	// set modelName and return the query
-	q.modelName = modelName
-	return q
-}
-
-// Include specifies fields to be filled in. Any fields which are included will be unchanged.
-func (q *ModelQuery) Include(fields ...string) *ModelQuery {
-	if len(q.excludes) > 0 {
-		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
-		return q
-	}
-	q.includes = append(q.includes, fields...)
-	return q
-}
-
-// Exclude specifies fields to *not* be filled in. Excluded fields will remain unchanged.
-// Any other fields *will* be filled in with the values stored in redis.
-func (q *ModelQuery) Exclude(fields ...string) *ModelQuery {
-	if len(q.includes) > 0 {
-		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
-		return q
-	}
-	q.excludes = append(q.excludes, fields...)
-	return q
-}
-
-func (q *ModelQuery) setErrorIfNone(e error) {
-	if q.err == nil {
-		q.err = e
-	}
-}
-
-// Run executes the query, using a transaction if possible. The first return
-// value is a Model, i.e. a pointer to a struct. When using the ScanById
-// constructor, the first return value is typically not needed. The second
-// return value is the first error (if any) that occured in the query constructor
-// or modifier methods.
-func (q *ModelQuery) Run() (interface{}, error) {
-	// check if the query had any prior errors
-	if q.err != nil {
-		return q.scannable, q.err
-	}
-
-	// start a transaction
-	t := newTransaction()
-
-	// set up includes
-	if err := findModelWithIncludes(q.id, q.scannable, q, t); err != nil {
-		return q.scannable, err
-	}
-
-	// execute the transaction
-	if err := t.exec(); err != nil {
-		return q.scannable, err
-	}
-	return q.scannable, nil
-}
-
-// FindAll returns a MultiModelQuery which can be chained with additional modifiers.
-func FindAll(modelName string) *MultiModelQuery {
-
-	// create a query object
-	q := &MultiModelQuery{
-		modelName: modelName,
-	}
-
-	// get the registered type corresponding to the modelName
-	typ, err := getRegisteredTypeFromName(modelName)
-	if err != nil {
-		q.setErrorIfNone(err)
-		return q
-	}
-
-	// instantiate a new slice and set it as scannables
-	q.modelType = typ
-	newVal := reflect.New(reflect.SliceOf(typ))
-	newVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(typ), 0, 0))
-	q.scannables = newVal.Interface()
-	return q
-}
-
-// ScanAll returns a MultiModelQuery which can be chained with additional modifiers.
-// It expects a pointer to a slice (or array) of Models as an argument, which should be
-// a pointer to a slice (or array) of pointers to structs of a registered type. ScanAll
-// will mutate the slice or array by appending to it.
-func ScanAll(models interface{}) *MultiModelQuery {
-
-	// create a query object
-	q := new(MultiModelQuery)
-
-	// make sure models is the right type
-	typ := reflect.TypeOf(models).Elem()
-	if !util.TypeIsSliceOrArray(typ) {
-		msg := fmt.Sprintf("zoom: ScanAll requires a pointer to a slice or array as an argument. Got: %T", models)
-		q.setErrorIfNone(errors.New(msg))
-		return q
-	}
-	elemType := typ.Elem()
-	if !util.TypeIsPointerToStruct(elemType) {
-		msg := fmt.Sprintf("zoom: ScanAll requires a pointer to a slice of pointers to structs. Got: %T", models)
-		q.setErrorIfNone(errors.New(msg))
-		return q
-	}
-	q.modelType = elemType
-
-	// get the registered name corresponding to the type of models
-	modelName, found := modelTypeToName[elemType]
+// NewQuery is used to construct a query. modelName should be the
+// name of a registered model. The query returned can be chained
+// together with one or more query modifiers, and then run using
+// the Run, Scan, Count, or Ids only methods. If no query modifiers
+// are used, running the query will return all models that match the
+// type corresponding to modelName in uspecified order. Will return
+// an error if modelName is not the name of some registered model
+// type.
+func NewQuery(modelName string) *Query {
+	q := &Query{}
+	spec, found := modelSpecs[modelName]
 	if !found {
-		q.setErrorIfNone(NewModelTypeNotRegisteredError(elemType))
-		return q
-	}
-	q.modelName = modelName
-	q.scannables = models
-	return q
-}
-
-// Include specifies fields to be filled in for each model. Any fields which are included
-// will be unchanged.
-func (q *MultiModelQuery) Include(fields ...string) *MultiModelQuery {
-	if len(q.excludes) > 0 {
-		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
-		return q
-	}
-	q.includes = append(q.includes, fields...)
-	return q
-}
-
-// Exclude specifies fields to *not* be filled in for each struct. Excluded fields will
-// remain unchanged. Any other fields *will* be filled in with the values stored in redis.
-func (q *MultiModelQuery) Exclude(fields ...string) *MultiModelQuery {
-	if len(q.includes) > 0 {
-		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
-		return q
-	}
-	q.excludes = append(q.excludes, fields...)
-	return q
-}
-
-// SortBy specifies a field to sort by. The field argument should be exactly the name of
-// an exported field. Will cause an error if the field is not found.
-func (q *MultiModelQuery) SortBy(field string) *MultiModelQuery {
-	q.sort.fieldName = field
-	return q
-}
-
-// Order specifies the order in which records should be sorted. It should be either ASC
-// or DESC. Any other argument will cause an error.
-func (q *MultiModelQuery) Order(order string) *MultiModelQuery {
-	if order == "ASC" {
-		q.sort.desc = false
-	} else if order == "DESC" {
-		q.sort.desc = true
+		q.setErrorIfNone(NewModelNameNotRegisteredError(modelName))
 	} else {
-		q.setErrorIfNone(errors.New("zoom: order must be either ASC or DESC"))
+		q.modelSpec = spec
 	}
+	return q
+}
+
+// Order specifies a field by which to sort the records and the order in which
+// records should be sorted. fieldName should be a field in the struct type specified by
+// the modelName argument in the query constructor. By default, the records are sorted
+// by ascending order. To sort by descending order, put a negative sign before
+// the field name. Zoom can only sort by fields which have been indexed, i.e. those which
+// have the `zoom:"index"` struct tag. However, in the future this may change.
+// Only one order may be specified per query. However in the future, secondary orders may be
+// allowed, and will take effect when two or more models have the same value for the primary
+// order field. Order will set an error on the query if the fieldName is invalid, if another
+// order has already been applied to the query, or if the fieldName specified does not correspond
+// to an indexed field. There is currently a bug where Order may not work correctly when
+// combined with filters.
+func (q *Query) Order(fieldName string) *Query {
+	if q.order.fieldName != "" {
+		// TODO: allow secondary sort orders?
+		q.setErrorIfNone(errors.New("zoom: error in Query.Order: previous order already specified. Only one order per query is allowed."))
+	}
+	var ot orderType
+	if strings.HasPrefix(fieldName, "-") {
+		ot = descending
+		// remove the "-" prefix
+		fieldName = fieldName[1:]
+	} else {
+		ot = ascending
+	}
+	if _, found := q.modelSpec.field(fieldName); found {
+		indexType, found := q.modelSpec.indexTypeForField(fieldName)
+		if !found {
+			// the field was not indexed
+			// TODO: add support for ordering unindexed fields in some cases?
+			msg := fmt.Sprintf("zoom: error in Query.Order: field %s in type %s is not indexed. Can only order by indexed fields", fieldName, q.modelSpec.modelType.String())
+			q.setErrorIfNone(errors.New(msg))
+		}
+		redisName, _ := q.modelSpec.redisNameForFieldName(fieldName)
+		q.order = order{
+			fieldName: fieldName,
+			redisName: redisName,
+			orderType: ot,
+			indexType: indexType,
+			indexed:   true,
+		}
+	} else {
+		// fieldName was invalid
+		msg := fmt.Sprintf("zoom: error in Query.Order: could not find field %s in type %s", fieldName, q.modelSpec.modelType.String())
+		q.setErrorIfNone(errors.New(msg))
+	}
+
 	return q
 }
 
 // Limit specifies an upper limit on the number of records to return.
-func (q *MultiModelQuery) Limit(amount uint) *MultiModelQuery {
+// If amount is 0, no limit will be applied. There is currently a bug
+// where Limit may not work correctly when combined with filters.
+func (q *Query) Limit(amount uint) *Query {
 	q.limit = amount
 	return q
 }
 
 // Offset specifies a starting index from which to start counting records that
-// will be returned.
-func (q *MultiModelQuery) Offset(amount uint) *MultiModelQuery {
+// will be returned. There is currently a bug where Offset may not work correctly
+// when combined with filters.
+func (q *Query) Offset(amount uint) *Query {
 	q.offset = amount
 	return q
 }
 
-func (q *MultiModelQuery) setErrorIfNone(e error) {
+// Include specifies one or more field names which will be read from the database
+// and scanned into the resulting models when the query is run. Field names which
+// are not specified in Include will not be read or scanned. You can only use one
+// of Include or Exclude, not both on the same query.
+func (q *Query) Include(fields ...string) *Query {
+	if len(q.excludes) > 0 {
+		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
+		return q
+	}
+	q.includes = append(q.includes, fields...)
+	return q
+}
+
+// Exclude specifies one or more field names which will *not* be read from the
+// database and scanned. Any other fields *will* be read and scanned into the
+// resulting models when the query is run. You can only use one of Include or
+// Exclude, not both on the same query.
+func (q *Query) Exclude(fields ...string) *Query {
+	if len(q.includes) > 0 {
+		q.setErrorIfNone(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
+		return q
+	}
+	q.excludes = append(q.excludes, fields...)
+	return q
+}
+
+// Filter applies a filter to the query, which will cause the query to only
+// return models with attributes matching the expression. filterString should be
+// an expression which includes a fieldName, a space, and an operator in that
+// order. Operators must be one of "=", "!=", ">", "<", ">=", or "<=". If multiple
+// filters are applied to the same query, the query will only return models which
+// have matches for ALL of the filters. I.e. applying multiple filters is logially
+// equivalent to combining them with a AND or INTERSECT operator. There are currently
+// some bugs, and Filter may not work correctly when combined with Count, Order,
+// Limit, or Offset.
+func (q *Query) Filter(filterString string, value interface{}) *Query {
+	fieldName, operator, err := splitFilterString(filterString)
+	if err != nil {
+		q.setErrorIfNone(err)
+		return q
+	}
+	if fieldName == "Id" {
+		// special case for Id
+		return q.filterById(operator, value)
+	}
+	f := filter{
+		fieldName: fieldName,
+	}
+	// get the filterType based on the operator
+	if typ, found := filterSymbols[operator]; !found {
+		q.setErrorIfNone(errors.New("zoom: invalid operator in fieldStr. should be one of =, !=, >, <, >=, or <=."))
+		return q
+	} else {
+		f.filterType = typ
+	}
+	// get the redisName based on the fieldName
+	if redisName, found := q.modelSpec.redisNameForFieldName(fieldName); !found {
+		msg := fmt.Sprintf("zoom: invalid fieldName in filterString.\nType %s has no field %s", q.modelSpec.modelType.String(), fieldName)
+		q.setErrorIfNone(errors.New(msg))
+		return q
+	} else {
+		f.redisName = redisName
+	}
+	// get the indexType based on the fieldName
+	if indexType, found := q.modelSpec.indexTypeForField(fieldName); !found {
+		msg := fmt.Sprintf("zoom: filters are only allowed on indexed fields.\n%s.%s is not indexed.", q.modelSpec.modelType.String(), fieldName)
+		q.setErrorIfNone(errors.New(msg))
+		return q
+	} else {
+		f.indexType = indexType
+	}
+	// get type of the field and make sure it matches type of value arg
+	// Here we iterate through pointer inderections. This is so you can
+	// just pass in a primative instead of a pointer to a primative for
+	// filtering on fields which have pointer values.
+	structField, _ := q.modelSpec.field(fieldName)
+	fieldType := structField.Type
+	valueType := reflect.TypeOf(value)
+	valueVal := reflect.ValueOf(value)
+	for valueType.Kind() == reflect.Ptr {
+		valueType = valueType.Elem()
+		valueVal = valueVal.Elem()
+		if !valueVal.IsValid() {
+			q.setErrorIfNone(errors.New("zoom: invalid value arg for Filter. Is it a nil pointer?"))
+			return q
+		}
+	}
+	if valueType != fieldType {
+		msg := fmt.Sprintf("zoom: invalid value arg for Filter. Parsed type of value (%s) does not match type of field (%s).", valueType.String(), fieldType.String())
+		q.setErrorIfNone(errors.New(msg))
+		return q
+	} else {
+		f.filterValue = valueVal
+	}
+	q.filters = append(q.filters, f)
+	return q
+}
+
+func splitFilterString(filterString string) (fieldName string, operator string, err error) {
+	split := strings.Split(filterString, " ")
+	if len(split) != 2 {
+		return "", "", errors.New("zoom: too many spaces in fieldStr argument. should be a field name, a space, and an operator.")
+	}
+	return split[0], split[1], nil
+}
+
+func (q *Query) filterById(operator string, value interface{}) *Query {
+	if operator != "=" {
+		q.setErrorIfNone(errors.New("zoom: only the = operator can be used with Filter on Id field."))
+		return q
+	}
+	idVal := reflect.ValueOf(value)
+	if idVal.Kind() != reflect.String {
+		msg := fmt.Sprintf("zoom: for a Filter on Id field, value must be a string type. Was type %s", idVal.Kind().String())
+		q.setErrorIfNone(errors.New(msg))
+		return q
+	}
+	f := filter{
+		fieldName:   "Id",
+		redisName:   "Id",
+		filterType:  equal,
+		filterValue: idVal,
+		byId:        true,
+	}
+	q.filters = append(q.filters, f)
+	return q
+}
+
+// Run is a query finisher. It runs the query and returns the results in
+// the form of an interface. The true type of the return value will be
+// a slice of pointers to some regestired model type. If you need a type-safe
+// way to run queries, look at the Scan method. Any errors that were caused
+// by invalid arguments to query modifiers will be returned here.
+func (q *Query) Run() (interface{}, error) {
+	if q.err != nil {
+		return nil, q.err
+	}
+
+	ids, err := q.getIds()
+	if err != nil {
+		return nil, err
+	}
+
+	// create a slice in which to store results using reflection the
+	// type of the slice whill match the type of the model being queried
+	resultsVal := reflect.New(reflect.SliceOf(q.modelSpec.modelType))
+	resultsVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(q.modelSpec.modelType), 0, 0))
+
+	if err := scanModelsByIds(resultsVal, q.modelSpec.modelName, ids, q.getIncludes()); err != nil {
+		return resultsVal.Elem().Interface(), err
+	}
+	return resultsVal.Elem().Interface(), nil
+}
+
+// Scan is a query finisher. It runs the query and attempts
+// to scan the results into in. The type of in should be a pointer
+// to a slice of pointers to a registered model type. Any errors that
+// were caused by invalid arguments to query modifiers will be returned
+// here.
+func (q *Query) Scan(in interface{}) error {
+	if q.err != nil {
+		return q.err
+	}
+
+	// make sure we are dealing with the right type
+	typ := reflect.TypeOf(in).Elem()
+	if !(typ.Kind() == reflect.Slice) {
+		msg := fmt.Sprintf("zoom: Query.Scan requires a pointer to a slice or array as an argument. Got: %T", in)
+		return errors.New(msg)
+	}
+	elemType := typ.Elem()
+	if !typeIsPointerToStruct(elemType) {
+		msg := fmt.Sprintf("zoom: Query.Scan requires a pointer to a slice of pointers to model structs. Got: %T", in)
+		return errors.New(msg)
+	}
+	if elemType != q.modelSpec.modelType {
+		msg := fmt.Sprintf("zoom: argument for Query.Scan did not match the type corresponding to the model name given in the NewQuery constructor.\nExpected %T but got %T", reflect.SliceOf(q.modelSpec.modelType), in)
+		return errors.New(msg)
+	}
+
+	ids, err := q.getIds()
+	if err != nil {
+		return err
+	}
+
+	resultsVal := reflect.ValueOf(in)
+	resultsVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(q.modelSpec.modelType), 0, 0))
+
+	return scanModelsByIds(resultsVal, q.modelSpec.modelName, ids, q.getIncludes())
+}
+
+// Count is a query finisher. It counts the number of models that would
+// be returned by the query without actually running the query. Any errors
+// that were caused by invalid arguments to query modifiers will be returned
+// here. There is currently a bug where Count may not work correctly for queries
+// with Filter modifiers.
+func (q *Query) Count() (int, error) {
+	if q.err != nil {
+		return 0, q.err
+	}
+	return q.getIdCount()
+}
+
+// IdsOnly is a query finisher. It returns only the ids of the models
+// and doesn't actually retrieve all of their fields. Any errors that were caused
+// by invalid arguments to query modifiers will be returned here.
+func (q *Query) IdsOnly() ([]string, error) {
+	if q.err != nil {
+		return nil, q.err
+	}
+	return q.getIds()
+}
+
+func (q *Query) setErrorIfNone(e error) {
 	if q.err == nil {
 		q.err = e
 	}
 }
 
-// Run executes the query, using a transaction if possible. The first return value
-// of Run will be a slice of Models, i.e. a slice of pointers to structs. When
-// using the ScanAll constructor, the first return value is typically not needed.
-// The second return value is the first error (if any) that occured in the query
-// constructor or modifier methods.
-func (q *MultiModelQuery) Run() (interface{}, error) {
-
-	// check if the query had any prior errors
-	if q.err != nil {
-		return nil, q.err
-	}
-
-	// use reflection to get a value for scannables
-	scannablesVal := reflect.ValueOf(q.scannables).Elem()
-
-	// get the ids for the models
-	ids, err := q.getIds()
-	if err != nil {
-		return scannablesVal.Interface(), err
-	}
-
-	// start a transaction
-	t := newTransaction()
-
-	// iterate through the ids and add a find operation for each model
-	for _, id := range ids {
-
-		// instantiate a new scannable element and append it to q.scannables
-		scannable := reflect.New(q.modelType.Elem())
-		scannablesVal.Set(reflect.Append(scannablesVal, scannable))
-
-		model, ok := scannable.Interface().(Model)
-		if !ok {
-			msg := fmt.Sprintf("zoom: could not convert val of type %s to Model\n", scannable.Type().String())
-			return scannablesVal.Interface(), errors.New(msg)
+// getIncludes parses the includes and excludes properties to return
+// a list of fieldNames which should be included in all find operations.
+// a return value of nil means that all fields should be considered.
+func (q *Query) getIncludes() []string {
+	if len(q.includes) != 0 {
+		return q.includes
+	} else if len(q.excludes) != 0 {
+		results := q.modelSpec.fieldNames
+		for _, name := range q.excludes {
+			results = removeElementFromStringSlice(results, name)
 		}
-
-		// add a find operation for the model m
-		findModelWithIncludes(id, model, q, t)
-	}
-
-	// execute the transaction
-	if err := t.exec(); err != nil {
-		return scannablesVal.Interface(), err
-	}
-
-	return scannablesVal.Interface(), nil
-}
-
-func findModelWithIncludes(id string, scannable Model, q namedIncluderExcluder, t *transaction) error {
-	ms := modelSpecs[q.name()]
-	includes := ms.fieldNames
-	if len(q.getIncludes()) != 0 {
-		// add a model find operation to the transaction
-		if err := t.findModel(q.name(), id, scannable, q.getIncludes()); err != nil {
-			return err
-		}
-	} else if len(q.getExcludes()) != 0 {
-		for _, name := range q.getExcludes() {
-			includes = util.RemoveElementFromStringSlice(includes, name)
-		}
-		// add a model find operation to the transaction
-		if err := t.findModel(q.name(), id, scannable, includes); err != nil {
-			return err
-		}
-	} else {
-		// add a model find operation to the transaction
-		if err := t.findModel(q.name(), id, scannable, nil); err != nil {
-			return err
-		}
+		return results
 	}
 	return nil
 }
 
-func (q *MultiModelQuery) getIds() ([]string, error) {
+// getIds() executes a single command and returns the ids of every
+// model which should be found for the query.
+func (q *Query) getIds() ([]string, error) {
 	conn := GetConn()
 	defer conn.Close()
 
-	// construct a redis command to get the ids
-	indexKey := q.modelName + ":all"
-	args := redis.Args{}
-	var command string
-	if q.sort.fieldName == "" {
-		// without sorting
-		command = "SMEMBERS"
-		args = args.Add(indexKey)
+	if len(q.filters) == 0 {
+		return q.getIdsWithoutFilters()
 	} else {
-		// with sorting
-		command = "SORT"
-		weight := q.modelName + ":*->" + q.sort.fieldName
-		args = args.Add(indexKey).Add("BY").Add(weight)
-
-		// check if the field is sortable and if we need the alpha option
-		field, found := q.modelType.Elem().FieldByName(q.sort.fieldName)
-		if !found {
-			msg := fmt.Sprintf("zoom: invalid SortBy modifier. model of type %s has no field %s\n.", q.modelType.String(), q.sort.fieldName)
-			return nil, errors.New(msg)
-		}
-		fieldType := field.Type
-		if !typeIsSortable(fieldType) {
-			msg := fmt.Sprintf("zoom: invalid SortBy modifier. field of type %s is not sortable.\nmust be string, int, uint, float, byte, or bool.", fieldType.String())
-			return nil, errors.New(msg)
-		}
-		if util.TypeIsString(fieldType) {
-			args = args.Add("ALPHA")
-		}
-
-		// add either ASC or DESC
-		if q.sort.desc {
-			args = args.Add("DESC")
-		} else {
-			args = args.Add("ASC")
-		}
-
-		// add limit if applicable
-		if q.limit != 0 {
-			args = args.Add("LIMIT").Add(q.offset).Add(q.limit)
-		}
+		return q.getIdsWithFilters()
 	}
-	return redis.Strings(conn.Do(command, args...))
+
 }
 
-func typeIsSortable(typ reflect.Type) bool {
-	return util.TypeIsString(typ) || util.TypeIsNumeric(typ) || util.TypeIsBool(typ)
+func (q *Query) getIdsWithoutFilters() ([]string, error) {
+	conn := GetConn()
+	defer conn.Close()
+
+	if q.order.fieldName == "" {
+		// without ordering
+		if q.offset != 0 {
+			return nil, errors.New("zoom: offset cannot be applied to queries without an order.")
+		}
+		indexKey := q.modelSpec.modelName + ":all"
+		args := redis.Args{}.Add(indexKey)
+		var command string
+		if q.limit == 0 {
+			command = "SMEMBERS"
+		} else {
+			command = "SRANDMEMBER"
+			args = args.Add(q.limit)
+		}
+		return redis.Strings(conn.Do(command, args...))
+	} else {
+		// with ordering
+		args := redis.Args{}
+		var command string
+		if q.order.orderType == ascending {
+			command = "ZRANGE"
+		} else if q.order.orderType == descending {
+			command = "ZREVRANGE"
+		}
+		start := q.offset
+		stop := -1
+		if q.limit != 0 {
+			stop = int(start) + int(q.limit) - 1
+		}
+		indexKey := q.modelSpec.modelName + ":" + q.order.redisName
+		args = args.Add(indexKey).Add(start).Add(stop)
+		if q.order.indexType == indexNumeric || q.order.indexType == indexBoolean {
+			// ordered by numeric or boolean index
+			// just return results of command directly
+			return redis.Strings(conn.Do(command, args...))
+		} else {
+			// ordered by alpha index
+			// we need to parse ids from the result of the command
+			ids, err := redis.Strings(conn.Do(command, args...))
+			if err != nil {
+				return nil, err
+			}
+			for i, valueAndId := range ids {
+				ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+			}
+			return ids, nil
+		}
+	}
+}
+
+func (q *Query) getIdsWithFilters() ([]string, error) {
+	idSets := []stringSet{}
+	// get a set of ids for each filter
+	for _, filter := range q.filters {
+		ids, err := filter.getIds(q.modelSpec.modelName, q.order)
+		if err != nil {
+			return nil, err
+		}
+		idSets = append(idSets, ids)
+	}
+	// get the intersection of all the id sets
+	// the resulting ids will only be those which
+	// pass ALL the filters.
+	// TODO: add set intersection here!
+	switch len(idSets) {
+	case 0:
+		return []string{}, nil
+	case 1:
+		return idSets[0].slice(), nil
+	default:
+		final := idSets[0].intersect(idSets[1:]...)
+		return final.slice(), nil
+	}
+}
+
+func (f filter) getIds(modelName string, o order) (stringSet, error) {
+	// special case for id filters
+	if f.byId {
+		id := f.filterValue.String()
+		return newStringSet(id), nil
+	} else {
+		setKey := modelName + ":" + f.redisName
+		reverse := o.orderType == descending && o.fieldName != ""
+		switch f.indexType {
+
+		case indexNumeric:
+			args := redis.Args{}.Add(setKey)
+			switch f.filterType {
+			case equal, less, greater, lessOrEqual, greaterOrEqual:
+				var min, max interface{}
+				switch f.filterType {
+				case equal:
+					min, max = f.filterValue.Interface(), f.filterValue.Interface()
+				case less:
+					min = "-inf"
+					// use "(" for exclusive
+					max = fmt.Sprintf("(%v", f.filterValue.Interface())
+				case greater:
+					// use "(" for exclusive
+					min = fmt.Sprintf("(%v", f.filterValue.Interface())
+					max = "+inf"
+				case lessOrEqual:
+					min = "-inf"
+					max = f.filterValue.Interface()
+				case greaterOrEqual:
+					min = f.filterValue.Interface()
+					max = "+inf"
+				}
+				// execute command to get the ids
+				// TODO: try and do this inside of a transaction
+				var command string
+				if !reverse {
+					command = "ZRANGEBYSCORE"
+					args = args.Add(min).Add(max)
+				} else {
+					command = "ZREVRANGEBYSCORE"
+					args = args.Add(max).Add(min)
+				}
+				conn := GetConn()
+				defer conn.Close()
+				idSlice, err := redis.Strings(conn.Do(command, args...))
+				if err != nil {
+					return nil, err
+				}
+				return newStringSetFromSlice(idSlice), nil
+			case notEqual:
+				// special case for not equals
+				// split into two different queries (less and greater) and
+				// use union to combine the results
+				t := newTransaction()
+				max := fmt.Sprintf("(%v", f.filterValue.Interface())
+				lessIds := []string{}
+				lessArgs := args.Add("-inf").Add(max)
+				if err := t.command("ZRANGEBYSCORE", lessArgs, newScanSliceHandler(&lessIds)); err != nil {
+					return nil, err
+				}
+				min := fmt.Sprintf("(%v", f.filterValue.Interface())
+				greaterIds := []string{}
+				greaterArgs := args.Add(min).Add("+inf")
+				if err := t.command("ZRANGEBYSCORE", greaterArgs, newScanSliceHandler(&greaterIds)); err != nil {
+					return nil, err
+				}
+
+				// execute the transaction to scan in values for lessIds and greaterIds
+				if err := t.exec(); err != nil {
+					return nil, err
+				}
+				if !reverse {
+					lessSet := newStringSetFromSlice(lessIds)
+					greaterSet := newStringSetFromSlice(greaterIds)
+					return lessSet.union(greaterSet), nil
+				} else {
+					for i, j := 0, len(lessIds)-1; i <= j; i, j = i+1, j-1 {
+						lessIds[i], lessIds[j] = lessIds[j], lessIds[i]
+					}
+					for i, j := 0, len(greaterIds)-1; i <= j; i, j = i+1, j-1 {
+						greaterIds[i], greaterIds[j] = greaterIds[j], greaterIds[i]
+					}
+					lessSet := newStringSetFromSlice(lessIds)
+					greaterSet := newStringSetFromSlice(greaterIds)
+					return greaterSet.union(lessSet), nil
+				}
+			}
+
+		case indexBoolean:
+			args := redis.Args{}.Add(setKey)
+			var min, max interface{}
+			switch f.filterType {
+			case equal:
+				if f.filterValue.Bool() == true {
+					// use 1 for true
+					min, max = 1, 1
+				} else {
+					// use 0 for false
+					min, max = 0, 0
+				}
+			case less:
+				if f.filterValue.Bool() == true {
+					// false is less than true
+					// 0 < 1
+					min, max = 0, 0
+				} else {
+					// can't be less than false (0)
+					return newStringSet(), nil
+				}
+			case greater:
+				if f.filterValue.Bool() == true {
+					// can't be greater than true (1)
+					return newStringSet(), nil
+				} else {
+					// true is greater than false
+					// 1 > 0
+					min, max = 1, 1
+				}
+			case lessOrEqual:
+				if f.filterValue.Bool() == true {
+					// true and false are <= true
+					// 1 <= 1 and 0 <= 1
+					min = 0
+					max = 1
+				} else {
+					// false <= false
+					// 0 <= 0
+					min, max = 0, 0
+				}
+			case greaterOrEqual:
+				if f.filterValue.Bool() == true {
+					// true >= true
+					// 1 >= 1
+					min, max = 1, 1
+				} else {
+					// false and true are >= false
+					// 0 >= 0 and 1 >= 0
+					min = 0
+					max = 1
+				}
+			case notEqual:
+				if f.filterValue.Bool() == true {
+					// not true means false
+					// false == 0
+					min, max = 0, 0
+				} else {
+					// not false means true
+					// true == 1
+					min, max = 1, 1
+				}
+			default:
+				msg := fmt.Sprintf("zoom: Filter operator out of range. Got: %d", f.filterType)
+				return nil, errors.New(msg)
+			}
+			// execute command to get the ids
+			// TODO: try and do this inside of a transaction
+			var command string
+			reverse := o.orderType == descending && o.fieldName != ""
+			if !reverse {
+				command = "ZRANGEBYSCORE"
+				args = args.Add(min).Add(max)
+			} else {
+				command = "ZREVRANGEBYSCORE"
+				args = args.Add(max).Add(min)
+			}
+			conn := GetConn()
+			defer conn.Close()
+			idSlice, err := redis.Strings(conn.Do(command, args...))
+			if err != nil {
+				return nil, err
+			}
+			return newStringSetFromSlice(idSlice), nil
+
+		case indexAlpha:
+			reverse := o.orderType == descending && o.fieldName != ""
+			conn := GetConn()
+			defer conn.Close()
+			beforeRank, afterRank, err := f.getAlphaRanks(conn, setKey)
+			if err != nil {
+				return nil, err
+			}
+			args := redis.Args{}.Add(setKey)
+			var start, stop int
+			switch f.filterType {
+			case equal, less, greater, lessOrEqual, greaterOrEqual:
+				switch f.filterType {
+				case equal:
+					if beforeRank+1 == afterRank {
+						// no models with value equal to target
+						return newStringSet(), nil
+					}
+					start = beforeRank
+					stop = afterRank - 2
+				case less:
+					if afterRank <= 2 {
+						// no models with value less than target
+						return newStringSet(), nil
+					}
+					start = 0
+					stop = afterRank - (afterRank - beforeRank) - 1
+				case greater:
+					start = beforeRank + (afterRank - beforeRank) - 1
+					stop = -1
+				case lessOrEqual:
+					if afterRank <= 1 {
+						// no models with value less than or equal to target
+						return newStringSet(), nil
+					}
+					start = 0
+					stop = afterRank - 2
+				case greaterOrEqual:
+					start = beforeRank
+					stop = -1
+				}
+				args = args.Add(start).Add(stop)
+				ids, err := redis.Strings(conn.Do("ZRANGE", args...))
+				if err != nil {
+					return nil, err
+				}
+				for i, valueAndId := range ids {
+					ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+				}
+				if reverse {
+					for i, j := 0, len(ids)-1; i <= j; i, j = i+1, j-1 {
+						ids[i], ids[j] = ids[j], ids[i]
+					}
+				}
+				return newStringSetFromSlice(ids), nil
+			case notEqual:
+				// special case for not equals
+				// split into two different queries (less and greater) and
+				// use union to combine the results
+				t := newTransaction()
+				lessIds := []string{}
+				if afterRank > 3 {
+					lessArgs := args.Add(0).Add(afterRank - (afterRank - beforeRank) - 1)
+					if err := t.command("ZRANGE", lessArgs, newScanSliceHandler(&lessIds)); err != nil {
+						return nil, err
+					}
+				}
+				greaterArgs := args.Add(beforeRank + (afterRank - beforeRank) - 1).Add(-1)
+				greaterIds := []string{}
+				if err := t.command("ZRANGE", greaterArgs, newScanSliceHandler(&greaterIds)); err != nil {
+					return nil, err
+				}
+				// execute the transaction to scan in values for lessIds and greaterIds
+				if err := t.exec(); err != nil {
+					return nil, err
+				}
+				for i, valueAndId := range lessIds {
+					lessIds[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+				}
+				for i, valueAndId := range greaterIds {
+					greaterIds[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+				}
+				if !reverse {
+					lessSet := newStringSetFromSlice(lessIds)
+					greaterSet := newStringSetFromSlice(greaterIds)
+					return lessSet.union(greaterSet), nil
+				} else {
+					for i, j := 0, len(lessIds)-1; i <= j; i, j = i+1, j-1 {
+						lessIds[i], lessIds[j] = lessIds[j], lessIds[i]
+					}
+					for i, j := 0, len(greaterIds)-1; i <= j; i, j = i+1, j-1 {
+						greaterIds[i], greaterIds[j] = greaterIds[j], greaterIds[i]
+					}
+					lessSet := newStringSetFromSlice(lessIds)
+					greaterSet := newStringSetFromSlice(greaterIds)
+					return greaterSet.union(lessSet), nil
+				}
+
+			}
+
+		default:
+			msg := fmt.Sprintf("zoom: cannot use filters on unindexed field %s for model name %s.", f.fieldName, modelName)
+			return nil, errors.New(msg)
+		}
+	}
+	return nil, nil
+}
+
+func (f filter) getAlphaRanks(conn redis.Conn, setKey string) (beforeRank int, afterRank int, err error) {
+	// TODO: try and do this inside of a single transaction
+	// or (better yet) implement some server-side lua
+	t := newTransaction()
+	target := f.filterValue.String()
+	// add a value to the sorted set which is garunteed to come before the
+	// target value when sorted
+	before := target
+	baseArgs := redis.Args{}.Add(setKey)
+	beforeArgs := baseArgs.Add(0).Add(before)
+	if err := t.command("ZADD", beforeArgs, nil); err != nil {
+		return 0, 0, err
+	}
+	// add a value to the sorted set which is garunteed to come after the
+	// target value when sorted
+	after := target + delString
+	afterArgs := baseArgs.Add(0).Add(after)
+	if err := t.command("ZADD", afterArgs, nil); err != nil {
+		return 0, 0, err
+	}
+	// get the rank of the value inserted before and remember it
+	beforeRankArgs := baseArgs.Add(before)
+	if err := t.command("ZRANK", beforeRankArgs, newSingleScanHandler(&beforeRank)); err != nil {
+		return 0, 0, err
+	}
+	// get the rank of the value inserted after and remember it
+	afterRankArgs := baseArgs.Add(after)
+	if err := t.command("ZRANK", afterRankArgs, newSingleScanHandler(&afterRank)); err != nil {
+		return 0, 0, err
+	}
+	// now remove both of the values we had added
+	removeArgs := baseArgs.Add(before).Add(after)
+	if err := t.command("ZREM", removeArgs, nil); err != nil {
+		return 0, 0, err
+	}
+	// execute the transaction to scan in the values for beforeRank and afterRank
+	if err := t.exec(); err != nil {
+		return 0, 0, err
+	}
+
+	return beforeRank, afterRank, nil
+}
+
+// Alpha indexes are stored as "<fieldValue> <modelId>", so we need to
+// extract the modelId. While fieldValue may have a space, modelId CANNOT
+// have a space in it, so we can simply take the part of the stored value
+// after the last space.
+func extractModelIdFromAlphaIndexValue(valueAndId string) string {
+	slices := strings.Split(valueAndId, " ")
+	return slices[len(slices)-1]
+}
+
+// NOTE: sliceVal should be the value of a pointer to a slice of pointer to models.
+// It's type should be *[]*<T>, where <T> is some type which satisfies the Model
+// interface. The type *[]*Model is not equivalent and will not work.
+func scanModelsByIds(sliceVal reflect.Value, modelName string, ids []string, includes []string) error {
+	t := newTransaction()
+	for _, id := range ids {
+		mr, err := newModelRefFromName(modelName)
+		if err != nil {
+			return err
+		}
+		mr.model.setId(id)
+		if err := t.findModel(mr, includes); err != nil {
+			if _, ok := err.(*KeyNotFoundError); ok {
+				continue // key not found errors are fine
+				// TODO: update the index in this case? Or maybe if it keeps happening?
+			}
+		}
+		sliceVal.Elem().Set(reflect.Append(sliceVal.Elem(), mr.modelVal()))
+	}
+	return t.exec()
+}
+
+// getIdCount returns the number of models that would be found if the
+// query were executed, but does not actually find them.
+func (q *Query) getIdCount() (int, error) {
+	conn := GetConn()
+	defer conn.Close()
+
+	args := redis.Args{}
+	var command string
+	if q.order.fieldName == "" {
+		// without ordering
+		if q.offset != 0 {
+			return 0, errors.New("zoom: offset cannot be applied to queries without an order.")
+		}
+		command = "SCARD"
+		indexKey := q.modelSpec.modelName + ":all"
+		args = args.Add(indexKey)
+		count, err := redis.Int(conn.Do("SCARD", args...))
+		if err != nil {
+			return 0, err
+		}
+		if q.limit == 0 {
+			// limit of 0 is the same as unlimited
+			return count, nil
+		} else {
+			limitInt := int(q.limit)
+			if count > limitInt {
+				return limitInt, nil
+			} else {
+				return count, nil
+			}
+		}
+	} else {
+		// with ordering
+		// this is a little more complicated
+		command = "ZCARD"
+		indexKey := q.modelSpec.modelName + ":" + q.order.redisName
+		args = args.Add(indexKey)
+		count, err := redis.Int(conn.Do(command, args...))
+		if err != nil {
+			return 0, err
+		}
+		if q.limit == 0 && q.offset == 0 {
+			// simple case (no limit, no offset)
+			return count, nil
+		} else {
+			// we need to take limit and offset into account
+			// in order to return the correct number of models which
+			// would have been returned by running the query
+			if q.offset > uint(count) {
+				// special case for offset > count
+				return 0, nil
+			} else if q.limit == 0 {
+				// special case if limit = 0 (really means unlimited)
+				return count - int(q.offset), nil
+			} else {
+				// holy type coercion, batman!
+				// it's ugly but it works
+				return int(math.Min(float64(count-int(q.offset)), float64(q.limit))), nil
+			}
+		}
+	}
 }

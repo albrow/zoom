@@ -10,20 +10,20 @@ package zoom
 
 import (
 	"fmt"
-	"github.com/stephenalexbrowne/zoom/util"
 	"reflect"
 )
 
 // Models converts an interface to a slice of Model. It is typically
-// used to convert a return value of a MultiModelQuery.
+// used to convert a return value of a Query. Will panic if the type
+// is invalid.
 func Models(in interface{}) []Model {
 	typ := reflect.TypeOf(in)
-	if !util.TypeIsSliceOrArray(typ) {
+	if !typeIsSliceOrArray(typ) {
 		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nArgument must be slice or array.", in)
 		panic(msg)
 	}
 	elemTyp := typ.Elem()
-	if !util.TypeIsPointerToStruct(elemTyp) {
+	if !typeIsPointerToStruct(elemTyp) {
 		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nSlice or array must have elements of type pointer to struct.", in)
 		panic(msg)
 	}
@@ -43,6 +43,19 @@ func Models(in interface{}) []Model {
 			panic(msg)
 		}
 		results[i] = model
+	}
+	return results
+}
+
+// Interfaces convert interface{} to []interface{}
+// Will panic if the type is invalid.
+func Interfaces(in interface{}) []interface{} {
+	val := reflect.ValueOf(in)
+	length := val.Len()
+	results := make([]interface{}, length)
+	for i := 0; i < length; i++ {
+		elemVal := val.Index(i)
+		results[i] = elemVal.Interface()
 	}
 	return results
 }
