@@ -1,18 +1,16 @@
 Zoom
 ====
 
-Version: X.X.X
+Version: 0.4.0
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
 Full documentation is available on
 [godoc.org](http://godoc.org/github.com/stephenalexbrowne/zoom).
 
-**WARNING:** this isn't done yet and may change significantly before the official release. I do not
-advise using Zoom for production or mission-critical applications. Feedback and pull requests are welcome :)
-
-Since the development branch is quickly changing, this README might not necessarily reflect the most
-up-to-date version of the API.
+**WARNING:** this isn't done yet and may change significantly before the official release. There is no
+promise of backwards compatibility until version 1.0. I do not advise using Zoom for production or
+mission-critical applications. Feedback and pull requests are welcome :)
 
 
 Table of Contents
@@ -142,18 +140,19 @@ type Person struct {
 }
 ```
 
-You must also call zoom.Register so that Zoom can spec out model types and the relationships between them.
+You must also call zoom.Register so that Zoom can spec out the different model types and the relations between them.
 You only need to do this once per type. For example, somewhere in your initialization sequence (e.g. in the main
 function) put the following:
 
 ``` go
-// register the *Person type using the default name "Person"
+// register the *Person type under the default name "Person"
 if err := zoom.Register(&Person{}); err != nil {
     // handle error
 }
 ```
 
-If you want to specify a custom model name to associate with a certain type, use the RegisterName function.
+Now the *Person type will be associated with the string name "Person." You can also use the RegisterName
+funcion to specify a custom name for the model type.
 
 ### Saving Models
 
@@ -186,7 +185,8 @@ if !ok {
 ```
 
 Alternatively, you can use the ScanById function to avoid type assertion. It expects a pointer
-to a model (some registered type).
+to a struct as an argument(some registered model type).
+
 
 ``` go
 p := &Person{}
@@ -252,7 +252,7 @@ for i, result := range results {
 ```
 
 You can use the Scan method if you want to avoid a type assertion. Scan expects a pointer to
-a slice or array of pointers to structs (of some registered model type).
+a slice of pointers to some model type.
 
 ``` go
 persons := make([]*Person, 0)
@@ -417,7 +417,8 @@ for _, child := range parentCopy.Children {
 ```
 
 For a Parent with a lot of children, it may take a long time to get each Child from the database. If
-this is the case, it's a good idea to use the Exclude modifier when you don't intend to use the children.
+this is the case, it's a good idea to use a query with the Exclude modifier when you don't intend to
+use the children.
 
 ``` go
 parents := make([]*Parent, 0)
@@ -503,23 +504,26 @@ BenchmarkCountAllQuery100000   50000	     54126 ns/op
 BenchmarkMDeleteById	    	2000	    603538 ns/op
 ```
 
-Benchmark results may vary widely between machines. You should run your own benchmarks that are closer
-to your use case to get a real sense of how Zoom will perform for you. The speeds above are already
-pretty fast, but improving them is one of the top priorities for this project.
+Currently, there are not many benchmarks for queries; I'm working on adding more.
+
+The results of the benchmark can vary widely from system to system. You should run your
+own benchmarks that are closer to your use case to get a real sense of how Zoom
+will perform for you. The speeds above are already pretty fast, but improving them is
+one of the top priorities for this project.
+
     
 Example Usage
 -------------
 
 The [zoom_example repository](https://github.com/stephenalexbrowne/zoom_example) is an
-example of how to use Zoom in a json/rest application. NOTE: the example repository
-currently uses version 0.3.0 and may not be compatible with the latest version.
+example of how to use Zoom in a json/rest application. NOTE: currently the example
+repository uses Zoom v0.3.3 and may not be compatible with the newest version.
 
 
 TODO
 ----
 
 Ordered generally by priority, here's what I'm working on:
-
 
 - Fix bugs and improve general durability
 - Add more benchmarks
