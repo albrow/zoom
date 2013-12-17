@@ -5,6 +5,7 @@
 // File marshal.go deals with encoding arbitrary data structures
 // into byte format and decoding bytes into arbitrary data
 // structures.
+
 package zoom
 
 import (

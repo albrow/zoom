@@ -4,6 +4,7 @@
 
 // File util.go contains miscellaneous utility functions used throughout
 // the zoom library. They are not intended for external use.
+
 package zoom
 
 import (
