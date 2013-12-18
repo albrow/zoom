@@ -203,3 +203,14 @@ func modelIds(ms []Model) []string {
 	}
 	return results
 }
+
+// converts a bool to an int using the following rule:
+// false = 0
+// true = 1
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	} else {
+		return 0
+	}
+}
