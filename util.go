@@ -214,3 +214,25 @@ func boolToInt(b bool) int {
 		return 0
 	}
 }
+
+// intersects two string slices. The order will be preserved
+// with respect to the first slice. (The first slice is used
+// in the outer loop). The return value is a copy, so neither
+// the first or second slice will be mutated.
+func orderedIntersectString(first []string, second []string) []string {
+	results := make([]string, 0)
+	lastIndex := 0
+	l2 := len(second)
+	for _, a := range first {
+		var b string
+		for i := lastIndex; i < l2 && b <= a; i++ {
+			b = second[i]
+			if a == b {
+				results = append(results, a)
+				lastIndex = i
+				break
+			}
+		}
+	}
+	return results
+}
