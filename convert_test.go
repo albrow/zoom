@@ -209,7 +209,7 @@ func testConvertType(typ reflect.Type, construct func() (in interface{}, err err
 	// create a copy of the same type and use ScanById
 	m2CopyInterface := reflect.New(typ).Interface()
 	m2Copy, ok := m2CopyInterface.(Model)
-	id := m2.getId()
+	id := m2.GetId()
 	if !ok {
 		t.Errorf("couldn't convert type %T to Model", m2CopyInterface)
 	}

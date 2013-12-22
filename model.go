@@ -25,8 +25,8 @@ type DefaultData struct {
 // Any struct which includes an embedded DefaultData field satisfies
 // the Model interface.
 type Model interface {
-	getId() string
-	setId(string)
+	GetId() string
+	SetId(string)
 	// TODO: add getters and setters for other default fields?
 }
 
@@ -181,11 +181,11 @@ func newModelRefFromName(modelName string) (modelRef, error) {
 	return mr, nil
 }
 
-func (d DefaultData) getId() string {
+func (d DefaultData) GetId() string {
 	return d.Id
 }
 
-func (d *DefaultData) setId(id string) {
+func (d *DefaultData) SetId(id string) {
 	d.Id = id
 }
 
@@ -493,7 +493,7 @@ func (mr modelRef) value(fieldName string) reflect.Value {
 
 // key returns a key which is used in redis to store the model
 func (mr modelRef) key() string {
-	return mr.modelSpec.modelName + ":" + mr.model.getId()
+	return mr.modelSpec.modelName + ":" + mr.model.GetId()
 }
 
 func (mr modelRef) indexKey() string {

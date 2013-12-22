@@ -199,7 +199,7 @@ func convertNumericToFloat64(val reflect.Value) (float64, error) {
 func modelIds(ms []Model) []string {
 	results := make([]string, len(ms))
 	for i, m := range ms {
-		results[i] = m.getId()
+		results[i] = m.GetId()
 	}
 	return results
 }

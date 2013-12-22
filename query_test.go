@@ -38,7 +38,7 @@ func TestQueryAllRun(t *testing.T) {
 	}
 
 	for i, got := range gots {
-		if got.getId() == "" {
+		if got.GetId() == "" {
 			t.Errorf("Got model has nil id on iteration %d", i)
 		}
 		expected, found := modelsMap[got.Id]
@@ -78,7 +78,7 @@ func TestQueryAllScan(t *testing.T) {
 	}
 
 	for i, got := range gots {
-		if got.getId() == "" {
+		if got.GetId() == "" {
 			t.Errorf("Got model has nil id on iteration %d", i)
 		}
 		expected, found := modelsMap[got.Id]
@@ -433,7 +433,7 @@ func TestOrderNumericDesc(t *testing.T) {
 	// expected ids is reversed
 	expectedIds := make([]string, len(ms))
 	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
 	}
 
 	q := NewQuery("indexedPrimativesModel").Order("-Int")
@@ -480,7 +480,7 @@ func TestOrderBooleanDesc(t *testing.T) {
 	// expected ids is reversed
 	expectedIds := make([]string, len(ms))
 	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
 	}
 
 	q := NewQuery("indexedPrimativesModel").Order("-Bool")
@@ -528,7 +528,7 @@ func TestOrderAlphaDesc(t *testing.T) {
 	// expected ids is reversed
 	expectedIds := make([]string, len(ms))
 	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
 	}
 
 	q := NewQuery("indexedPrimativesModel").Order("-String")
@@ -1041,7 +1041,7 @@ func TestNumericOrderDescRangeFilter(t *testing.T) {
 	// expected ids is reversed
 	expectedIds := make([]string, len(ms))
 	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
 	}
 
 	// less
@@ -1089,7 +1089,7 @@ func TestBooleanOrderDescRangeFilters(t *testing.T) {
 	// expected ids is reversed
 	expectedIds := make([]string, len(ms))
 	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
 	}
 
 	// less
@@ -1128,7 +1128,7 @@ func TestAlphaDescOrderRangeFilters(t *testing.T) {
 	// expected ids is reversed
 	expectedIds := make([]string, len(ms))
 	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].getId(), ms[i].getId()
+		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
 	}
 
 	// less
