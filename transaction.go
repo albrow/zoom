@@ -214,8 +214,8 @@ func (t *transaction) saveModel(m Model) error {
 	}
 
 	// set the id if needed
-	if m.getId() == "" {
-		m.setId(generateRandomId())
+	if m.GetId() == "" {
+		m.SetId(generateRandomId())
 	}
 
 	// add operations to save the model indexes
@@ -264,7 +264,7 @@ func (t *transaction) saveStruct(mr modelRef) error {
 }
 
 func (t *transaction) index(mr modelRef) error {
-	args := redis.Args{}.Add(mr.indexKey()).Add(mr.model.getId())
+	args := redis.Args{}.Add(mr.indexKey()).Add(mr.model.GetId())
 	if err := t.command("SADD", args, nil); err != nil {
 		return err
 	}
@@ -326,14 +326,14 @@ func (t *transaction) saveModelOneToOneRelationship(mr modelRef, r relationship)
 		msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", field.Type().String())
 		return errors.New(msg)
 	}
-	if rModel.getId() == "" {
+	if rModel.GetId() == "" {
 		msg := fmt.Sprintf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
 		return errors.New(msg)
 	}
 
 	// add a command to the transaction to set the relation key
 	relationKey := mr.key() + ":" + r.redisName
-	args := redis.Args{relationKey, rModel.getId()}
+	args := redis.Args{relationKey, rModel.GetId()}
 	if err := t.command("SET", args, nil); err != nil {
 		return err
 	}
@@ -359,13 +359,13 @@ func (t *transaction) saveModelOneToManyRelationship(mr modelRef, r relationship
 		}
 
 		// make sure the id is not nil
-		if rModel.getId() == "" {
+		if rModel.GetId() == "" {
 			msg := fmt.Sprintf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
 			return errors.New(msg)
 		}
 
 		// add its id to the slice
-		ids = append(ids, rModel.getId())
+		ids = append(ids, rModel.GetId())
 	}
 
 	if len(ids) > 0 {
@@ -422,7 +422,7 @@ func (t *transaction) saveModelPrimativeIndexNumeric(mr modelRef, p primative) e
 	if err != nil {
 		return err
 	}
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	return t.indexNumeric(indexKey, score, id)
 }
 
@@ -436,7 +436,7 @@ func (t *transaction) saveModelPointerIndexNumeric(mr modelRef, p pointer) error
 	if err != nil {
 		return err
 	}
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	return t.indexNumeric(indexKey, score, id)
 }
 
@@ -454,7 +454,7 @@ func (t *transaction) saveModelPrimativeIndexAlpha(mr modelRef, p primative) err
 	}
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
 	value := mr.value(p.fieldName).String()
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	return t.indexAlpha(indexKey, value, id)
 }
 
@@ -468,7 +468,7 @@ func (t *transaction) saveModelPointerIndexAlpha(mr modelRef, p pointer) error {
 	}
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
 	value := mr.value(p.fieldName).Elem().String()
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	return t.indexAlpha(indexKey, value, id)
 	return nil
 }
@@ -506,7 +506,7 @@ func (t *transaction) removeOldAlphaIndex(mr modelRef, fieldName string, redisNa
 			conn := GetConn()
 			defer conn.Close()
 			alphaIndexKey := mr.modelSpec.modelName + ":" + fieldName
-			member := oldFieldValue + " " + mr.model.getId()
+			member := oldFieldValue + " " + mr.model.GetId()
 			if _, err := conn.Do("ZREM", alphaIndexKey, member); err != nil {
 				return err
 			}
@@ -517,7 +517,7 @@ func (t *transaction) removeOldAlphaIndex(mr modelRef, fieldName string, redisNa
 
 func (t *transaction) saveModelPrimativeIndexBoolean(mr modelRef, p primative) error {
 	value := mr.value(p.fieldName).Bool()
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
 	var score float64
 	if value == true {
@@ -534,7 +534,7 @@ func (t *transaction) saveModelPointerIndexBoolean(mr modelRef, p pointer) error
 		return nil // skip nil pointers for now
 	}
 	value := mr.value(p.fieldName).Elem().Bool()
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
 	var score float64
 	if value == true {
@@ -695,7 +695,7 @@ func (t *transaction) findModelOneToOneRelation(mr modelRef, r relationship) err
 	}
 
 	// set id and create modelRef
-	rModel.setId(id)
+	rModel.SetId(id)
 	rModelRef, err := newModelRefFromModel(rModel)
 	if err != nil {
 		return err
@@ -747,7 +747,7 @@ func (t *transaction) findModelOneToManyRelation(mr modelRef, r relationship) er
 		}
 
 		// set id and create modelRef
-		rModel.setId(id)
+		rModel.SetId(id)
 		rModelRef, err := newModelRefFromModel(rModel)
 		if err != nil {
 			return err
@@ -768,7 +768,7 @@ func (t *transaction) findModelOneToManyRelation(mr modelRef, r relationship) er
 
 func (t *transaction) deleteModel(mr modelRef) error {
 	modelName := mr.modelSpec.modelName
-	id := mr.model.getId()
+	id := mr.model.GetId()
 
 	// add an operation to delete the model itself
 	key := modelName + ":" + id
@@ -889,7 +889,7 @@ func (t *transaction) removeModelIndexes(mr modelRef) error {
 
 func (t *transaction) removeModelPrimativeIndexNumeric(mr modelRef, p primative) error {
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	return t.unindexNumeric(indexKey, id)
 }
 
@@ -899,7 +899,7 @@ func (t *transaction) removeModelPointerIndexNumeric(mr modelRef, p pointer) err
 		return nil // skip nil pointers for now
 	}
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	return t.unindexNumeric(indexKey, id)
 }
 
@@ -914,7 +914,7 @@ func (t *transaction) unindexNumeric(indexKey string, id string) error {
 func (t *transaction) removeModelPrimativeIndexAlpha(mr modelRef, p primative) error {
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
 	value := mr.value(p.fieldName).String()
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	return t.unindexAlpha(indexKey, value, id)
 }
 
@@ -925,7 +925,7 @@ func (t *transaction) removeModelPointerIndexAlpha(mr modelRef, p pointer) error
 	}
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
 	value := mr.value(p.fieldName).Elem().String()
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	return t.unindexAlpha(indexKey, value, id)
 	return nil
 }
@@ -940,13 +940,13 @@ func (t *transaction) unindexAlpha(indexKey, value, id string) error {
 }
 
 func (t *transaction) removeModelPrimativeIndexBoolean(mr modelRef, p primative) error {
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
 	return t.unindexNumeric(indexKey, id)
 }
 
 func (t *transaction) removeModelPointerIndexBoolean(mr modelRef, p pointer) error {
-	id := mr.model.getId()
+	id := mr.model.GetId()
 	indexKey := mr.modelSpec.modelName + ":" + p.redisName
 	return t.unindexNumeric(indexKey, id)
 }
@@ -958,7 +958,7 @@ func checkModelExists(mr modelRef) error {
 	defer conn.Close()
 
 	indexKey := mr.modelSpec.modelName + ":all"
-	if exists, err := redis.Bool(conn.Do("SISMEMBER", indexKey, mr.model.getId())); err != nil {
+	if exists, err := redis.Bool(conn.Do("SISMEMBER", indexKey, mr.model.GetId())); err != nil {
 		return err
 	} else if !exists {
 		return NewKeyNotFoundError(mr.key(), mr.modelSpec.modelType)
