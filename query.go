@@ -308,7 +308,7 @@ func (q *Query) Run() (interface{}, error) {
 		return nil, q.err
 	}
 
-	ids, err := q.getIds()
+	ids, err := q.GetIds()
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +350,7 @@ func (q *Query) Scan(in interface{}) error {
 		return errors.New(msg)
 	}
 
-	ids, err := q.getIds()
+	ids, err := q.GetIds()
 	if err != nil {
 		return err
 	}
@@ -370,7 +370,7 @@ func (q *Query) Count() (int, error) {
 	if q.err != nil {
 		return 0, q.err
 	}
-	return q.getIdCount()
+	return q.GetIdCount()
 }
 
 // IdsOnly is a query finisher. It returns only the ids of the models
@@ -380,7 +380,7 @@ func (q *Query) IdsOnly() ([]string, error) {
 	if q.err != nil {
 		return nil, q.err
 	}
-	return q.getIds()
+	return q.GetIds()
 }
 
 func (q *Query) setErrorIfNone(e error) {
@@ -405,21 +405,21 @@ func (q *Query) getIncludes() []string {
 	return nil
 }
 
-// getIds() executes a single command and returns the ids of every
+// GetIds() executes a single command and returns the ids of every
 // model which should be found for the query.
-func (q *Query) getIds() ([]string, error) {
+func (q *Query) GetIds() ([]string, error) {
 	conn := GetConn()
 	defer conn.Close()
 
 	if len(q.filters) == 0 {
-		return q.getIdsWithoutFilters()
+		return q.GetIdsWithoutFilters()
 	} else {
-		return q.getIdsWithFilters()
+		return q.GetIdsWithFilters()
 	}
 
 }
 
-func (q *Query) getIdsWithoutFilters() ([]string, error) {
+func (q *Query) GetIdsWithoutFilters() ([]string, error) {
 	conn := GetConn()
 	defer conn.Close()
 
@@ -473,11 +473,11 @@ func (q *Query) getIdsWithoutFilters() ([]string, error) {
 	}
 }
 
-func (q *Query) getIdsWithFilters() ([]string, error) {
+func (q *Query) GetIdsWithFilters() ([]string, error) {
 	idSets := []stringSet{}
 	// get a set of ids for each filter
 	for _, filter := range q.filters {
-		ids, err := filter.getIds(q.modelSpec.modelName, q.order)
+		ids, err := filter.GetIds(q.modelSpec.modelName, q.order)
 		if err != nil {
 			return nil, err
 		}
@@ -498,7 +498,7 @@ func (q *Query) getIdsWithFilters() ([]string, error) {
 	}
 }
 
-func (f filter) getIds(modelName string, o order) (stringSet, error) {
+func (f filter) GetIds(modelName string, o order) (stringSet, error) {
 	// special case for id filters
 	if f.byId {
 		id := f.filterValue.String()
@@ -842,7 +842,7 @@ func scanModelsByIds(sliceVal reflect.Value, modelName string, ids []string, inc
 		if err != nil {
 			return err
 		}
-		mr.model.setId(id)
+		mr.model.SetId(id)
 		if err := t.findModel(mr, includes); err != nil {
 			if _, ok := err.(*KeyNotFoundError); ok {
 				continue // key not found errors are fine
@@ -854,9 +854,9 @@ func scanModelsByIds(sliceVal reflect.Value, modelName string, ids []string, inc
 	return t.exec()
 }
 
-// getIdCount returns the number of models that would be found if the
+// GetIdCount returns the number of models that would be found if the
 // query were executed, but does not actually find them.
-func (q *Query) getIdCount() (int, error) {
+func (q *Query) GetIdCount() (int, error) {
 	conn := GetConn()
 	defer conn.Close()
 

@@ -124,6 +124,7 @@ func filterModels(models []*indexedPrimativesModel, fieldName string, fType filt
 				valueBool := reflect.ValueOf(fVal).Bool()
 				return boolToInt(fieldBool) <= boolToInt(valueBool), nil
 			}
+
 		}
 
 	// NOTE: this implementation only considers the first letter of the
@@ -600,7 +601,6 @@ func TestInternalOrderModelsBoolean(t *testing.T) {
 	expected[0].Bool = false
 	expected[1].Bool = true
 	models := []*indexedPrimativesModel{expected[1], expected[0]}
-
 	got := orderModels(models, indexBoolean)
 	if eql, msg := looseEquals(expected, got); !eql {
 		t.Errorf("Expected: %v\nGot %v\n%s\n", expected, got, msg)

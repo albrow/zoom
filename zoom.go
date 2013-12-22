@@ -124,7 +124,7 @@ func MFindById(modelNames, ids []string) ([]Model, error) {
 		if err != nil {
 			return results, err
 		}
-		mr.model.setId(id)
+		mr.model.SetId(id)
 
 		// add a find operation to the transaction
 		t.findModel(mr, nil)
@@ -149,7 +149,7 @@ func ScanById(id string, model Model) error {
 	if err != nil {
 		return err
 	}
-	mr.model.setId(id)
+	mr.model.SetId(id)
 
 	// start a transaction
 	t := newTransaction()
@@ -202,7 +202,7 @@ func MScanById(ids []string, models interface{}) error {
 		if err != nil {
 			return err
 		}
-		mr.model.setId(id)
+		mr.model.SetId(id)
 
 		// start a transaction
 		t.findModel(mr, nil)
@@ -223,7 +223,7 @@ func MScanById(ids []string, models interface{}) error {
 func Delete(model Model) error {
 	t := newTransaction()
 
-	if model.getId() == "" {
+	if model.GetId() == "" {
 		return errors.New("zoom: cannot delete because model Id field is empty")
 	}
 	mr, err := newModelRefFromModel(model)
@@ -252,7 +252,7 @@ func Delete(model Model) error {
 func MDelete(models []Model) error {
 	t := newTransaction()
 	for _, m := range models {
-		if m.getId() == "" {
+		if m.GetId() == "" {
 			return errors.New("zoom: cannot delete because model Id field is empty")
 		}
 		mr, err := newModelRefFromModel(m)
