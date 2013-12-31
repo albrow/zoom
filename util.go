@@ -219,19 +219,33 @@ func boolToInt(b bool) int {
 // with respect to the first slice. (The first slice is used
 // in the outer loop). The return value is a copy, so neither
 // the first or second slice will be mutated.
-func orderedIntersectString(first []string, second []string) []string {
+func orderedIntersectStrings(first []string, second []string) []string {
 	results := make([]string, 0)
-	lastIndex := 0
-	l2 := len(second)
+	memo := make(map[string]struct{})
+	for _, a := range second {
+		memo[a] = struct{}{}
+	}
 	for _, a := range first {
-		var b string
-		for i := lastIndex; i < l2 && b <= a; i++ {
-			b = second[i]
-			if a == b {
-				results = append(results, a)
-				lastIndex = i
-				break
-			}
+		if _, found := memo[a]; found {
+			results = append(results, a)
+		}
+	}
+	return results
+}
+
+// intersects two model slices. The order will be preserved
+// with respect to the first slice. (The first slice is used
+// in the outer loop). The return value is a copy, so neither
+// the first or second slice will be mutated.
+func orderedIntersectModels(first []*indexedPrimativesModel, second []*indexedPrimativesModel) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, 0)
+	memo := make(map[*indexedPrimativesModel]struct{})
+	for _, m := range second {
+		memo[m] = struct{}{}
+	}
+	for _, m := range first {
+		if _, found := memo[m]; found {
+			results = append(results, m)
 		}
 	}
 	return results

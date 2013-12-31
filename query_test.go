@@ -14,9 +14,23 @@ import (
 )
 
 // TODO:
-// 	- Implement the testQuery function using the internal filter and
-//	  order functions below
 // 	- Write high-level tests for every possible combination of query modifiers
+
+func TestFindAllQuery(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newIndexedPrimativesModels(5)
+	if err != nil {
+		t.Error(err)
+	}
+	if err := MSave(Models(ms)); err != nil {
+		t.Error(err)
+	}
+
+	q := NewQuery("indexedPrimativesModel")
+	testQuery(t, q, ms)
+}
 
 // There's a huge amount of test cases to cover above.
 // Below is some code that makes it easier, but needs to be
@@ -34,8 +48,68 @@ import (
 // of a simpler implementation which doesn't touch the database. If the results match,
 // then the query was correct and the test will pass. Models should be an array of all
 // the models which are being queried against.
-func testQuery(t *testing.T, q RunScanner, models []*indexedPrimativesModel) {
-	// TODO: implement this!
+func testQuery(t *testing.T, q *Query, models []*indexedPrimativesModel) {
+	expected, err := expectedResultsForQuery(q, models)
+	if err != nil {
+		t.Error(err)
+	}
+	expectedIds := modelIds(Models(expected))
+
+	got := make([]*indexedPrimativesModel, 0)
+	if err := q.Scan(&got); err != nil {
+		t.Error(err)
+	}
+	gotIds := modelIds(Models(got))
+
+	if q.order.fieldName == "" {
+		// order doesn't matter
+		if eql, msg := compareAsStringSet(expectedIds, gotIds); !eql {
+			t.Errorf("Expected: %v\nGot: %v\n%s", expectedIds, gotIds, msg)
+		}
+	} else {
+		if !reflect.DeepEqual(expected, got) {
+			t.Errorf("Expected: %v\nGot: %v\n", expectedIds, gotIds)
+		}
+	}
+}
+
+func expectedResultsForQuery(q *Query, models []*indexedPrimativesModel) ([]*indexedPrimativesModel, error) {
+	expected := make([]*indexedPrimativesModel, len(models))
+	copy(expected, models)
+	fmt.Println("expected: ", expected)
+
+	// apply filters
+	for _, f := range q.filters {
+		fmodels, err := filterModels(models, f.fieldName, f.filterType, f.filterValue, f.indexType)
+		if err != nil {
+			return nil, err
+		}
+		expected = orderedIntersectModels(fmodels, expected)
+	}
+
+	if q.order.fieldName != "" {
+		expected = orderModels(expected, q.order.indexType)
+	}
+	fmt.Println("expected: ", expected)
+
+	start := q.offset
+	var end uint
+	if q.limit == 0 {
+		end = uint(len(expected))
+	} else {
+		end = start + q.limit
+	}
+
+	if int(start) > len(expected) {
+		expected = []*indexedPrimativesModel{}
+	} else if int(end) > len(expected) {
+		expected = expected[start:]
+	} else {
+		expected = expected[start:end]
+	}
+	fmt.Println("expected: ", expected)
+
+	return expected, nil
 }
 
 // filterModels returns only those models which pass the filter,
