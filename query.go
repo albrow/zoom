@@ -474,38 +474,48 @@ func (q *Query) getIdsWithoutFilters() ([]string, error) {
 }
 
 func (q *Query) getIdsWithFilters() ([]string, error) {
-	idSets := []stringSet{}
+	otherIds := [][]string{}
+	// primary ids will ultimately serve as the order for all other intersections.
+	primaryIds := []string{}
+
 	// get a set of ids for each filter
 	for _, filter := range q.filters {
 		ids, err := filter.getIds(q.modelSpec.modelName, q.order)
 		if err != nil {
 			return nil, err
 		}
-		idSets = append(idSets, ids)
+		if filter.fieldName == q.order.fieldName {
+			primaryIds = ids
+		} else {
+			otherIds = append(otherIds, ids)
+		}
 	}
 	// get the intersection of all the id sets
 	// the resulting ids will only be those which
 	// pass ALL the filters.
-	// TODO: add set intersection here!
-	switch len(idSets) {
+	switch len(otherIds) {
 	case 0:
-		return []string{}, nil
+		return primaryIds, nil
 	case 1:
-		return idSets[0].slice(), nil
+		return append(primaryIds, otherIds[0]...), nil
 	default:
-		final := idSets[0].intersect(idSets[1:]...)
-		return final.slice(), nil
+		final := []string{}
+		final = append(final, primaryIds...)
+		for _, oIds := range otherIds {
+			final = orderedIntersectStrings(final, oIds)
+		}
+		return final, nil
 	}
 }
 
-func (f filter) getIds(modelName string, o order) (stringSet, error) {
+func (f filter) getIds(modelName string, o order) ([]string, error) {
 	// special case for id filters
 	if f.byId {
 		id := f.filterValue.String()
-		return newStringSet(id), nil
+		return []string{id}, nil
 	} else {
 		setKey := modelName + ":" + f.redisName
-		reverse := o.orderType == descending && o.fieldName != ""
+		reverse := o.orderType == descending && o.fieldName == f.fieldName
 		switch f.indexType {
 
 		case indexNumeric:
@@ -547,7 +557,7 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 				if err != nil {
 					return nil, err
 				}
-				return newStringSetFromSlice(idSlice), nil
+				return idSlice, nil
 			case notEqual:
 				// special case for not equals
 				// split into two different queries (less and greater) and
@@ -571,9 +581,7 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 					return nil, err
 				}
 				if !reverse {
-					lessSet := newStringSetFromSlice(lessIds)
-					greaterSet := newStringSetFromSlice(greaterIds)
-					return lessSet.union(greaterSet), nil
+					return append(lessIds, greaterIds...), nil
 				} else {
 					for i, j := 0, len(lessIds)-1; i <= j; i, j = i+1, j-1 {
 						lessIds[i], lessIds[j] = lessIds[j], lessIds[i]
@@ -581,9 +589,7 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 					for i, j := 0, len(greaterIds)-1; i <= j; i, j = i+1, j-1 {
 						greaterIds[i], greaterIds[j] = greaterIds[j], greaterIds[i]
 					}
-					lessSet := newStringSetFromSlice(lessIds)
-					greaterSet := newStringSetFromSlice(greaterIds)
-					return greaterSet.union(lessSet), nil
+					return append(greaterIds, lessIds...), nil
 				}
 			}
 
@@ -606,12 +612,12 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 					min, max = 0, 0
 				} else {
 					// can't be less than false (0)
-					return newStringSet(), nil
+					return []string{}, nil
 				}
 			case greater:
 				if f.filterValue.Bool() == true {
 					// can't be greater than true (1)
-					return newStringSet(), nil
+					return []string{}, nil
 				} else {
 					// true is greater than false
 					// 1 > 0
@@ -656,7 +662,7 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 			// execute command to get the ids
 			// TODO: try and do this inside of a transaction
 			var command string
-			reverse := o.orderType == descending && o.fieldName != ""
+			reverse := o.orderType == descending && o.fieldName == f.fieldName
 			if !reverse {
 				command = "ZRANGEBYSCORE"
 				args = args.Add(min).Add(max)
@@ -670,10 +676,10 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 			if err != nil {
 				return nil, err
 			}
-			return newStringSetFromSlice(idSlice), nil
+			return idSlice, nil
 
 		case indexAlpha:
-			reverse := o.orderType == descending && o.fieldName != ""
+			reverse := o.orderType == descending && o.fieldName == f.fieldName
 			conn := GetConn()
 			defer conn.Close()
 			beforeRank, afterRank, err := f.getAlphaRanks(conn, setKey)
@@ -688,14 +694,14 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 				case equal:
 					if beforeRank+1 == afterRank {
 						// no models with value equal to target
-						return newStringSet(), nil
+						return []string{}, nil
 					}
 					start = beforeRank
 					stop = afterRank - 2
 				case less:
 					if afterRank <= 2 {
 						// no models with value less than target
-						return newStringSet(), nil
+						return []string{}, nil
 					}
 					start = 0
 					stop = afterRank - (afterRank - beforeRank) - 1
@@ -705,7 +711,7 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 				case lessOrEqual:
 					if afterRank <= 1 {
 						// no models with value less than or equal to target
-						return newStringSet(), nil
+						return []string{}, nil
 					}
 					start = 0
 					stop = afterRank - 2
@@ -726,7 +732,7 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 						ids[i], ids[j] = ids[j], ids[i]
 					}
 				}
-				return newStringSetFromSlice(ids), nil
+				return ids, nil
 			case notEqual:
 				// special case for not equals
 				// split into two different queries (less and greater) and
@@ -755,9 +761,7 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 					greaterIds[i] = extractModelIdFromAlphaIndexValue(valueAndId)
 				}
 				if !reverse {
-					lessSet := newStringSetFromSlice(lessIds)
-					greaterSet := newStringSetFromSlice(greaterIds)
-					return lessSet.union(greaterSet), nil
+					return append(lessIds, greaterIds...), nil
 				} else {
 					for i, j := 0, len(lessIds)-1; i <= j; i, j = i+1, j-1 {
 						lessIds[i], lessIds[j] = lessIds[j], lessIds[i]
@@ -765,9 +769,7 @@ func (f filter) getIds(modelName string, o order) (stringSet, error) {
 					for i, j := 0, len(greaterIds)-1; i <= j; i, j = i+1, j-1 {
 						greaterIds[i], greaterIds[j] = greaterIds[j], greaterIds[i]
 					}
-					lessSet := newStringSetFromSlice(lessIds)
-					greaterSet := newStringSetFromSlice(greaterIds)
-					return greaterSet.union(lessSet), nil
+					return append(greaterIds, lessIds...), nil
 				}
 
 			}
