@@ -440,74 +440,109 @@ func (q *Query) getIdsWithoutFilters() ([]string, error) {
 		return redis.Strings(conn.Do(command, args...))
 	} else {
 		// with ordering
-		args := redis.Args{}
-		var command string
-		if q.order.orderType == ascending {
-			command = "ZRANGE"
-		} else if q.order.orderType == descending {
-			command = "ZREVRANGE"
-		}
-		start := q.offset
-		stop := -1
-		if q.limit != 0 {
-			stop = int(start) + int(q.limit) - 1
-		}
-		indexKey := q.modelSpec.modelName + ":" + q.order.redisName
-		args = args.Add(indexKey).Add(start).Add(stop)
-		if q.order.indexType == indexNumeric || q.order.indexType == indexBoolean {
-			// ordered by numeric or boolean index
-			// just return results of command directly
-			return redis.Strings(conn.Do(command, args...))
-		} else {
-			// ordered by alpha index
-			// we need to parse ids from the result of the command
-			ids, err := redis.Strings(conn.Do(command, args...))
-			if err != nil {
-				return nil, err
-			}
-			for i, valueAndId := range ids {
-				ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
-			}
-			return ids, nil
-		}
+		return q.getOrderedIds()
 	}
 }
 
 func (q *Query) getIdsWithFilters() ([]string, error) {
-	otherIds := [][]string{}
-	// primary ids will ultimately serve as the order for all other intersections.
-	primaryIds := []string{}
 
 	// get a set of ids for each filter
+	idSets := map[string][]string{}
 	for _, filter := range q.filters {
 		ids, err := filter.getIds(q.modelSpec.modelName, q.order)
 		if err != nil {
 			return nil, err
 		}
-		if filter.fieldName == q.order.fieldName {
-			primaryIds = ids
-		} else {
-			otherIds = append(otherIds, ids)
+		if len(ids) == 0 {
+			// if any filter returns zero matching models, the query should return nothing
+			return []string{}, nil
 		}
+		idSets[filter.fieldName] = ids
 	}
-	// get the intersection of all the id sets
-	// the resulting ids will only be those which
-	// pass ALL the filters.
-	switch len(otherIds) {
-	case 0:
-		return primaryIds, nil
-	case 1:
-		return append(primaryIds, otherIds[0]...), nil
+
+	switch q.order.fieldName {
+	case "":
+		// no ordering
+		idSetsSlice := [][]string{}
+		for _, ids := range idSets {
+			idSetsSlice = append(idSetsSlice, ids)
+		}
+		final := idSetsSlice[0]
+		for _, ids := range idSetsSlice[0:] {
+			final = orderedIntersectStrings(final, ids)
+		}
+		return final, nil
 	default:
+		// with ordering
+
+		// if there is an order to the query, but no filter with that same fieldname, we
+		// need to get an ordered list of ids to be used for sorting
+		// TODO: optimize this by doing a manual sort (in go instead of in redis) if the
+		// models we're dealing with are significantly smaller than the total number of
+		// models
+		// TODO: move this into a transaction with the other filters
+		primaryIds, found := idSets[q.order.fieldName]
+		if !found {
+			orderedIds, err := q.getOrderedIds()
+			if err != nil {
+				return nil, err
+			}
+			primaryIds = orderedIds
+		}
+
 		final := []string{}
 		final = append(final, primaryIds...)
-		for _, oIds := range otherIds {
-			final = orderedIntersectStrings(final, oIds)
+
+		// intersect primary ids with all the other id sets
+		// this ensures ordering by the primary ids, the ids which we wanted
+		// to order the query by.
+		for fieldName, oIds := range idSets {
+			if fieldName != q.order.fieldName {
+				final = orderedIntersectStrings(final, oIds)
+			}
 		}
 		return final, nil
 	}
 }
 
+// TODO: move this into a transaction
+func (q Query) getOrderedIds() ([]string, error) {
+	conn := GetConn()
+	defer conn.Close()
+	args := redis.Args{}
+	var command string
+	if q.order.orderType == ascending {
+		command = "ZRANGE"
+	} else if q.order.orderType == descending {
+		command = "ZREVRANGE"
+	}
+	start := q.offset
+	stop := -1
+	if q.limit != 0 {
+		stop = int(start) + int(q.limit) - 1
+	}
+	indexKey := q.modelSpec.modelName + ":" + q.order.redisName
+	args = args.Add(indexKey).Add(start).Add(stop)
+	if q.order.indexType == indexNumeric || q.order.indexType == indexBoolean {
+		// ordered by numeric or boolean index
+		// just return results of command directly
+		return redis.Strings(conn.Do(command, args...))
+	} else {
+		// ordered by alpha index
+		// we need to parse ids from the result of the command
+		ids, err := redis.Strings(conn.Do(command, args...))
+		if err != nil {
+			return nil, err
+		}
+		for i, valueAndId := range ids {
+			ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+		}
+		return ids, nil
+	}
+}
+
+// TODO: make queries with multiple filters use a single transaction
+// for all of them
 func (f filter) getIds(modelName string, o order) ([]string, error) {
 	// special case for id filters
 	if f.byId {
@@ -945,6 +980,9 @@ func (f filter) string() string {
 
 // string returns a string representation of the order
 func (o order) string() string {
+	if o.fieldName == "" {
+		return ""
+	}
 	switch o.orderType {
 	case ascending:
 		return fmt.Sprintf("(order %s)", o.fieldName)
