@@ -41,7 +41,39 @@ func TestQueryOrderNumeric(t *testing.T) {
 	defer testingTearDown()
 
 	// create models which we will try to sort
-	models, err := createFullModels(9)
+	models, err := createFullModels(10)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// use reflection to get all the numeric field names for *indexedPrimativesModel
+	fieldNames := make([]string, 0)
+	typ := reflect.TypeOf(indexedPrimativesModel{})
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if !field.Anonymous {
+			if typeIsNumeric(field.Type) {
+				fieldNames = append(fieldNames, field.Name)
+			}
+		}
+	}
+
+	// create some test queries to sort the models by all possible numeric fields
+	for _, fieldName := range fieldNames {
+		q1 := NewQuery("indexedPrimativesModel").Order(fieldName)
+		testQuery(t, q1, models)
+		q2 := NewQuery("indexedPrimativesModel").Order("-" + fieldName)
+		testQuery(t, q2, models)
+	}
+}
+
+func TestQueryOrderBoolean(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to sort
+	models, err := createFullModels(10)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -49,38 +81,11 @@ func TestQueryOrderNumeric(t *testing.T) {
 
 	// create some test queries to sort the models
 	queries := []*Query{
-		NewQuery("indexedPrimativesModel").Order("Int"),
-		NewQuery("indexedPrimativesModel").Order("-Int"),
+		NewQuery("indexedPrimativesModel").Order("Bool"),
+		NewQuery("indexedPrimativesModel").Order("-Bool"),
 	}
-
 	for _, q := range queries {
 		testQuery(t, q, models)
-	}
-}
-
-func TestQueryOrderBoolean(t *testing.T) {
-	// since there are only two models here, we should repeat the test
-	// a few times to make sure it didn't return them in the correct order by chance
-	for i := 0; i <= 10; i++ {
-		testingSetUp()
-
-		// create models which we will try to sort
-		models, err := createFullModels(2)
-		if err != nil {
-			t.Error(err)
-			t.FailNow()
-		}
-
-		// create some test queries to sort the models
-		queries := []*Query{
-			NewQuery("indexedPrimativesModel").Order("Bool"),
-			NewQuery("indexedPrimativesModel").Order("-Bool"),
-		}
-		for _, q := range queries {
-			testQuery(t, q, models)
-		}
-
-		testingTearDown()
 	}
 }
 
@@ -89,7 +94,7 @@ func TestQueryOrderAlpha(t *testing.T) {
 	defer testingTearDown()
 
 	// create models which we will try to sort
-	models, err := createFullModels(9)
+	models, err := createFullModels(10)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -113,24 +118,36 @@ func TestQueryFilterNumeric(t *testing.T) {
 	defer testingTearDown()
 
 	// create models which we will try to filter
-	models, err := createFullModels(29)
+	models, err := createFullModels(10)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 
-	// create some test queries to filter the models
-	queries := []*Query{
-		NewQuery("indexedPrimativesModel").Filter("Int =", 5),
-		NewQuery("indexedPrimativesModel").Filter("Int !=", 5),
-		NewQuery("indexedPrimativesModel").Filter("Int >", 5),
-		NewQuery("indexedPrimativesModel").Filter("Int >=", 5),
-		NewQuery("indexedPrimativesModel").Filter("Int <", 5),
-		NewQuery("indexedPrimativesModel").Filter("Int <=", 5),
+	// use reflection to get all the numeric field names for *indexedPrimativesModel
+	fieldNames := make([]string, 0)
+	filterValues := make([]interface{}, 0)
+	typ := reflect.TypeOf(indexedPrimativesModel{})
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if !field.Anonymous {
+			if typeIsNumeric(field.Type) {
+				fieldNames = append(fieldNames, field.Name)
+				fv := reflect.ValueOf(5).Convert(field.Type).Interface()
+				filterValues = append(filterValues, fv)
+			}
+		}
 	}
 
-	for _, q := range queries {
-		testQuery(t, q, models)
+	// create some test queries to filter the models using all possible numeric filters
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for i, fieldName := range fieldNames {
+		val := filterValues[i]
+		for _, op := range operators {
+			q := NewQuery("indexedPrimativesModel")
+			q.Filter(fieldName+" "+op, val)
+			testQuery(t, q, models)
+		}
 	}
 }
 
@@ -139,30 +156,19 @@ func TestQueryFilterBoolean(t *testing.T) {
 	defer testingTearDown()
 
 	// create models which we will try to filter
-	models, err := createFullModels(6)
+	models, err := createFullModels(10)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 
 	// create some test queries to filter the models
-	queries := []*Query{
-		NewQuery("indexedPrimativesModel").Filter("Bool =", true),
-		NewQuery("indexedPrimativesModel").Filter("Bool !=", true),
-		NewQuery("indexedPrimativesModel").Filter("Bool >", true),
-		NewQuery("indexedPrimativesModel").Filter("Bool >=", true),
-		NewQuery("indexedPrimativesModel").Filter("Bool <", true),
-		NewQuery("indexedPrimativesModel").Filter("Bool <=", true),
-		NewQuery("indexedPrimativesModel").Filter("Bool =", false),
-		NewQuery("indexedPrimativesModel").Filter("Bool !=", false),
-		NewQuery("indexedPrimativesModel").Filter("Bool >", false),
-		NewQuery("indexedPrimativesModel").Filter("Bool >=", false),
-		NewQuery("indexedPrimativesModel").Filter("Bool <", false),
-		NewQuery("indexedPrimativesModel").Filter("Bool <=", false),
-	}
-
-	for _, q := range queries {
-		testQuery(t, q, models)
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for _, op := range operators {
+		q1 := NewQuery("indexedPrimativesModel").Filter("Bool "+op, true)
+		testQuery(t, q1, models)
+		q2 := NewQuery("indexedPrimativesModel").Filter("Bool "+op, false)
+		testQuery(t, q2, models)
 	}
 }
 
@@ -171,26 +177,19 @@ func TestQueryFilterAlpha(t *testing.T) {
 	defer testingTearDown()
 
 	// create models which we will try to filter
-	// we create three with each letter of the alphabet so
+	// we create two with each letter of the alphabet so
 	// we can test what happens when there are multiple models
 	// with the same letter (the same String value)
-	models, err := createFullModels(26 * 3)
+	models, err := createFullModels(26 * 2)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 
 	// create some test queries to filter the models
-	queries := []*Query{
-		NewQuery("indexedPrimativesModel").Filter("String =", "k"),
-		NewQuery("indexedPrimativesModel").Filter("String !=", "k"),
-		NewQuery("indexedPrimativesModel").Filter("String >", "k"),
-		NewQuery("indexedPrimativesModel").Filter("String >=", "k"),
-		NewQuery("indexedPrimativesModel").Filter("String <", "k"),
-		NewQuery("indexedPrimativesModel").Filter("String <=", "k"),
-	}
-
-	for _, q := range queries {
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for _, op := range operators {
+		q := NewQuery("indexedPrimativesModel").Filter("String "+op, "k")
 		testQuery(t, q, models)
 	}
 }
@@ -199,42 +198,30 @@ func TestFilterOrderCombos(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	models, err := createFullModels(100)
+	models, err := createFullModels(50)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 
-	// use reflection to get all the field names for *indexedPrimativesModel
-	fieldNames := make([]string, 0)
-	filterValues := make([]interface{}, 0)
-	typ := reflect.TypeOf(indexedPrimativesModel{})
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
-		if !field.Anonymous {
-			fieldNames = append(fieldNames, field.Name)
-			if typeIsNumeric(field.Type) {
-				fv := reflect.ValueOf(5).Convert(field.Type).Interface()
-				filterValues = append(filterValues, fv)
-			} else if typeIsBool(field.Type) {
-				filterValues = append(filterValues, false)
-			} else {
-				filterValues = append(filterValues, "k")
-			}
-		}
-	}
+	// use one numeric, one bool, and one string field
+	fieldNames := []string{"Int", "Bool", "String"}
+	filterValues := []interface{}{5, true, "k"}
 
 	// iterate and create queries for all possible combinations of filters and orders
+	// with the fields and values specified above
 	operators := []string{"=", "!=", ">", ">=", "<", "<="}
-	for i, fieldName := range fieldNames {
+	for i, f1 := range fieldNames {
 		val := filterValues[i]
 		for _, op := range operators {
-			q := NewQuery("indexedPrimativesModel")
-			q.Filter(fieldName+" "+op, val).Order(fieldName)
-			testQuery(t, q, models)
-			q = NewQuery("indexedPrimativesModel")
-			q.Filter(fieldName+" "+op, val).Order("-" + fieldName)
-			testQuery(t, q, models)
+			for _, f2 := range fieldNames {
+				q := NewQuery("indexedPrimativesModel")
+				q.Filter(f1+" "+op, val).Order(f2)
+				testQuery(t, q, models)
+				q = NewQuery("indexedPrimativesModel")
+				q.Filter(f1+" "+op, val).Order("-" + f2)
+				testQuery(t, q, models)
+			}
 		}
 	}
 }
@@ -628,7 +615,6 @@ func TestInternalFilterModelsNumeric(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		fmt.Printf("testing numeric case %d (%s)...\n", i, tc.name)
 		if got, err := filterModels(models, "Int", tc.fType, tc.fVal, indexNumeric); err != nil {
 			t.Error(err)
 		} else {
@@ -718,7 +704,6 @@ func TestInternalFilterModelsBoolean(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		fmt.Printf("testing boolean case %d (%s)...\n", i, tc.name)
 		if got, err := filterModels(models, "Bool", tc.fType, tc.fVal, indexBoolean); err != nil {
 			t.Error(err)
 		} else {
@@ -835,7 +820,6 @@ func TestInternalFilterModelsAlpha(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		fmt.Printf("testing alpha case %d (%s)...\n", i, tc.name)
 		if got, err := filterModels(models, "String", tc.fType, tc.fVal, indexAlpha); err != nil {
 			t.Error(err)
 		} else {
