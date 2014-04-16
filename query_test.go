@@ -7,12 +7,11 @@
 package zoom
 
 import (
+	"errors"
 	"fmt"
-	"log"
 	"math/rand"
 	"reflect"
 	"sort"
-	"strconv"
 	"testing"
 )
 
@@ -23,7 +22,7 @@ func TestQueryAll(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	ms, err := newIndexedPrimativesModels(5)
+	ms, err := createFullModels(5)
 	if err != nil {
 		t.Error(err)
 	}
@@ -42,7 +41,7 @@ func TestQueryOrderNumeric(t *testing.T) {
 	defer testingTearDown()
 
 	// create models which we will try to sort
-	models, err := createOrderableNumericModels(9)
+	models, err := createFullModels(9)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -60,24 +59,28 @@ func TestQueryOrderNumeric(t *testing.T) {
 }
 
 func TestQueryOrderBoolean(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
+	// since there are only two models here, we should repeat the test
+	// a few times to make sure it didn't return them in the correct order by chance
+	for i := 0; i <= 10; i++ {
+		testingSetUp()
 
-	// create models which we will try to sort
-	models, err := createOrderableBooleanModels()
-	if err != nil {
-		t.Error(err)
-		t.FailNow()
-	}
+		// create models which we will try to sort
+		models, err := createFullModels(2)
+		if err != nil {
+			t.Error(err)
+			t.FailNow()
+		}
 
-	// create some test queries to sort the models
-	queries := []*Query{
-		NewQuery("indexedPrimativesModel").Order("Bool"),
-		NewQuery("indexedPrimativesModel").Order("-Bool"),
-	}
+		// create some test queries to sort the models
+		queries := []*Query{
+			NewQuery("indexedPrimativesModel").Order("Bool"),
+			NewQuery("indexedPrimativesModel").Order("-Bool"),
+		}
+		for _, q := range queries {
+			testQuery(t, q, models)
+		}
 
-	for _, q := range queries {
-		testQuery(t, q, models)
+		testingTearDown()
 	}
 }
 
@@ -86,7 +89,7 @@ func TestQueryOrderAlpha(t *testing.T) {
 	defer testingTearDown()
 
 	// create models which we will try to sort
-	models, err := createOrderableAlphaModels(9)
+	models, err := createFullModels(9)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -103,51 +106,173 @@ func TestQueryOrderAlpha(t *testing.T) {
 	}
 }
 
-func createOrderableNumericModels(num int) ([]*indexedPrimativesModel, error) {
-	ms := []*indexedPrimativesModel{}
-	for i := 0; i < num; i++ {
-		m := &indexedPrimativesModel{
-			Int: i,
+// === Test the Filter modifier
+
+func TestQueryFilterNumeric(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to filter
+	models, err := createFullModels(29)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// create some test queries to filter the models
+	queries := []*Query{
+		NewQuery("indexedPrimativesModel").Filter("Int =", 5),
+		NewQuery("indexedPrimativesModel").Filter("Int !=", 5),
+		NewQuery("indexedPrimativesModel").Filter("Int >", 5),
+		NewQuery("indexedPrimativesModel").Filter("Int >=", 5),
+		NewQuery("indexedPrimativesModel").Filter("Int <", 5),
+		NewQuery("indexedPrimativesModel").Filter("Int <=", 5),
+	}
+
+	for _, q := range queries {
+		testQuery(t, q, models)
+	}
+}
+
+func TestQueryFilterBoolean(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to filter
+	models, err := createFullModels(6)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// create some test queries to filter the models
+	queries := []*Query{
+		NewQuery("indexedPrimativesModel").Filter("Bool =", true),
+		NewQuery("indexedPrimativesModel").Filter("Bool !=", true),
+		NewQuery("indexedPrimativesModel").Filter("Bool >", true),
+		NewQuery("indexedPrimativesModel").Filter("Bool >=", true),
+		NewQuery("indexedPrimativesModel").Filter("Bool <", true),
+		NewQuery("indexedPrimativesModel").Filter("Bool <=", true),
+		NewQuery("indexedPrimativesModel").Filter("Bool =", false),
+		NewQuery("indexedPrimativesModel").Filter("Bool !=", false),
+		NewQuery("indexedPrimativesModel").Filter("Bool >", false),
+		NewQuery("indexedPrimativesModel").Filter("Bool >=", false),
+		NewQuery("indexedPrimativesModel").Filter("Bool <", false),
+		NewQuery("indexedPrimativesModel").Filter("Bool <=", false),
+	}
+
+	for _, q := range queries {
+		testQuery(t, q, models)
+	}
+}
+
+func TestQueryFilterAlpha(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to filter
+	// we create three with each letter of the alphabet so
+	// we can test what happens when there are multiple models
+	// with the same letter (the same String value)
+	models, err := createFullModels(26 * 3)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// create some test queries to filter the models
+	queries := []*Query{
+		NewQuery("indexedPrimativesModel").Filter("String =", "k"),
+		NewQuery("indexedPrimativesModel").Filter("String !=", "k"),
+		NewQuery("indexedPrimativesModel").Filter("String >", "k"),
+		NewQuery("indexedPrimativesModel").Filter("String >=", "k"),
+		NewQuery("indexedPrimativesModel").Filter("String <", "k"),
+		NewQuery("indexedPrimativesModel").Filter("String <=", "k"),
+	}
+
+	for _, q := range queries {
+		testQuery(t, q, models)
+	}
+}
+
+func TestFilterOrderCombos(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createFullModels(100)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// use reflection to get all the field names for *indexedPrimativesModel
+	fieldNames := make([]string, 0)
+	filterValues := make([]interface{}, 0)
+	typ := reflect.TypeOf(indexedPrimativesModel{})
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if !field.Anonymous {
+			fieldNames = append(fieldNames, field.Name)
+			if typeIsNumeric(field.Type) {
+				fv := reflect.ValueOf(5).Convert(field.Type).Interface()
+				filterValues = append(filterValues, fv)
+			} else if typeIsBool(field.Type) {
+				filterValues = append(filterValues, false)
+			} else {
+				filterValues = append(filterValues, "k")
+			}
 		}
-		ms = append(ms, m)
 	}
 
-	// shuffle the order
-	for i := range ms {
-		j := rand.Intn(i + 1)
-		ms[i], ms[j] = ms[j], ms[i]
+	// iterate and create queries for all possible combinations of filters and orders
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for i, fieldName := range fieldNames {
+		val := filterValues[i]
+		for _, op := range operators {
+			q := NewQuery("indexedPrimativesModel")
+			q.Filter(fieldName+" "+op, val).Order(fieldName)
+			testQuery(t, q, models)
+			q = NewQuery("indexedPrimativesModel")
+			q.Filter(fieldName+" "+op, val).Order("-" + fieldName)
+			testQuery(t, q, models)
+		}
 	}
-
-	if err := MSave(Models(ms)); err != nil {
-		return ms, err
-	}
-	return ms, nil
 }
 
-// Only create 2 here. It's much easier to test.
-// With more than two models the ordering is unstable
-func createOrderableBooleanModels() ([]*indexedPrimativesModel, error) {
-	ms := make([]*indexedPrimativesModel, 2)
-	ms[0] = &indexedPrimativesModel{
-		Bool: true,
+// create a number of models with all fields filled out.
+// we will use these to test a lot of different queries.
+// on each iteration from i=0 to num-1 a model is created with:
+// 		- numeric fields set to i (typecasted if needed)
+//		- bool field set to true if i%2 = 0 and false otherwise
+//		- string field set to the value at index i%26 from a slice of all lowercase letters a-z
+//			(i.e. i=0 corresponds to a, i=26 corresponds to z, and i=27 corresponds to a)
+func createFullModels(num int) ([]*indexedPrimativesModel, error) {
+	// alphabet holds every letter from a to z
+	alphabet := []string{}
+	for c := 'a'; c < 'z'+1; c++ {
+		alphabet = append(alphabet, string(c))
 	}
-	ms[1] = &indexedPrimativesModel{
-		Bool: false,
-	}
+	bools := []bool{true, false}
 
-	if err := MSave(Models(ms)); err != nil {
-		return ms, err
-	}
-	return ms, nil
-}
-
-// NOTE: numbers > 9 might not work the way you'd expect
-// From an alphanumeric perspective 123 < 2
-func createOrderableAlphaModels(num int) ([]*indexedPrimativesModel, error) {
 	ms := []*indexedPrimativesModel{}
 	for i := 0; i < num; i++ {
 		m := &indexedPrimativesModel{
-			String: strconv.Itoa(i),
+			Uint:    uint(i),
+			Uint8:   uint8(i),
+			Uint16:  uint16(i),
+			Uint32:  uint32(i),
+			Uint64:  uint64(i),
+			Int:     i,
+			Int8:    int8(i),
+			Int16:   int16(i),
+			Int32:   int32(i),
+			Int64:   int64(i),
+			Float32: float32(i),
+			Float64: float64(i),
+			Byte:    byte(i),
+			Rune:    rune(i),
+			String:  alphabet[i%len(alphabet)],
+			Bool:    bools[i%len(bools)],
 		}
 		ms = append(ms, m)
 	}
@@ -184,17 +309,35 @@ func testQuery(t *testing.T, q *Query, models []*indexedPrimativesModel) {
 	expected, err := expectedResultsForQuery(q, models)
 	if err != nil {
 		t.Error(err)
+		t.FailNow()
 	}
-
 	got := make([]*indexedPrimativesModel, 0)
 	if err := q.Scan(&got); err != nil {
 		t.Error(err)
+		t.FailNow()
 	}
-	orderMatters := false
+
+	// check that the models match without considering order
+	match := compareModelSlices(t, expected, got, false)
+	if !match {
+		t.Errorf("\n\tfor query %s", q)
+		t.FailNow()
+	}
+
+	// check that the models are in the correct order (if applicable)
 	if q.order.fieldName != "" {
-		orderMatters = true
+		reverse := false
+		if q.order.orderType == descending {
+			reverse = true
+		}
+		if sorted, fields, err := modelsAreSortedByField(got, q.order.fieldName, reverse); err != nil {
+			t.Error(err)
+			t.FailNow()
+		} else if !sorted {
+			t.Errorf("models were not in the correct order. %v \n\tfor the query %s", fields, q)
+			t.FailNow()
+		}
 	}
-	compareModelSlices(t, expected, got, orderMatters)
 }
 
 func expectedResultsForQuery(q *Query, models []*indexedPrimativesModel) ([]*indexedPrimativesModel, error) {
@@ -203,19 +346,11 @@ func expectedResultsForQuery(q *Query, models []*indexedPrimativesModel) ([]*ind
 
 	// apply filters
 	for _, f := range q.filters {
-		fmodels, err := filterModels(models, f.fieldName, f.filterType, f.filterValue, f.indexType)
+		fmodels, err := filterModels(models, f.fieldName, f.filterType, f.filterValue.Interface(), f.indexType)
 		if err != nil {
 			return nil, err
 		}
 		expected = orderedIntersectModels(fmodels, expected)
-	}
-
-	if q.order.fieldName != "" {
-		if q.order.orderType == descending {
-			expected = reverseModels(orderModels(expected, q.order.fieldName))
-		} else {
-			expected = orderModels(expected, q.order.fieldName)
-		}
 	}
 
 	start := q.offset
@@ -249,39 +384,39 @@ func filterModels(models []*indexedPrimativesModel, fieldName string, fType filt
 		switch fType {
 		case equal:
 			s = func(m *indexedPrimativesModel) (bool, error) {
-				fieldInt := reflect.ValueOf(m).Elem().FieldByName(fieldName).Int()
-				valueInt := reflect.ValueOf(fVal).Int()
-				return fieldInt == valueInt, nil
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal == filterVal, nil
 			}
 		case notEqual:
 			s = func(m *indexedPrimativesModel) (bool, error) {
-				fieldInt := reflect.ValueOf(m).Elem().FieldByName(fieldName).Int()
-				valueInt := reflect.ValueOf(fVal).Int()
-				return fieldInt != valueInt, nil
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal != filterVal, nil
 			}
 		case greater:
 			s = func(m *indexedPrimativesModel) (bool, error) {
-				fieldInt := reflect.ValueOf(m).Elem().FieldByName(fieldName).Int()
-				valueInt := reflect.ValueOf(fVal).Int()
-				return fieldInt > valueInt, nil
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal > filterVal, nil
 			}
 		case less:
 			s = func(m *indexedPrimativesModel) (bool, error) {
-				fieldInt := reflect.ValueOf(m).Elem().FieldByName(fieldName).Int()
-				valueInt := reflect.ValueOf(fVal).Int()
-				return fieldInt < valueInt, nil
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal < filterVal, nil
 			}
 		case greaterOrEqual:
 			s = func(m *indexedPrimativesModel) (bool, error) {
-				fieldInt := reflect.ValueOf(m).Elem().FieldByName(fieldName).Int()
-				valueInt := reflect.ValueOf(fVal).Int()
-				return fieldInt >= valueInt, nil
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal >= filterVal, nil
 			}
 		case lessOrEqual:
 			s = func(m *indexedPrimativesModel) (bool, error) {
-				fieldInt := reflect.ValueOf(m).Elem().FieldByName(fieldName).Int()
-				valueInt := reflect.ValueOf(fVal).Int()
-				return fieldInt <= valueInt, nil
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal <= filterVal, nil
 			}
 		}
 
@@ -711,43 +846,6 @@ func TestInternalFilterModelsAlpha(t *testing.T) {
 	}
 }
 
-// Some functions to be used by the builtin sort package
-type ById []*indexedPrimativesModel
-
-func (a ById) Len() int {
-	return len(a)
-}
-func (a ById) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-func (a ById) Less(i, j int) bool {
-	return a[i].Id < a[j].Id
-}
-
-type ByInt []*indexedPrimativesModel
-
-func (a ByInt) Len() int {
-	return len(a)
-}
-func (a ByInt) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-func (a ByInt) Less(i, j int) bool {
-	return a[i].Int < a[j].Int
-}
-
-type ByBool []*indexedPrimativesModel
-
-func (a ByBool) Len() int {
-	return len(a)
-}
-func (a ByBool) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
-}
-func (a ByBool) Less(i, j int) bool {
-	return boolToInt(a[i].Bool) < boolToInt(a[j].Bool)
-}
-
 // NOTE: This implementation only sorts by the first letter of the string!
 type ByString []*indexedPrimativesModel
 
@@ -761,27 +859,281 @@ func (a ByString) Less(i, j int) bool {
 	return a[i].String < a[j].String
 }
 
-// orderModels uses the sort package to order the models by the
-// given field and index type Assumes that indexNumeric corresponds
-// to the Int field, indexBoolean corresponds to the Bool field,
-// and indexAlpha corresponds to the String field.
-// Returns a copy of the model slice, so the original is unchanged.
-func orderModels(models []*indexedPrimativesModel, fieldName string) []*indexedPrimativesModel {
-	results := make([]*indexedPrimativesModel, len(models))
-	copy(results, models)
-	switch fieldName {
-	case "Id":
-		sort.Sort(ById(results))
-	case "Int":
-		sort.Sort(ByInt(results))
-	case "Bool":
-		sort.Sort(ByBool(results))
-	case "String":
-		sort.Sort(ByString(results))
-	default:
-		log.Fatalf("Don't know how to order by the field named %s\n", fieldName)
+// returns true iff the given models are sorted by field
+// redis sorts can be unstable, so here it is considered sorted even if it is unstable.
+// if revers is true, will check if the models are sorted in reverse (descending) order.
+func modelsAreSortedByField(models []*indexedPrimativesModel, fieldName string, reverse bool) (bool, []interface{}, error) {
+	ms := make([]*indexedPrimativesModel, len(models))
+	copy(ms, models)
+	typ, err := getRegisteredTypeFromName("indexedPrimativesModel")
+	if err != nil {
+		return false, nil, err
 	}
-	return results
+	field, found := typ.Elem().FieldByName(fieldName)
+	if !found {
+		msg := fmt.Sprintf("Could not find field named %s in type %s", fieldName, typ.String())
+		return false, nil, errors.New(msg)
+	}
+	fType := field.Type
+	if typeIsNumeric(fType) {
+		return modelsAreSortedByNumericField(ms, fieldName, reverse)
+	} else if typeIsBool(fType) {
+		return modelsAreSortedByBooleanField(ms, fieldName, reverse)
+	} else if typeIsString(fType) {
+		return modelsAreSortedByStringField(ms, fieldName, reverse)
+	}
+	return false, nil, fmt.Errorf("Don't know how to classify field type %s! Was not numeric, bool, or string.", fType.String())
+}
+
+// Note: it's okay to mutate models here because it was copied in the previous function.
+func modelsAreSortedByNumericField(models []*indexedPrimativesModel, fieldName string, reverse bool) (bool, []interface{}, error) {
+	fieldsAsFloats := make([]float64, len(models))
+	fieldsAsInterfaces := make([]interface{}, len(models))
+	floatType := reflect.TypeOf(0.0)
+	for i, m := range models {
+		val := reflect.ValueOf(m)
+		fVal := val.Elem().FieldByName(fieldName)
+		fValFloat := fVal.Convert(floatType)
+		fFloat := fValFloat.Float()
+		fieldsAsFloats[i] = fFloat
+		fieldsAsInterfaces[i] = fValFloat.Interface()
+	}
+	if reverse {
+		for i, j := 0, len(fieldsAsFloats)-1; i <= j; i, j = i+1, j-1 {
+			fieldsAsFloats[i], fieldsAsFloats[j] = fieldsAsFloats[j], fieldsAsFloats[i]
+		}
+	}
+	if sort.Float64sAreSorted(fieldsAsFloats) {
+		return true, fieldsAsInterfaces, nil
+	} else {
+		return false, fieldsAsInterfaces, nil
+	}
+}
+
+// Note: it's okay to mutate models here because it was copied in the previous function.
+func modelsAreSortedByBooleanField(models []*indexedPrimativesModel, fieldName string, reverse bool) (bool, []interface{}, error) {
+	// let false = 0, true = 1
+	fieldsAsInts := make([]int, len(models))
+	fieldsAsInterfaces := make([]interface{}, len(models))
+	for i, m := range models {
+		if m.Bool {
+			fieldsAsInts[i] = 1
+			fieldsAsInterfaces[i] = 1
+		} else {
+			fieldsAsInts[i] = 0
+			fieldsAsInterfaces[i] = 0
+		}
+	}
+	if reverse {
+		for i, j := 0, len(fieldsAsInts)-1; i <= j; i, j = i+1, j-1 {
+			fieldsAsInts[i], fieldsAsInts[j] = fieldsAsInts[j], fieldsAsInts[i]
+		}
+	}
+	if sort.IntsAreSorted(fieldsAsInts) {
+		return true, fieldsAsInterfaces, nil
+	} else {
+		return false, fieldsAsInterfaces, nil
+	}
+}
+
+// Note: it's okay to mutate models here because it was copied in the previous function.
+func modelsAreSortedByStringField(models []*indexedPrimativesModel, fieldName string, reverse bool) (bool, []interface{}, error) {
+	fieldsAsStrings := make([]string, len(models))
+	fieldsAsInterfaces := make([]interface{}, len(models))
+	for i, m := range models {
+		fieldsAsStrings[i] = m.String
+		fieldsAsInterfaces[i] = m.String
+	}
+	if reverse {
+		for i, j := 0, len(fieldsAsStrings)-1; i <= j; i, j = i+1, j-1 {
+			fieldsAsStrings[i], fieldsAsStrings[j] = fieldsAsStrings[j], fieldsAsStrings[i]
+		}
+	}
+	if sort.StringsAreSorted(fieldsAsStrings) {
+		return true, fieldsAsInterfaces, nil
+	} else {
+		return false, fieldsAsInterfaces, nil
+	}
+}
+
+// Test our internal check to see if models are sorted
+func TestModelsAreSortedNumeric(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// make models which are sorted
+	models, _ := newIndexedPrimativesModels(4)
+	models[0].Int = 0
+	models[1].Int = 1
+	models[2].Int = 2
+	models[3].Int = 3
+	if result, _, err := modelsAreSortedByField(models, "Int", false); err != nil {
+		t.Error(err)
+	} else if result == false {
+		t.Error("Expected true but got false")
+	}
+
+	// reverse them and check if they are reverse sorted
+	models[0].Int = 3
+	models[1].Int = 2
+	models[2].Int = 1
+	models[3].Int = 0
+	if result, _, err := modelsAreSortedByField(models, "Int", true); err != nil {
+		t.Error(err)
+	} else if result == false {
+		t.Error("Expected true but got false")
+	}
+
+	// try models with two of the same value
+	models[0].Int = 0
+	models[1].Int = 1
+	models[2].Int = 1
+	models[3].Int = 2
+	if result, _, err := modelsAreSortedByField(models, "Int", false); err != nil {
+		t.Error(err)
+	} else if result == false {
+		t.Error("Expected true but got false")
+	}
+
+	// try models which are not sorted
+	models[0].Int = 0
+	models[1].Int = 2
+	models[2].Int = 1
+	models[3].Int = 3
+	if result, _, err := modelsAreSortedByField(models, "Int", false); err != nil {
+		t.Error(err)
+	} else if result == true {
+		t.Error("Expected false but got true")
+	}
+	models[0].Int = 3
+	models[1].Int = 1
+	models[2].Int = 2
+	models[3].Int = 0
+	if result, _, err := modelsAreSortedByField(models, "Int", true); err != nil {
+		t.Error(err)
+	} else if result == true {
+		t.Error("Expected false but got true")
+	}
+}
+
+// Test our internal check to see if models are sorted
+func TestModelsAreSortedBoolean(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// make models which are sorted
+	models, _ := newIndexedPrimativesModels(4)
+	models[0].Bool = false
+	models[1].Bool = false
+	models[2].Bool = true
+	models[3].Bool = true
+	if result, _, err := modelsAreSortedByField(models, "Bool", false); err != nil {
+		t.Error(err)
+	} else if result == false {
+		t.Error("Expected true but got false")
+	}
+
+	// reverse them and check if they are reverse sorted
+	models[0].Bool = true
+	models[1].Bool = true
+	models[2].Bool = false
+	models[3].Bool = false
+	if result, _, err := modelsAreSortedByField(models, "Bool", true); err != nil {
+		t.Error(err)
+	} else if result == false {
+		t.Error("Expected true but got false")
+	}
+
+	// try models with two of the same value
+	models[0].Bool = false
+	models[1].Bool = false
+	models[2].Bool = false
+	models[3].Bool = true
+	if result, _, err := modelsAreSortedByField(models, "Bool", false); err != nil {
+		t.Error(err)
+	} else if result == false {
+		t.Error("Expected true but got false")
+	}
+
+	// try models which are not sorted
+	models[0].Bool = false
+	models[1].Bool = true
+	models[2].Bool = false
+	models[3].Bool = true
+	if result, _, err := modelsAreSortedByField(models, "Bool", false); err != nil {
+		t.Error(err)
+	} else if result == true {
+		t.Error("Expected false but got true")
+	}
+	models[0].Bool = true
+	models[1].Bool = false
+	models[2].Bool = true
+	models[3].Bool = false
+	if result, _, err := modelsAreSortedByField(models, "Bool", true); err != nil {
+		t.Error(err)
+	} else if result == true {
+		t.Error("Expected false but got true")
+	}
+}
+
+// Test our internal check to see if models are sorted
+func TestModelsAreSortedString(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// make models which are sorted
+	models, _ := newIndexedPrimativesModels(4)
+	models[0].String = "apple"
+	models[1].String = "banana"
+	models[2].String = "cherry"
+	models[3].String = "durian"
+	if result, _, err := modelsAreSortedByField(models, "String", false); err != nil {
+		t.Error(err)
+	} else if result == false {
+		t.Error("Expected true but got false")
+	}
+
+	// reverse them and check if they are reverse sorted
+	models[0].String = "durian"
+	models[1].String = "cherry"
+	models[2].String = "banana"
+	models[3].String = "apple"
+	if result, _, err := modelsAreSortedByField(models, "String", true); err != nil {
+		t.Error(err)
+	} else if result == false {
+		t.Error("Expected true but got false")
+	}
+
+	// try models with two of the same value
+	models[0].String = "apple"
+	models[1].String = "banana"
+	models[2].String = "banana"
+	models[3].String = "cherry"
+	if result, _, err := modelsAreSortedByField(models, "String", false); err != nil {
+		t.Error(err)
+	} else if result == false {
+		t.Error("Expected true but got false")
+	}
+
+	// try models which are not sorted
+	models[0].String = "apple"
+	models[1].String = "cherry"
+	models[2].String = "banana"
+	models[3].String = "durian"
+	if result, _, err := modelsAreSortedByField(models, "String", false); err != nil {
+		t.Error(err)
+	} else if result == true {
+		t.Error("Expected false but got true")
+	}
+	models[0].String = "durian"
+	models[1].String = "banana"
+	models[2].String = "cherry"
+	models[3].String = "apple"
+	if result, _, err := modelsAreSortedByField(models, "String", true); err != nil {
+		t.Error(err)
+	} else if result == true {
+		t.Error("Expected false but got true")
+	}
 }
 
 // reverseModels reverses the order of the models slice. Returns a copy,
@@ -795,63 +1147,6 @@ func reverseModels(models []*indexedPrimativesModel) []*indexedPrimativesModel {
 	return results
 }
 
-// Test our internal orderModels function for the Id field
-func TestInternalOrderModelsNumeric(t *testing.T) {
-	expected, _ := newIndexedPrimativesModels(4)
-	expected[0].Int = 0
-	expected[1].Int = 1
-	expected[2].Int = 2
-	expected[3].Int = 3
-	models := []*indexedPrimativesModel{expected[3], expected[0], expected[2], expected[1]}
-
-	got := orderModels(models, "Int")
-	if eql, msg := looseEquals(expected, got); !eql {
-		t.Errorf("Expected: %v\nGot %v\n%s\n", expected, got, msg)
-	}
-}
-
-// Test our internal orderModels function for the Int field
-func TestInternalOrderModelsId(t *testing.T) {
-	expected, _ := newIndexedPrimativesModels(4)
-	expected[0].Id = "a"
-	expected[1].Id = "b"
-	expected[2].Id = "c"
-	expected[3].Id = "d"
-	models := []*indexedPrimativesModel{expected[3], expected[0], expected[2], expected[1]}
-
-	got := orderModels(models, "Id")
-	if eql, msg := looseEquals(expected, got); !eql {
-		t.Errorf("Expected: %v\nGot %v\n%s\n", expected, got, msg)
-	}
-}
-
-// Test our internal orderModels function for the Bool field
-func TestInternalOrderModelsBoolean(t *testing.T) {
-	expected, _ := newIndexedPrimativesModels(2)
-	expected[0].Bool = false
-	expected[1].Bool = true
-	models := []*indexedPrimativesModel{expected[1], expected[0]}
-	got := orderModels(models, "Bool")
-	if eql, msg := looseEquals(expected, got); !eql {
-		t.Errorf("Expected: %v\nGot %v\n%s\n", expected, got, msg)
-	}
-}
-
-// Test our internal orderModels function for the String field
-func TestInternalOrderModelsAlpha(t *testing.T) {
-	expected, _ := newIndexedPrimativesModels(4)
-	expected[0].String = "a"
-	expected[1].String = "b"
-	expected[2].String = "c"
-	expected[3].String = "d"
-	models := []*indexedPrimativesModel{expected[3], expected[0], expected[2], expected[1]}
-
-	got := orderModels(models, "String")
-	if eql, msg := looseEquals(expected, got); !eql {
-		t.Errorf("Expected: %v\nGot %v\n%s\n", expected, got, msg)
-	}
-}
-
 // Test our internal reverseModels function for numeric index types
 func TestInternalReverseModelsNumeric(t *testing.T) {
 	models, _ := newIndexedPrimativesModels(4)
@@ -859,34 +1154,6 @@ func TestInternalReverseModelsNumeric(t *testing.T) {
 	models[1].Int = 1
 	models[2].Int = 2
 	models[3].Int = 3
-	expected := []*indexedPrimativesModel{models[3], models[2], models[1], models[0]}
-
-	got := reverseModels(models)
-	if eql, msg := looseEquals(expected, got); !eql {
-		t.Errorf("Expected: %v\nGot %v\n%s\n", expected, got, msg)
-	}
-}
-
-// Test our internal reverseModels function for boolean index types
-func TestInternalReverseModelsBoolean(t *testing.T) {
-	models, _ := newIndexedPrimativesModels(2)
-	models[0].Bool = false
-	models[1].Bool = true
-	expected := []*indexedPrimativesModel{models[1], models[0]}
-
-	got := reverseModels(models)
-	if eql, msg := looseEquals(expected, got); !eql {
-		t.Errorf("Expected: %v\nGot %v\n%s\n", expected, got, msg)
-	}
-}
-
-// Test our internal reverseModels function for alpha index types
-func TestInternalReverseModelsAlpha(t *testing.T) {
-	models, _ := newIndexedPrimativesModels(4)
-	models[0].String = "a"
-	models[1].String = "b"
-	models[2].String = "c"
-	models[3].String = "d"
 	expected := []*indexedPrimativesModel{models[3], models[2], models[1], models[0]}
 
 	got := reverseModels(models)

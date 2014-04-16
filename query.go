@@ -370,7 +370,7 @@ func (q *Query) Count() (int, error) {
 	if q.err != nil {
 		return 0, q.err
 	}
-	return q.GetIdCount()
+	return q.getIdCount()
 }
 
 // IdsOnly is a query finisher. It returns only the ids of the models
@@ -412,14 +412,14 @@ func (q *Query) GetIds() ([]string, error) {
 	defer conn.Close()
 
 	if len(q.filters) == 0 {
-		return q.GetIdsWithoutFilters()
+		return q.getIdsWithoutFilters()
 	} else {
-		return q.GetIdsWithFilters()
+		return q.getIdsWithFilters()
 	}
 
 }
 
-func (q *Query) GetIdsWithoutFilters() ([]string, error) {
+func (q *Query) getIdsWithoutFilters() ([]string, error) {
 	conn := GetConn()
 	defer conn.Close()
 
@@ -473,11 +473,11 @@ func (q *Query) GetIdsWithoutFilters() ([]string, error) {
 	}
 }
 
-func (q *Query) GetIdsWithFilters() ([]string, error) {
+func (q *Query) getIdsWithFilters() ([]string, error) {
 	idSets := []stringSet{}
 	// get a set of ids for each filter
 	for _, filter := range q.filters {
-		ids, err := filter.GetIds(q.modelSpec.modelName, q.order)
+		ids, err := filter.getIds(q.modelSpec.modelName, q.order)
 		if err != nil {
 			return nil, err
 		}
@@ -498,7 +498,7 @@ func (q *Query) GetIdsWithFilters() ([]string, error) {
 	}
 }
 
-func (f filter) GetIds(modelName string, o order) (stringSet, error) {
+func (f filter) getIds(modelName string, o order) (stringSet, error) {
 	// special case for id filters
 	if f.byId {
 		id := f.filterValue.String()
@@ -854,9 +854,9 @@ func scanModelsByIds(sliceVal reflect.Value, modelName string, ids []string, inc
 	return t.exec()
 }
 
-// GetIdCount returns the number of models that would be found if the
+// getIdCount returns the number of models that would be found if the
 // query were executed, but does not actually find them.
-func (q *Query) GetIdCount() (int, error) {
+func (q *Query) getIdCount() (int, error) {
 	conn := GetConn()
 	defer conn.Close()
 
@@ -915,4 +915,82 @@ func (q *Query) GetIdCount() (int, error) {
 			}
 		}
 	}
+}
+
+// string returns a string representation of the filterType
+func (ft filterType) string() string {
+	switch ft {
+	case equal:
+		return "="
+	case notEqual:
+		return "!="
+	case greater:
+		return ">"
+	case less:
+		return "<"
+	case greaterOrEqual:
+		return ">="
+	case lessOrEqual:
+		return "<="
+	}
+	return ""
+}
+
+// string returns a string representation of the filter
+func (f filter) string() string {
+	return fmt.Sprintf("(filter %s %s %v)", f.fieldName, f.filterType.string(), f.filterValue.Interface())
+}
+
+// string returns a string representation of the order
+func (o order) string() string {
+	switch o.orderType {
+	case ascending:
+		return fmt.Sprintf("(order %s)", o.fieldName)
+	case descending:
+		return fmt.Sprintf("(order -%s)", o.fieldName)
+	}
+	return ""
+}
+
+// String returns a string representation of the query and its modifiers
+func (q *Query) String() string {
+	modelName := q.modelSpec.modelName
+	filters := ""
+	for _, f := range q.filters {
+		filters += f.string() + " "
+	}
+	order := q.order.string()
+	limit := ""
+	offset := ""
+	if q.limit != 0 {
+		limit = fmt.Sprintf("(limit %v)", q.limit)
+	}
+	if q.offset != 0 {
+		offset = fmt.Sprintf("(offset %v)", q.offset)
+	}
+	includes := ""
+	if len(q.includes) > 0 {
+		fields := "["
+		for i, in := range q.includes {
+			fields += in
+			if i != len(q.includes)-1 {
+				fields += ", "
+			}
+		}
+		fields += "]"
+		includes = fmt.Sprintf("(include %s)", fields)
+	}
+	excludes := ""
+	if len(q.excludes) > 0 {
+		fields := "["
+		for i, ex := range q.excludes {
+			fields += ex
+			if i != len(q.excludes)-1 {
+				fields += ", "
+			}
+		}
+		fields += "]"
+		excludes = fmt.Sprintf("(exclude %s)", fields)
+	}
+	return fmt.Sprintf("%s: %s%s %s %s %s%s", modelName, filters, order, limit, offset, includes, excludes)
 }

@@ -429,12 +429,21 @@ func newIndexedPointersModels(num int) ([]*indexedPointersModel, error) {
 	return results, nil
 }
 
-func compareModelSlices(t *testing.T, expected []*indexedPrimativesModel, got []*indexedPrimativesModel, orderMatters bool) {
+// utility type for quickly sorting by id
+type ById []*indexedPrimativesModel
+
+func (ms ById) Len() int           { return len(ms) }
+func (ms ById) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
+func (ms ById) Less(i, j int) bool { return ms[i].Id < ms[j].Id }
+
+// returns true if the models are equal, false if they are not.
+// also calls.Error with a specific error message if they don't match
+func compareModelSlices(t *testing.T, expected []*indexedPrimativesModel, got []*indexedPrimativesModel, orderMatters bool) bool {
 	if len(expected) != len(got) {
 		t.Errorf("Lengths did not match. Expected: %d but got: %d\n", len(expected), len(got))
 		_, msg := compareAsStringSet(modelIds(Models(expected)), modelIds(Models(got)))
 		t.Error(msg)
-		return
+		return false
 	}
 	eCopy, gCopy := make([]*indexedPrimativesModel, len(expected)), make([]*indexedPrimativesModel, len(got))
 	copy(eCopy, expected)
@@ -452,8 +461,10 @@ func compareModelSlices(t *testing.T, expected []*indexedPrimativesModel, got []
 			for _, msg := range msgs {
 				t.Errorf("\t%s", msg)
 			}
+			return false
 		}
 	}
+	return true
 }
 
 func compareModels(expected, got *indexedPrimativesModel) (bool, []string) {
@@ -470,59 +481,59 @@ func compareModels(expected, got *indexedPrimativesModel) (bool, []string) {
 	// Uint fields
 	if expected.Uint != got.Uint {
 		eql = false
-		msg := fmt.Sprintf("Uint was incorrect. Expected: %d but got: %d\n", expected.Uint, got.Uint)
+		msg := fmt.Sprintf("Uint was incorrect. Expected: %v but got: %v\n", expected.Uint, got.Uint)
 		msgs = append(msgs, msg)
 	}
 	if expected.Uint8 != got.Uint8 {
 		eql = false
-		msg := fmt.Sprintf("Uint8 was incorrect. Expected: %d but got: %d\n", expected.Uint8, got.Uint8)
+		msg := fmt.Sprintf("Uint8 was incorrect. Expected: %v but got: %v\n", expected.Uint8, got.Uint8)
 		msgs = append(msgs, msg)
 	}
 	if expected.Uint16 != got.Uint16 {
 		eql = false
-		msg := fmt.Sprintf("Uint16 was incorrect. Expected: %d but got: %d\n", expected.Uint16, got.Uint16)
+		msg := fmt.Sprintf("Uint16 was incorrect. Expected: %v but got: %v\n", expected.Uint16, got.Uint16)
 		msgs = append(msgs, msg)
 	}
 	if expected.Uint32 != got.Uint32 {
 		eql = false
-		msg := fmt.Sprintf("Uint32 was incorrect. Expected: %d but got: %d\n", expected.Uint32, got.Uint32)
+		msg := fmt.Sprintf("Uint32 was incorrect. Expected: %v but got: %v\n", expected.Uint32, got.Uint32)
 		msgs = append(msgs, msg)
 	}
 	if expected.Uint64 != got.Uint64 {
 		eql = false
-		msg := fmt.Sprintf("Uint64 was incorrect. Expected: %d but got: %d\n", expected.Uint64, got.Uint64)
+		msg := fmt.Sprintf("Uint64 was incorrect. Expected: %v but got: %v\n", expected.Uint64, got.Uint64)
 		msgs = append(msgs, msg)
 	}
 	if expected.Id != got.Id {
 		eql = false
-		msg := fmt.Sprintf("Id was incorrect. Expected: %d but got: %d\n", expected.Id, got.Id)
+		msg := fmt.Sprintf("Id was incorrect. Expected: %v but got: %v\n", expected.Id, got.Id)
 		msgs = append(msgs, msg)
 	}
 
 	// Int fields
 	if expected.Int != got.Int {
 		eql = false
-		msg := fmt.Sprintf("Int was incorrect. Expected: %d but got: %d\n", expected.Int, got.Int)
+		msg := fmt.Sprintf("Int was incorrect. Expected: %v but got: %v\n", expected.Int, got.Int)
 		msgs = append(msgs, msg)
 	}
 	if expected.Int8 != got.Int8 {
 		eql = false
-		msg := fmt.Sprintf("Int8 was incorrect. Expected: %d but got: %d\n", expected.Int8, got.Int8)
+		msg := fmt.Sprintf("Int8 was incorrect. Expected: %v but got: %v\n", expected.Int8, got.Int8)
 		msgs = append(msgs, msg)
 	}
 	if expected.Int16 != got.Int16 {
 		eql = false
-		msg := fmt.Sprintf("Int16 was incorrect. Expected: %d but got: %d\n", expected.Int16, got.Int16)
+		msg := fmt.Sprintf("Int16 was incorrect. Expected: %v but got: %v\n", expected.Int16, got.Int16)
 		msgs = append(msgs, msg)
 	}
 	if expected.Int32 != got.Int32 {
 		eql = false
-		msg := fmt.Sprintf("Int32 was incorrect. Expected: %d but got: %d\n", expected.Int32, got.Int32)
+		msg := fmt.Sprintf("Int32 was incorrect. Expected: %v but got: %v\n", expected.Int32, got.Int32)
 		msgs = append(msgs, msg)
 	}
 	if expected.Int64 != got.Int64 {
 		eql = false
-		msg := fmt.Sprintf("Int64 was incorrect. Expected: %d but got: %d\n", expected.Int64, got.Int64)
+		msg := fmt.Sprintf("Int64 was incorrect. Expected: %v but got: %v\n", expected.Int64, got.Int64)
 		msgs = append(msgs, msg)
 	}
 

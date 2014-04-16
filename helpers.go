@@ -29,7 +29,7 @@ func Models(in interface{}) []Model {
 	}
 	_, found := modelTypeToName[elemTyp]
 	if !found {
-		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nType %T is not registered.", in, in)
+		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nType %s is not registered.", in, elemTyp)
 		panic(msg)
 	}
 	val := reflect.ValueOf(in)
