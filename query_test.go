@@ -15,9 +15,6 @@ import (
 	"testing"
 )
 
-// TODO:
-// 	- Write high-level tests for every possible combination of query modifiers
-
 func TestQueryAll(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -33,8 +30,6 @@ func TestQueryAll(t *testing.T) {
 	q := NewQuery("indexedPrimativesModel")
 	testQuery(t, q, ms)
 }
-
-// === Test the Order modifier
 
 func TestQueryOrderNumeric(t *testing.T) {
 	testingSetUp()
@@ -110,8 +105,6 @@ func TestQueryOrderAlpha(t *testing.T) {
 		testQuery(t, q, models)
 	}
 }
-
-// === Test the Filter modifier
 
 func TestQueryFilterNumeric(t *testing.T) {
 	testingSetUp()
