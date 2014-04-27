@@ -230,9 +230,7 @@ func Delete(model Model) error {
 	if err != nil {
 		return err
 	}
-	if err := t.deleteModel(mr); err != nil {
-		return err
-	}
+	t.deleteModel(mr)
 
 	// execute the transaction
 	if err := t.exec(); err != nil {
@@ -259,9 +257,7 @@ func MDelete(models []Model) error {
 		if err != nil {
 			return err
 		}
-		if err := t.deleteModel(mr); err != nil {
-			return err
-		}
+		t.deleteModel(mr)
 	}
 
 	// execute the transaction
