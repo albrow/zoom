@@ -5,6 +5,8 @@ Version: X.X.X
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
+Requires redis version >= 2.8.9 and Go version >= 1.0.
+
 Full documentation is available on
 [godoc.org](http://godoc.org/github.com/stephenalexbrowne/zoom).
 
