@@ -457,7 +457,7 @@ func (q *Query) sendIdData() error {
 			q.idData = append(q.idData, idsDataKey)
 			if q.order.fieldName != "" && q.order.indexType == indexAlpha {
 				// special case for parsing ids from the redis response
-				q.trans.command(cmd, args, newSendAlphaIdsHandler(q.trans, idsDataKey))
+				q.trans.command(cmd, args, newSendAlphaIdsHandler(q.trans, idsDataKey, false))
 			} else {
 				// send the database response directly
 				q.trans.command(cmd, args, newSendDataHandler(q.trans, idsDataKey))
@@ -487,7 +487,7 @@ func (q *Query) sendIdData() error {
 				q.idData = append(q.idData, orderedIdsKey)
 				if q.order.fieldName != "" && q.order.indexType == indexAlpha {
 					// special case for parsing ids from the redis response
-					q.trans.command(cmd, args, newSendAlphaIdsHandler(q.trans, orderedIdsKey))
+					q.trans.command(cmd, args, newSendAlphaIdsHandler(q.trans, orderedIdsKey, false))
 				} else {
 					// send the database response directly
 					q.trans.command(cmd, args, newSendDataHandler(q.trans, orderedIdsKey))
@@ -499,13 +499,19 @@ func (q *Query) sendIdData() error {
 }
 
 // returns a function which, when run, extracts ids from alpha index values and then sends the ids as transaction data
-func newSendAlphaIdsHandler(t *transaction, key string) func(interface{}) error {
+func newSendAlphaIdsHandler(t *transaction, key string, reverse bool) func(interface{}) error {
 	return func(reply interface{}) error {
 		if ids, err := redis.Strings(reply, nil); err != nil {
 			return err
 		} else {
 			for i, valueAndId := range ids {
 				ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+			}
+			if reverse {
+				// TODO: if redis adds a ZREVRANGEBYLEX, remove this manual reverse and use that instead
+				for i, j := 0, len(ids)-1; i <= j; i, j = i+1, j-1 {
+					ids[i], ids[j] = ids[j], ids[i]
+				}
 			}
 			t.sendData(key, ids)
 			return nil
@@ -787,7 +793,6 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 			// execute command to get the ids
 			// TODO: try and do this inside of a transaction
 			var command string
-			reverse := q.order.orderType == descending && q.order.fieldName == f.fieldName
 			if !reverse {
 				command = "ZRANGEBYSCORE"
 				args = args.Add(min).Add(max)
@@ -798,7 +803,70 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 			q.trans.command(command, args, newSendDataHandler(q.trans, dataKey))
 
 		case indexAlpha:
-			return nil
+			args := redis.Args{}.Add(setKey)
+			switch f.filterType {
+			case equal, less, greater, lessOrEqual, greaterOrEqual:
+				var min, max string
+				valString := f.filterValue.String()
+				switch f.filterType {
+				case equal:
+					min = "(" + valString
+					max = "(" + valString + delString
+				case less:
+					min = "-"
+					max = "(" + valString
+				case greater:
+					min = "(" + valString + delString
+					max = "+"
+				case lessOrEqual:
+					min = "-"
+					max = "(" + valString + delString
+				case greaterOrEqual:
+					min = "(" + valString
+					max = "+"
+				}
+				args = args.Add(min).Add(max)
+				q.trans.command("ZRANGEBYLEX", args, newSendAlphaIdsHandler(q.trans, dataKey, reverse))
+			case notEqual:
+				// special case for not equals
+				// split into two different queries (less and greater) and
+				// combine the results
+				valString := f.filterValue.String()
+				max := "(" + valString
+				lessArgs := args.Add("-").Add(max)
+				lessIdsKey := dataKey + "lessIds"
+				q.trans.command("ZRANGEBYLEX", lessArgs, newSendAlphaIdsHandler(q.trans, lessIdsKey, false))
+				min := "(" + valString + delString
+				greaterIdsKey := dataKey + "greaterIds"
+				greaterArgs := args.Add(min).Add("+")
+				q.trans.command("ZRANGEBYLEX", greaterArgs, newSendAlphaIdsHandler(q.trans, greaterIdsKey, false))
+
+				// when both lessIds and greaterIds are ready, combine them into a single set of ids
+				q.trans.doWhenDataReady([]string{lessIdsKey, greaterIdsKey}, func() error {
+					lessIds, err := convertDataToStrings(q.trans.data[lessIdsKey])
+					if err != nil {
+						return err
+					}
+					greaterIds, err := convertDataToStrings(q.trans.data[greaterIdsKey])
+					if err != nil {
+						return err
+					}
+					allFilterIds := make([]string, 0)
+					if !reverse {
+						allFilterIds = append(lessIds, greaterIds...)
+					} else {
+						for i, j := 0, len(lessIds)-1; i <= j; i, j = i+1, j-1 {
+							lessIds[i], lessIds[j] = lessIds[j], lessIds[i]
+						}
+						for i, j := 0, len(greaterIds)-1; i <= j; i, j = i+1, j-1 {
+							greaterIds[i], greaterIds[j] = greaterIds[j], greaterIds[i]
+						}
+						allFilterIds = append(greaterIds, lessIds...)
+					}
+					q.trans.sendData(dataKey, allFilterIds)
+					return nil
+				})
+			}
 
 		default:
 			msg := fmt.Sprintf("zoom: cannot use filters on unindexed field %s for model name %s.", f.fieldName, q.modelSpec.modelName)

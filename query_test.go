@@ -173,7 +173,6 @@ func TestQueryFilterBoolean(t *testing.T) {
 }
 
 func TestQueryFilterAlpha(t *testing.T) {
-	t.Skip("awaiting new alpha implementation")
 	testingSetUp()
 	defer testingTearDown()
 
@@ -209,8 +208,8 @@ func TestFilterOrderCombos(t *testing.T) {
 	// fieldNames := []string{"Int", "Bool", "String"}
 	// filterValues := []interface{}{5, true, "k"}
 	// TODO: re-add string values when alpha implementation is fixed
-	fieldNames := []string{"Int", "Bool"}
-	filterValues := []interface{}{5, true}
+	fieldNames := []string{"Int", "Bool", "String"}
+	filterValues := []interface{}{5, true, "k"}
 
 	// iterate and create queries for all possible combinations of filters and orders
 	// with the fields and values specified above
