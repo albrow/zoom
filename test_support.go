@@ -132,21 +132,21 @@ type embed struct {
 }
 
 type indexedPrimativesModel struct {
-	Uint    uint    `zoom:"index"`
-	Uint8   uint8   `zoom:"index"`
-	Uint16  uint16  `zoom:"index"`
-	Uint32  uint32  `zoom:"index"`
-	Uint64  uint64  `zoom:"index"`
+	Uint    uint    `zoom:"index" json:"-"`
+	Uint8   uint8   `zoom:"index" json:"-"`
+	Uint16  uint16  `zoom:"index" json:"-"`
+	Uint32  uint32  `zoom:"index" json:"-"`
+	Uint64  uint64  `zoom:"index" json:"-"`
 	Int     int     `zoom:"index"`
-	Int8    int8    `zoom:"index"`
-	Int16   int16   `zoom:"index"`
-	Int32   int32   `zoom:"index"`
-	Int64   int64   `zoom:"index"`
-	Float32 float32 `zoom:"index"`
-	Float64 float64 `zoom:"index"`
-	Byte    byte    `zoom:"index"`
-	Rune    rune    `zoom:"index"`
-	String  string  `zoom:"index"`
+	Int8    int8    `zoom:"index" json:"-"`
+	Int16   int16   `zoom:"index" json:"-"`
+	Int32   int32   `zoom:"index" json:"-"`
+	Int64   int64   `zoom:"index" json:"-"`
+	Float32 float32 `zoom:"index" json:"-"`
+	Float64 float64 `zoom:"index" json:"-"`
+	Byte    byte    `zoom:"index" json:"-"`
+	Rune    rune    `zoom:"index" json:"-"`
+	String  string  `zoom:"index" json:"-"`
 	Bool    bool    `zoom:"index"`
 	DefaultData
 }

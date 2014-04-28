@@ -7,6 +7,7 @@
 package zoom
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/rand"
@@ -187,7 +188,27 @@ func TestQueryFilterAlpha(t *testing.T) {
 	}
 }
 
-func TestFilterOrderCombos(t *testing.T) {
+func TestQueryLimitAndOffset(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createFullModels(10)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	limits := []uint{0, 1, 9, 10}
+	offsets := []uint{0, 1, 9, 10}
+	for _, l := range limits {
+		for _, o := range offsets {
+			q := NewQuery("indexedPrimativesModel").Order("Int").Limit(l).Offset(o)
+			testQuery(t, q, models)
+		}
+	}
+}
+
+func TestQueryCombos(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -203,6 +224,8 @@ func TestFilterOrderCombos(t *testing.T) {
 	// TODO: re-add string values when alpha implementation is fixed
 	fieldNames := []string{"Int", "Bool", "String"}
 	filterValues := []interface{}{5, true, "k"}
+	limits := []uint{0, 1, 5, 9, 10}
+	offsets := []uint{0, 1, 5, 9, 10}
 
 	// iterate and create queries for all possible combinations of filters and orders
 	// with the fields and values specified above
@@ -211,12 +234,16 @@ func TestFilterOrderCombos(t *testing.T) {
 		val := filterValues[i]
 		for _, op := range operators {
 			for _, f2 := range fieldNames {
-				q := NewQuery("indexedPrimativesModel")
-				q.Filter(f1+" "+op, val).Order(f2)
-				testQuery(t, q, models)
-				q = NewQuery("indexedPrimativesModel")
-				q.Filter(f1+" "+op, val).Order("-" + f2)
-				testQuery(t, q, models)
+				for _, offset := range offsets {
+					for _, limit := range limits {
+						q := NewQuery("indexedPrimativesModel")
+						q.Filter(f1+" "+op, val).Order(f2).Limit(limit).Offset(offset)
+						testQuery(t, q, models)
+						q = NewQuery("indexedPrimativesModel")
+						q.Filter(f1+" "+op, val).Order("-" + f2).Limit(limit).Offset(offset)
+						testQuery(t, q, models)
+					}
+				}
 			}
 		}
 	}
@@ -294,27 +321,29 @@ func testQuery(t *testing.T, q *Query, models []*indexedPrimativesModel) {
 		t.Error(err)
 		t.FailNow()
 	}
-	testQueryScan(t, q, expected)
-	testQueryIdsOnly(t, q, expected)
+	stable := !modelsContainDuplicatesForField(models, q.order.fieldName)
+	testQueryScan(t, q, expected, stable)
+	testQueryIdsOnly(t, q, expected, stable)
 	testQueryCount(t, q, expected)
 }
 
-func testQueryScan(t *testing.T, q *Query, expected []*indexedPrimativesModel) {
+func testQueryScan(t *testing.T, q *Query, expected []*indexedPrimativesModel, stable bool) {
 	got := make([]*indexedPrimativesModel, 0)
 	if err := q.Scan(&got); err != nil {
 		t.Error(err)
 		t.FailNow()
 	}
 
-	// check that the models match without considering order
-	match := compareModelSlices(t, expected, got, false)
-	if !match {
-		t.Errorf("\n\ttestQueryScan failed for query %s", q)
-		t.FailNow()
-	}
+	if q.order.fieldName != "" && !stable {
+		// since redis sorts are unstable, varying results from the query should
+		// all be considered correct. In this case, the best we can do is make sure
+		// that the length is rught and that the models were sorted correctly.
+		if len(expected) != len(got) {
+			t.Errorf("Length of results was not correct. Expected %d but got %d\n\tfor query %s", len(expected), len(got), q)
+			t.FailNow()
+		}
 
-	// check that the models are in the correct order (if applicable)
-	if q.order.fieldName != "" {
+		// check that the models are in the correct order (if applicable)
 		reverse := false
 		if q.order.orderType == descending {
 			reverse = true
@@ -324,6 +353,28 @@ func testQueryScan(t *testing.T, q *Query, expected []*indexedPrimativesModel) {
 			t.FailNow()
 		} else if !sorted {
 			t.Errorf("models were not in the correct order. %v \n\tfor the query %s", fields, q)
+			t.FailNow()
+		}
+	} else {
+		// we can expect a stable sort since there are no duplicates. We can test
+		// the order of the models exactly.
+		orderMatters := false
+		if q.order.fieldName != "" {
+			orderMatters = true
+		}
+		match := compareModelSlices(t, expected, got, orderMatters)
+		if !match {
+			t.Errorf("\n\ttestQueryScan failed for query %s", q)
+			if eJS, err := json.Marshal(expected); err != nil {
+				t.Error(err)
+			} else {
+				t.Errorf("Expected JSON:\n\t%s", eJS)
+			}
+			if gJS, err := json.Marshal(got); err != nil {
+				t.Error(err)
+			} else {
+				t.Errorf("Got JSON:\n\t%s", gJS)
+			}
 			t.FailNow()
 		}
 	}
@@ -340,14 +391,31 @@ func testQueryCount(t *testing.T, q *Query, expectedModels []*indexedPrimativesM
 	}
 }
 
-func testQueryIdsOnly(t *testing.T, q *Query, expectedModels []*indexedPrimativesModel) {
+func testQueryIdsOnly(t *testing.T, q *Query, expectedModels []*indexedPrimativesModel, stable bool) {
 	expected := modelIds(Models(expectedModels))
-	if got, err := q.IdsOnly(); err != nil {
+	got, err := q.IdsOnly()
+	if err != nil {
 		t.Error(err)
 		t.FailNow()
-	} else if match, msg := compareAsStringSet(expected, got); !match {
-		t.Errorf("%s\ntestQueryIdsOnly failed for query %s.", msg, q)
-		t.FailNow()
+	}
+	if stable {
+		// for queries with stable sorts we should expect an exact order
+		if q.order.fieldName == "" {
+			if match, msg := compareAsStringSet(expected, got); !match {
+				t.Errorf("%s\ntestQueryIdsOnly failed for query %s.", msg, q)
+				t.FailNow()
+			}
+		} else {
+			if !reflect.DeepEqual(expected, got) {
+				t.Errorf("testQueryIdsOnly failed for query %s.\nexpected %v but got %v", q, expected, got)
+				t.FailNow()
+			}
+		}
+	} else {
+		// for queries with unstable sorts, we can only check that the length is correct :(
+		if len(expected) != len(got) {
+			t.Errorf("testQueryIdsOnly failed for query %s.\nLengths did not match. Expected %s but got %s.", q, len(expected), len(got))
+		}
 	}
 }
 
@@ -362,6 +430,10 @@ func expectedResultsForQuery(q *Query, models []*indexedPrimativesModel) ([]*ind
 			return nil, err
 		}
 		expected = orderedIntersectModels(fmodels, expected)
+	}
+
+	if q.order.fieldName != "" && !modelsContainDuplicatesForField(expected, q.order.fieldName) {
+		expected = sortModels(expected, q.order.fieldName, q.order.orderType == descending)
 	}
 
 	start := q.offset
@@ -854,17 +926,131 @@ func TestInternalFilterModelsAlpha(t *testing.T) {
 	}
 }
 
-// NOTE: This implementation only sorts by the first letter of the string!
-type ByString []*indexedPrimativesModel
+// sorting interfaces. UGH. This is incredibly annoying, but this is the best
+// way I could find of doing it. based on the http://golang.org/pkg/sort/
+// example
 
-func (a ByString) Len() int {
-	return len(a)
+type lessFunc func(m1, m2 *indexedPrimativesModel) bool
+
+// multiSorter implements the Sort interface, sorting the models within.
+type multiSorter struct {
+	models []*indexedPrimativesModel
+	less   []lessFunc
 }
-func (a ByString) Swap(i, j int) {
-	a[i], a[j] = a[j], a[i]
+
+// Sort sorts the argument slice according to the less functions passed to OrderedBy.
+func (ms *multiSorter) Sort(models []*indexedPrimativesModel) {
+	ms.models = models
+	sort.Sort(ms)
 }
-func (a ByString) Less(i, j int) bool {
-	return a[i].String < a[j].String
+
+// OrderedBy returns a Sorter that sorts using the less functions, in order.
+// Call its Sort method to sort the data.
+func OrderedBy(less ...lessFunc) *multiSorter {
+	return &multiSorter{
+		less: less,
+	}
+}
+
+// Len is part of sort.Interface.
+func (ms *multiSorter) Len() int {
+	return len(ms.models)
+}
+
+// Swap is part of sort.Interface.
+func (ms *multiSorter) Swap(i, j int) {
+	ms.models[i], ms.models[j] = ms.models[j], ms.models[i]
+}
+
+// Less is part of sort.Interface. It is implemented by looping along the
+// less functions until it finds a comparison that is either Less or
+// !Less. Note that it can call the less functions twice per call. We
+// could change the functions to return -1, 0, 1 and reduce the
+// number of calls for greater efficiency: an exercise for the reader.
+func (ms *multiSorter) Less(i, j int) bool {
+	p, q := ms.models[i], ms.models[j]
+	// Try all but the last comparison.
+	var k int
+	for k = 0; k < len(ms.less)-1; k++ {
+		less := ms.less[k]
+		switch {
+		case less(p, q):
+			// p < q, so we have a decision.
+			return true
+		case less(q, p):
+			// p > q, so we have a decision.
+			return false
+		}
+		// p == q; try the next comparison.
+	}
+	// All comparisons to here said "equal", so just return whatever
+	// the final comparison reports.
+	return ms.less[k](p, q)
+}
+
+// Closures that order the Model structure.
+var lessFuncs map[string]lessFunc = map[string]lessFunc{
+	"Uint": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Uint < m2.Uint
+	},
+	"Uint8": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Uint8 < m2.Uint8
+	},
+	"Uint16": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Uint16 < m2.Uint16
+	},
+	"Uint32": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Uint32 < m2.Uint32
+	},
+	"Uint64": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Uint64 < m2.Uint64
+	},
+	"Int": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Int < m2.Int
+	},
+	"Int8": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Int8 < m2.Int8
+	},
+	"Int16": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Int16 < m2.Int16
+	},
+	"Int32": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Int32 < m2.Int32
+	},
+	"Int64": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Int64 < m2.Int64
+	},
+	"Float32": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Float32 < m2.Float32
+	},
+	"Float64": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Float64 < m2.Float64
+	},
+	"Byte": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Byte < m2.Byte
+	},
+	"Rune": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Rune < m2.Rune
+	},
+	"String": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.String < m2.String
+	},
+	"Bool": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Bool == false && m2.Bool == true
+	},
+}
+
+// sortModels sorts the set of models by the given fieldName. Returns a copy,
+// so the original is unchanged.
+func sortModels(models []*indexedPrimativesModel, fieldName string, reverse bool) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, len(models))
+	copy(results, models)
+	OrderedBy(lessFuncs[fieldName]).Sort(results)
+	if reverse {
+		return reverseModels(results)
+	} else {
+		return results
+	}
 }
 
 // returns true iff the given models are sorted by field
@@ -964,183 +1150,73 @@ func modelsAreSortedByStringField(models []*indexedPrimativesModel, fieldName st
 	}
 }
 
-// Test our internal check to see if models are sorted
-func TestModelsAreSortedNumeric(t *testing.T) {
+// Test our model sort implementation for numeric fields
+func TestInternalSortModelsNumeric(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
 	// make models which are sorted
-	models, _ := newIndexedPrimativesModels(4)
-	models[0].Int = 0
-	models[1].Int = 1
-	models[2].Int = 2
-	models[3].Int = 3
-	if result, _, err := modelsAreSortedByField(models, "Int", false); err != nil {
-		t.Error(err)
-	} else if result == false {
-		t.Error("Expected true but got false")
-	}
-
-	// reverse them and check if they are reverse sorted
-	models[0].Int = 3
-	models[1].Int = 2
-	models[2].Int = 1
-	models[3].Int = 0
-	if result, _, err := modelsAreSortedByField(models, "Int", true); err != nil {
-		t.Error(err)
-	} else if result == false {
-		t.Error("Expected true but got false")
-	}
-
-	// try models with two of the same value
-	models[0].Int = 0
-	models[1].Int = 1
-	models[2].Int = 1
-	models[3].Int = 2
-	if result, _, err := modelsAreSortedByField(models, "Int", false); err != nil {
-		t.Error(err)
-	} else if result == false {
-		t.Error("Expected true but got false")
-	}
-
-	// try models which are not sorted
-	models[0].Int = 0
-	models[1].Int = 2
-	models[2].Int = 1
-	models[3].Int = 3
-	if result, _, err := modelsAreSortedByField(models, "Int", false); err != nil {
-		t.Error(err)
-	} else if result == true {
-		t.Error("Expected false but got true")
-	}
-	models[0].Int = 3
-	models[1].Int = 1
-	models[2].Int = 2
-	models[3].Int = 0
-	if result, _, err := modelsAreSortedByField(models, "Int", true); err != nil {
-		t.Error(err)
-	} else if result == true {
-		t.Error("Expected false but got true")
+	presorted, _ := createFullModels(10)
+	models := shuffleModels(presorted)
+	fieldNames := []string{"Uint", "Uint8", "Uint16", "Uint32", "Uint64", "Int", "Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "Byte", "Rune"}
+	for _, fn := range fieldNames {
+		asc := sortModels(models, fn, false)
+		if sorted, _, err := modelsAreSortedByField(asc, fn, false); err != nil {
+			t.Error(err)
+		} else if !sorted {
+			t.Errorf("Models were not correctly sorted by %s", fn)
+		}
+		des := sortModels(models, fn, true)
+		if sorted, _, err := modelsAreSortedByField(des, fn, true); err != nil {
+			t.Error(err)
+		} else if !sorted {
+			t.Errorf("Models were not correctly sorted by -%s", fn)
+		}
 	}
 }
 
-// Test our internal check to see if models are sorted
-func TestModelsAreSortedBoolean(t *testing.T) {
+func TestInternalSortModelsAlpha(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
+	presorted, _ := createFullModels(10)
+	models := shuffleModels(presorted)
 
-	// make models which are sorted
-	models, _ := newIndexedPrimativesModels(4)
-	models[0].Bool = false
-	models[1].Bool = false
-	models[2].Bool = true
-	models[3].Bool = true
-	if result, _, err := modelsAreSortedByField(models, "Bool", false); err != nil {
+	asc := sortModels(models, "String", false)
+	if sorted, _, err := modelsAreSortedByField(asc, "String", false); err != nil {
 		t.Error(err)
-	} else if result == false {
-		t.Error("Expected true but got false")
+	} else if !sorted {
+		t.Error("Models were not correctly sorted by String")
 	}
-
-	// reverse them and check if they are reverse sorted
-	models[0].Bool = true
-	models[1].Bool = true
-	models[2].Bool = false
-	models[3].Bool = false
-	if result, _, err := modelsAreSortedByField(models, "Bool", true); err != nil {
+	des := sortModels(models, "String", true)
+	if sorted, _, err := modelsAreSortedByField(des, "String", true); err != nil {
 		t.Error(err)
-	} else if result == false {
-		t.Error("Expected true but got false")
-	}
-
-	// try models with two of the same value
-	models[0].Bool = false
-	models[1].Bool = false
-	models[2].Bool = false
-	models[3].Bool = true
-	if result, _, err := modelsAreSortedByField(models, "Bool", false); err != nil {
-		t.Error(err)
-	} else if result == false {
-		t.Error("Expected true but got false")
-	}
-
-	// try models which are not sorted
-	models[0].Bool = false
-	models[1].Bool = true
-	models[2].Bool = false
-	models[3].Bool = true
-	if result, _, err := modelsAreSortedByField(models, "Bool", false); err != nil {
-		t.Error(err)
-	} else if result == true {
-		t.Error("Expected false but got true")
-	}
-	models[0].Bool = true
-	models[1].Bool = false
-	models[2].Bool = true
-	models[3].Bool = false
-	if result, _, err := modelsAreSortedByField(models, "Bool", true); err != nil {
-		t.Error(err)
-	} else if result == true {
-		t.Error("Expected false but got true")
+	} else if !sorted {
+		t.Error("Models were not correctly sorted by -String")
 	}
 }
 
-// Test our internal check to see if models are sorted
-func TestModelsAreSortedString(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
+func TestInternalSortModelsBoolean(t *testing.T) {
+	// NOTE: we only get to create two models here if we want a stable sort.
+	// To rule out the possibility of the two models being sorted by chance (50%!),
+	// we repeat the test 10 times.
+	for i := 0; i < 10; i++ {
+		testingSetUp()
+		presorted, _ := createFullModels(2)
+		models := shuffleModels(presorted)
 
-	// make models which are sorted
-	models, _ := newIndexedPrimativesModels(4)
-	models[0].String = "apple"
-	models[1].String = "banana"
-	models[2].String = "cherry"
-	models[3].String = "durian"
-	if result, _, err := modelsAreSortedByField(models, "String", false); err != nil {
-		t.Error(err)
-	} else if result == false {
-		t.Error("Expected true but got false")
-	}
-
-	// reverse them and check if they are reverse sorted
-	models[0].String = "durian"
-	models[1].String = "cherry"
-	models[2].String = "banana"
-	models[3].String = "apple"
-	if result, _, err := modelsAreSortedByField(models, "String", true); err != nil {
-		t.Error(err)
-	} else if result == false {
-		t.Error("Expected true but got false")
-	}
-
-	// try models with two of the same value
-	models[0].String = "apple"
-	models[1].String = "banana"
-	models[2].String = "banana"
-	models[3].String = "cherry"
-	if result, _, err := modelsAreSortedByField(models, "String", false); err != nil {
-		t.Error(err)
-	} else if result == false {
-		t.Error("Expected true but got false")
-	}
-
-	// try models which are not sorted
-	models[0].String = "apple"
-	models[1].String = "cherry"
-	models[2].String = "banana"
-	models[3].String = "durian"
-	if result, _, err := modelsAreSortedByField(models, "String", false); err != nil {
-		t.Error(err)
-	} else if result == true {
-		t.Error("Expected false but got true")
-	}
-	models[0].String = "durian"
-	models[1].String = "banana"
-	models[2].String = "cherry"
-	models[3].String = "apple"
-	if result, _, err := modelsAreSortedByField(models, "String", true); err != nil {
-		t.Error(err)
-	} else if result == true {
-		t.Error("Expected false but got true")
+		asc := sortModels(models, "Bool", false)
+		if sorted, _, err := modelsAreSortedByField(asc, "Bool", false); err != nil {
+			t.Error(err)
+		} else if !sorted {
+			t.Error("Models were not correctly sorted by Bool")
+		}
+		des := sortModels(models, "Bool", true)
+		if sorted, _, err := modelsAreSortedByField(des, "Bool", true); err != nil {
+			t.Error(err)
+		} else if !sorted {
+			t.Error("Models were not correctly sorted by -Bool")
+		}
+		testingTearDown()
 	}
 }
 
@@ -1167,5 +1243,82 @@ func TestInternalReverseModelsNumeric(t *testing.T) {
 	got := reverseModels(models)
 	if eql, msg := looseEquals(expected, got); !eql {
 		t.Errorf("Expected: %v\nGot %v\n%s\n", expected, got, msg)
+	}
+}
+
+// randomizes the order of models. Good for testing sorts
+func shuffleModels(models []*indexedPrimativesModel) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, len(models))
+	perm := rand.Perm(len(models))
+	for i, v := range perm {
+		results[v] = models[i]
+	}
+	return results
+}
+
+// returns true iff the set of models contains duplicate values for the given field name
+func modelsContainDuplicatesForField(models []*indexedPrimativesModel, fieldName string) bool {
+	prev := []interface{}{}
+	for _, m := range models {
+		mVal := reflect.ValueOf(m).Elem()
+		fVal := mVal.FieldByName(fieldName)
+		if !fVal.IsValid() {
+			continue
+		}
+		val := fVal.Interface()
+		for _, p := range prev {
+			if reflect.DeepEqual(p, val) {
+				return true
+			}
+		}
+		prev = append(prev, val)
+	}
+	return false
+}
+
+func TestInternalModelsContainDuplicates(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// should contain no duplicates
+	models, _ := createFullModels(2)
+	expecteds := map[string]bool{
+		"Bool":   false,
+		"Int":    false,
+		"String": false,
+	}
+	for fn, expected := range expecteds {
+		got := modelsContainDuplicatesForField(models, fn)
+		if expected != got {
+			t.Errorf("Duplicate check was incorrect. Expected %v but got %v", expected, got)
+		}
+	}
+
+	// only Bool fields should be duplicated
+	models, _ = createFullModels(3)
+	expecteds = map[string]bool{
+		"Bool":   true,
+		"Int":    false,
+		"String": false,
+	}
+	for fn, expected := range expecteds {
+		got := modelsContainDuplicatesForField(models, fn)
+		if expected != got {
+			t.Errorf("Duplicate check was incorrect. Expected %v but got %v", expected, got)
+		}
+	}
+
+	// only Bool and String fields should be duplicated
+	models, _ = createFullModels(27)
+	expecteds = map[string]bool{
+		"Bool":   true,
+		"Int":    false,
+		"String": true,
+	}
+	for fn, expected := range expecteds {
+		got := modelsContainDuplicatesForField(models, fn)
+		if expected != got {
+			t.Errorf("Duplicate check was incorrect. Expected %v but got %v", expected, got)
+		}
 	}
 }

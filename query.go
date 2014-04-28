@@ -20,17 +20,16 @@ import (
 // and can be run in several different ways with different query
 // finishers.
 type Query struct {
-	modelSpec              modelSpec
-	trans                  *transaction
-	includes               []string
-	excludes               []string
-	order                  order
-	limit                  uint
-	offset                 uint
-	filters                []filter
-	idData                 []string
-	waitForAlphaFilterKeys []string
-	err                    error
+	modelSpec modelSpec
+	trans     *transaction
+	includes  []string
+	excludes  []string
+	order     order
+	limit     uint
+	offset    uint
+	filters   []filter
+	idData    []string
+	err       error
 }
 
 type order struct {
@@ -450,7 +449,7 @@ func (q *Query) IdsOnly() ([]string, error) {
 // considered data dependencies.
 func (q *Query) sendIdData() error {
 	if len(q.filters) == 0 {
-		if cmd, args, err := q.getAllModelsArgs(); err != nil {
+		if cmd, args, err := q.getAllModelsArgs(true); err != nil {
 			return err
 		} else {
 			idsDataKey := "modelIds"
@@ -480,7 +479,7 @@ func (q *Query) sendIdData() error {
 			// no filter had the same field name as the order, so we need to add a
 			// command to get the ordered ids and use them as a basis for ordering
 			// all the others.
-			if cmd, args, err := q.getAllModelsArgs(); err != nil {
+			if cmd, args, err := q.getAllModelsArgs(false); err != nil {
 				return err
 			} else {
 				orderedIdsKey := "primaryIds"
@@ -567,6 +566,9 @@ func (q *Query) intersectAllIds() ([]string, error) {
 			}
 		}
 	}
+	if len(q.filters) > 0 {
+		allModelIds = applyLimitOffset(allModelIds, q.limit, q.offset)
+	}
 	return allModelIds, nil
 }
 
@@ -601,7 +603,7 @@ func (q *Query) scanModelsByIds(ids []string, sliceVal reflect.Value) error {
 }
 
 // NOTE: only use this method for queries without any filters.
-func (q *Query) getAllModelsArgs() (string, redis.Args, error) {
+func (q *Query) getAllModelsArgs(applyLimitOffset bool) (string, redis.Args, error) {
 	args := redis.Args{}
 	var command string
 	if q.order.fieldName == "" {
@@ -610,7 +612,7 @@ func (q *Query) getAllModelsArgs() (string, redis.Args, error) {
 		}
 		indexKey := q.modelSpec.modelName + ":all"
 		args = args.Add(indexKey)
-		if q.limit == 0 {
+		if q.limit == 0 || !applyLimitOffset {
 			command = "SMEMBERS"
 		} else {
 			command = "SRANDMEMBER"
@@ -622,9 +624,14 @@ func (q *Query) getAllModelsArgs() (string, redis.Args, error) {
 		} else if q.order.orderType == descending {
 			command = "ZREVRANGE"
 		}
-		start, stop := q.getStartStop()
 		indexKey := q.modelSpec.modelName + ":" + q.order.redisName
-		args = args.Add(indexKey).Add(start).Add(stop)
+		args = args.Add(indexKey)
+		if applyLimitOffset {
+			start, stop := q.getStartStop()
+			args = args.Add(start).Add(stop)
+		} else {
+			args = args.Add(0).Add(-1)
+		}
 	}
 	return command, args, nil
 }
@@ -654,25 +661,7 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 			args := redis.Args{}.Add(setKey)
 			switch f.filterType {
 			case equal, less, greater, lessOrEqual, greaterOrEqual:
-				var min, max interface{}
-				switch f.filterType {
-				case equal:
-					min, max = f.filterValue.Interface(), f.filterValue.Interface()
-				case less:
-					min = "-inf"
-					// use "(" for exclusive
-					max = fmt.Sprintf("(%v", f.filterValue.Interface())
-				case greater:
-					// use "(" for exclusive
-					min = fmt.Sprintf("(%v", f.filterValue.Interface())
-					max = "+inf"
-				case lessOrEqual:
-					min = "-inf"
-					max = f.filterValue.Interface()
-				case greaterOrEqual:
-					min = f.filterValue.Interface()
-					max = "+inf"
-				}
+				min, max := getMinMaxForNumericFilter(f)
 				var command string
 				if !reverse {
 					command = "ZRANGEBYSCORE"
@@ -874,6 +863,47 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 		}
 	}
 	return nil
+}
+
+// do some math wrt limit and offset and return the results
+func applyLimitOffset(slice []string, limit uint, offset uint) []string {
+	start := offset
+	var end uint
+	if limit == 0 {
+		end = uint(len(slice))
+	} else {
+		end = start + limit
+	}
+	if int(start) > len(slice) {
+		return []string{}
+	} else if int(end) > len(slice) {
+		return slice[start:]
+	} else {
+		return slice[start:end]
+	}
+	return slice
+}
+
+func getMinMaxForNumericFilter(f filter) (min interface{}, max interface{}) {
+	switch f.filterType {
+	case equal:
+		min, max = f.filterValue.Interface(), f.filterValue.Interface()
+	case less:
+		min = "-inf"
+		// use "(" for exclusive
+		max = fmt.Sprintf("(%v", f.filterValue.Interface())
+	case greater:
+		// use "(" for exclusive
+		min = fmt.Sprintf("(%v", f.filterValue.Interface())
+		max = "+inf"
+	case lessOrEqual:
+		min = "-inf"
+		max = f.filterValue.Interface()
+	case greaterOrEqual:
+		min = f.filterValue.Interface()
+		max = "+inf"
+	}
+	return min, max
 }
 
 // string returns a string representation of the filterType
