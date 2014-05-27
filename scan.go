@@ -21,8 +21,7 @@ func scanModel(bulk []interface{}, mr modelRef) error {
 	for i := 0; i < len(bulk); i += 2 {
 		bytes, ok := bulk[i].([]byte)
 		if !ok {
-			msg := fmt.Sprintf("zoom: could not convert bulk value %v of type %T to []byte\n", bulk[i], bulk[i])
-			return errors.New(msg)
+			return fmt.Errorf("zoom: could not convert bulk value %v of type %T to []byte\n", bulk[i], bulk[i])
 		}
 		fieldName := string(bytes)
 		ms := mr.modelSpec
@@ -49,8 +48,7 @@ func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 	typ := dest.Type()
 	srcBytes, ok := src.([]byte)
 	if !ok {
-		msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: could not convert %v of type %T to []byte.\n", src, src)
 	}
 	if len(srcBytes) == 0 {
 		return nil // skip blanks
@@ -65,8 +63,7 @@ func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 			// slice or array of bytes
 			dest.SetBytes(srcBytes)
 		default:
-			msg := fmt.Sprintf("zoom: don't know how to scan primative type: %T.\n", src)
-			return errors.New(msg)
+			return fmt.Errorf("zoom: don't know how to scan primative type: %T.\n", src)
 		}
 	} else if typeIsNumeric(typ) {
 		srcString := string(srcBytes)
@@ -75,41 +72,35 @@ func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 			// float types
 			srcFloat, err := strconv.ParseFloat(srcString, 64)
 			if err != nil {
-				msg := fmt.Sprintf("zoom: could not convert %s to float.\n", srcString)
-				return errors.New(msg)
+				return fmt.Errorf("zoom: could not convert %s to float.\n", srcString)
 			}
 			dest.SetFloat(srcFloat)
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			// int types
 			srcInt, err := strconv.ParseInt(srcString, 10, 0)
 			if err != nil {
-				msg := fmt.Sprintf("zoom: could not convert %s to int.\n", srcString)
-				return errors.New(msg)
+				return fmt.Errorf("zoom: could not convert %s to int.\n", srcString)
 			}
 			dest.SetInt(srcInt)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			// uint types
 			srcUint, err := strconv.ParseUint(srcString, 10, 0)
 			if err != nil {
-				msg := fmt.Sprintf("zoom: could not convert %s to uint.\n", srcString)
-				return errors.New(msg)
+				return fmt.Errorf("zoom: could not convert %s to uint.\n", srcString)
 			}
 			dest.SetUint(srcUint)
 		default:
-			msg := fmt.Sprintf("zoom: don't know how to scan primative type: %T.\n", src)
-			return errors.New(msg)
+			return fmt.Errorf("zoom: don't know how to scan primative type: %T.\n", src)
 		}
 	} else if typeIsBool(typ) {
 		srcString := string(srcBytes)
 		srcBool, err := strconv.ParseBool(srcString)
 		if err != nil {
-			msg := fmt.Sprintf("zoom: could not convert %s to bool.\n", srcString)
-			return errors.New(msg)
+			return fmt.Errorf("zoom: could not convert %s to bool.\n", srcString)
 		}
 		dest.SetBool(srcBool)
 	} else {
-		msg := fmt.Sprintf("zoom: don't know how to scan primative type: %T.\n", src)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: don't know how to scan primative type: %T.\n", src)
 	}
 	return nil
 }
@@ -122,8 +113,7 @@ func scanPointerVal(src interface{}, dest reflect.Value) error {
 func scanInconvertibleVal(src interface{}, dest reflect.Value) error {
 	srcBytes, ok := src.([]byte)
 	if !ok {
-		msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: could not convert %v of type %T to []byte.\n", src, src)
 	}
 	if len(srcBytes) == 0 {
 		return nil // skip blanks

@@ -206,8 +206,8 @@ func testingSetUp() {
 		panic(err.Error())
 	}
 	if n != 0 {
-		msg := fmt.Sprintf("Database #%d is not empty, test can not continue", *database)
-		panic(msg)
+		err := fmt.Errorf("Database #%d is not empty, test can not continue", *database)
+		panic(err)
 	}
 
 	// use a seed for rand to make test runs consistent

@@ -9,7 +9,6 @@
 package zoom
 
 import (
-	"errors"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"reflect"
@@ -422,12 +421,10 @@ func (t *transaction) saveModelOneToOneRelationship(mr modelRef, r relationship)
 	}
 	rModel, ok := field.Interface().(Model)
 	if !ok {
-		msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", field.Type().String())
-		return errors.New(msg)
+		return fmt.Errorf("zoom: cannot convert type %s to Model\n", field.Type().String())
 	}
 	if rModel.GetId() == "" {
-		msg := fmt.Sprintf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
 	}
 
 	// add a command to the transaction to set the relation key
@@ -451,14 +448,12 @@ func (t *transaction) saveModelOneToManyRelationship(mr modelRef, r relationship
 		// convert the individual element to a model
 		rModel, ok := rElem.Interface().(Model)
 		if !ok {
-			msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", field.Type().String())
-			return errors.New(msg)
+			return fmt.Errorf("zoom: cannot convert type %s to Model\n", field.Type().String())
 		}
 
 		// make sure the id is not nil
 		if rModel.GetId() == "" {
-			msg := fmt.Sprintf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
-			return errors.New(msg)
+			return fmt.Errorf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
 		}
 
 		// add its id to the slice
@@ -753,8 +748,7 @@ func (t *transaction) findModelOneToOneRelation(mr modelRef, r relationship) err
 	// convert field to a model
 	rModel, ok := field.Interface().(Model)
 	if !ok {
-		msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", field.Type().String())
-		return errors.New(msg)
+		return fmt.Errorf("zoom: cannot convert type %s to Model\n", field.Type().String())
 	}
 
 	// set id and create modelRef
@@ -805,8 +799,7 @@ func (t *transaction) findModelOneToManyRelation(mr modelRef, r relationship) er
 		rVal := reflect.New(rType.Elem())
 		rModel, ok := rVal.Interface().(Model)
 		if !ok {
-			msg := fmt.Sprintf("zoom: cannot convert type %s to Model\n", rType.String())
-			return errors.New(msg)
+			return fmt.Errorf("zoom: cannot convert type %s to Model\n", rType.String())
 		}
 
 		// set id and create modelRef

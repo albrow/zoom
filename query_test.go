@@ -8,7 +8,6 @@ package zoom
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -1065,8 +1064,8 @@ func modelsAreSortedByField(models []*indexedPrimativesModel, fieldName string, 
 	}
 	field, found := typ.Elem().FieldByName(fieldName)
 	if !found {
-		msg := fmt.Sprintf("Could not find field named %s in type %s", fieldName, typ.String())
-		return false, nil, errors.New(msg)
+		err := fmt.Errorf("Could not find field named %s in type %s", fieldName, typ.String())
+		return false, nil, err
 	}
 	fType := field.Type
 	if typeIsNumeric(fType) {

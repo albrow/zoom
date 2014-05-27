@@ -8,7 +8,6 @@
 package zoom
 
 import (
-	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -152,8 +151,8 @@ func newModelRefFromInterface(in interface{}) (modelRef, error) {
 	mr := modelRef{}
 	m, ok := in.(Model)
 	if !ok {
-		msg := fmt.Sprintf("zoom: could not convert val of type %T to Model", in)
-		return mr, errors.New(msg)
+		err := fmt.Errorf("zoom: could not convert val of type %T to Model", in)
+		return mr, err
 	}
 	mr.model = m
 	modelName, err := getRegisteredNameFromInterface(in)
@@ -174,8 +173,8 @@ func newModelRefFromName(modelName string) (modelRef, error) {
 	val := reflect.New(mr.modelSpec.modelType.Elem())
 	m, ok := val.Interface().(Model)
 	if !ok {
-		msg := fmt.Sprintf("zoom: could not convert val of type %T to Model", val.Interface())
-		return mr, errors.New(msg)
+		err := fmt.Errorf("zoom: could not convert val of type %T to Model", val.Interface())
+		return mr, err
 	}
 	mr.model = m
 	return mr, nil
@@ -215,8 +214,7 @@ func RegisterName(name string, model Model) error {
 	} else if modelNameIsRegistered(name) {
 		return NewNameAlreadyRegisteredError(name)
 	} else if !typeIsPointerToStruct(typ) {
-		msg := fmt.Sprintf("zoom: Register and RegisterName require a pointer to a struct as an argument.\nThe type %T is not a pointer to a struct.", model)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: Register and RegisterName require a pointer to a struct as an argument.\nThe type %T is not a pointer to a struct.", model)
 	}
 
 	modelTypeToName[typ] = name
@@ -269,8 +267,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 				case "index":
 					index = true
 				default:
-					msg := fmt.Sprintf("zoom: unrecognized option specified in struct tag: %s", op)
-					return errors.New(msg)
+					return fmt.Errorf("zoom: unrecognized option specified in struct tag: %s", op)
 				}
 			}
 		}
@@ -290,8 +287,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 				} else if typeIsBool(field.Type) {
 					p.indexType = indexBoolean
 				} else {
-					msg := fmt.Sprintf("zoom: Requested index on unsupported type %s\n", field.Type.String())
-					return errors.New(msg)
+					return fmt.Errorf("zoom: Requested index on unsupported type %s\n", field.Type.String())
 				}
 				ms.primativeIndexes[field.Name] = p
 			}
@@ -313,8 +309,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 					} else if typeIsBool(field.Type.Elem()) {
 						p.indexType = indexBoolean
 					} else {
-						msg := fmt.Sprintf("zoom: Requested index on unsupported type %s\n", field.Type.Elem().String())
-						return errors.New(msg)
+						return fmt.Errorf("zoom: Requested index on unsupported type %s\n", field.Type.Elem().String())
 					}
 					ms.pointerIndexes[field.Name] = p
 				}
@@ -372,8 +367,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 					// and written directly into the redis hash.
 					ms.addInconvertible(field, redisName)
 				} else {
-					msg := fmt.Sprintf("zoom: redisType tag for type %s was invalid.\nShould be either 'list' or 'set'.\nGot: %s", typ.String(), redisType)
-					return errors.New(msg)
+					return fmt.Errorf("zoom: redisType tag for type %s was invalid.\nShould be either 'list' or 'set'.\nGot: %s", typ.String(), redisType)
 				}
 			}
 		} else {

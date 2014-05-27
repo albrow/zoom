@@ -140,8 +140,8 @@ func (q *Query) Order(fieldName string) *Query {
 		if !found {
 			// the field was not indexed
 			// TODO: add support for ordering unindexed fields in some cases?
-			msg := fmt.Sprintf("zoom: error in Query.Order: field %s in type %s is not indexed. Can only order by indexed fields", fieldName, q.modelSpec.modelType.String())
-			q.setErrorIfNone(errors.New(msg))
+			err := fmt.Errorf("zoom: error in Query.Order: field %s in type %s is not indexed. Can only order by indexed fields", fieldName, q.modelSpec.modelType.String())
+			q.setErrorIfNone(err)
 		}
 		redisName, _ := q.modelSpec.redisNameForFieldName(fieldName)
 		q.order = order{
@@ -153,8 +153,8 @@ func (q *Query) Order(fieldName string) *Query {
 		}
 	} else {
 		// fieldName was invalid
-		msg := fmt.Sprintf("zoom: error in Query.Order: could not find field %s in type %s", fieldName, q.modelSpec.modelType.String())
-		q.setErrorIfNone(errors.New(msg))
+		err := fmt.Errorf("zoom: error in Query.Order: could not find field %s in type %s", fieldName, q.modelSpec.modelType.String())
+		q.setErrorIfNone(err)
 	}
 
 	return q
@@ -262,16 +262,16 @@ func (q *Query) Filter(filterString string, value interface{}) *Query {
 	}
 	// get the redisName based on the fieldName
 	if redisName, found := q.modelSpec.redisNameForFieldName(fieldName); !found {
-		msg := fmt.Sprintf("zoom: invalid fieldName in filterString.\nType %s has no field %s", q.modelSpec.modelType.String(), fieldName)
-		q.setErrorIfNone(errors.New(msg))
+		err := fmt.Errorf("zoom: invalid fieldName in filterString.\nType %s has no field %s", q.modelSpec.modelType.String(), fieldName)
+		q.setErrorIfNone(err)
 		return q
 	} else {
 		f.redisName = redisName
 	}
 	// get the indexType based on the fieldName
 	if indexType, found := q.modelSpec.indexTypeForField(fieldName); !found {
-		msg := fmt.Sprintf("zoom: filters are only allowed on indexed fields.\n%s.%s is not indexed.", q.modelSpec.modelType.String(), fieldName)
-		q.setErrorIfNone(errors.New(msg))
+		err := fmt.Errorf("zoom: filters are only allowed on indexed fields.\n%s.%s is not indexed.", q.modelSpec.modelType.String(), fieldName)
+		q.setErrorIfNone(err)
 		return q
 	} else {
 		f.indexType = indexType
@@ -293,8 +293,8 @@ func (q *Query) Filter(filterString string, value interface{}) *Query {
 		}
 	}
 	if valueType != fieldType {
-		msg := fmt.Sprintf("zoom: invalid value arg for Filter. Parsed type of value (%s) does not match type of field (%s).", valueType.String(), fieldType.String())
-		q.setErrorIfNone(errors.New(msg))
+		err := fmt.Errorf("zoom: invalid value arg for Filter. Parsed type of value (%s) does not match type of field (%s).", valueType.String(), fieldType.String())
+		q.setErrorIfNone(err)
 		return q
 	} else {
 		f.filterValue = valueVal
@@ -318,8 +318,8 @@ func (q *Query) filterById(operator string, value interface{}) *Query {
 	}
 	idVal := reflect.ValueOf(value)
 	if idVal.Kind() != reflect.String {
-		msg := fmt.Sprintf("zoom: for a Filter on Id field, value must be a string type. Was type %s", idVal.Kind().String())
-		q.setErrorIfNone(errors.New(msg))
+		err := fmt.Errorf("zoom: for a Filter on Id field, value must be a string type. Was type %s", idVal.Kind().String())
+		q.setErrorIfNone(err)
 		return q
 	}
 	f := filter{
@@ -375,17 +375,14 @@ func (q *Query) Scan(in interface{}) error {
 	// make sure we are dealing with the right type
 	typ := reflect.TypeOf(in).Elem()
 	if !(typ.Kind() == reflect.Slice) {
-		msg := fmt.Sprintf("zoom: Query.Scan requires a pointer to a slice or array as an argument. Got: %T", in)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: Query.Scan requires a pointer to a slice or array as an argument. Got: %T", in)
 	}
 	elemType := typ.Elem()
 	if !typeIsPointerToStruct(elemType) {
-		msg := fmt.Sprintf("zoom: Query.Scan requires a pointer to a slice of pointers to model structs. Got: %T", in)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: Query.Scan requires a pointer to a slice of pointers to model structs. Got: %T", in)
 	}
 	if elemType != q.modelSpec.modelType {
-		msg := fmt.Sprintf("zoom: argument for Query.Scan did not match the type corresponding to the model name given in the NewQuery constructor.\nExpected %T but got %T", reflect.SliceOf(q.modelSpec.modelType), in)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: argument for Query.Scan did not match the type corresponding to the model name given in the NewQuery constructor.\nExpected %T but got %T", reflect.SliceOf(q.modelSpec.modelType), in)
 	}
 
 	if err := q.sendIdData(); err != nil {
@@ -776,8 +773,7 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 					min, max = 1, 1
 				}
 			default:
-				msg := fmt.Sprintf("zoom: Filter operator out of range. Got: %d", f.filterType)
-				return errors.New(msg)
+				return fmt.Errorf("zoom: Filter operator out of range. Got: %d", f.filterType)
 			}
 			// execute command to get the ids
 			// TODO: try and do this inside of a transaction
@@ -858,8 +854,7 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 			}
 
 		default:
-			msg := fmt.Sprintf("zoom: cannot use filters on unindexed field %s for model name %s.", f.fieldName, q.modelSpec.modelName)
-			return errors.New(msg)
+			return fmt.Errorf("zoom: cannot use filters on unindexed field %s for model name %s.", f.fieldName, q.modelSpec.modelName)
 		}
 	}
 	return nil

@@ -9,7 +9,6 @@ package zoom
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -191,8 +190,8 @@ func convertNumericToFloat64(val reflect.Value) (float64, error) {
 	case reflect.Float32, reflect.Float64:
 		return val.Float(), nil
 	default:
-		msg := fmt.Sprintf("zoom: attempt to call convertNumericToFloat64 on non-numeric type %s", val.Type().String())
-		return 0.0, errors.New(msg)
+		err := fmt.Errorf("zoom: attempt to call convertNumericToFloat64 on non-numeric type %s", val.Type().String())
+		return 0.0, err
 	}
 }
 
