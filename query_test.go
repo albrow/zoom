@@ -191,11 +191,9 @@ func TestQueryDoubleFilters(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	// create models which we will try to filter
-	// we create two with each letter of the alphabet so
-	// we can test what happens when there are multiple models
-	// with the same letter (the same String value)
-	models, err := createFullModels(26 * 2)
+	// create enough models so that there are some
+	// collisions
+	models, err := createFullModels(100)
 	if err != nil {
 		t.Error(err)
 		t.FailNow()
@@ -287,7 +285,7 @@ func TestQueryCombos(t *testing.T) {
 // create a number of models with all fields filled out.
 // we will use these to test a lot of different queries.
 // on each iteration from i=0 to num-1 a model is created with:
-// 		- numeric fields set to i (typecasted if needed)
+// 	- numeric fields set to i (typecasted if needed)
 //		- bool field set to true if i%2 = 0 and false otherwise
 //		- string field set to the value at index i%26 from a slice of all lowercase letters a-z
 //			(i.e. i=0 corresponds to a, i=26 corresponds to z, and i=27 corresponds to a)
