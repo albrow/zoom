@@ -187,6 +187,42 @@ func TestQueryFilterAlpha(t *testing.T) {
 	}
 }
 
+func TestQueryDoubleFilters(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to filter
+	// we create two with each letter of the alphabet so
+	// we can test what happens when there are multiple models
+	// with the same letter (the same String value)
+	models, err := createFullModels(26 * 2)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// create some test queries to filter the models
+	fieldNames := []string{"Int", "Bool", "String"}
+	filterValues := []interface{}{5, true, "k"}
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for i, f1 := range fieldNames {
+		v1 := filterValues[i]
+		for j, f2 := range fieldNames {
+			v2 := filterValues[j]
+			for _, o1 := range operators {
+				for _, o2 := range operators {
+					if f1 == f2 && o1 == o2 {
+						// no sense in doing the same filter twice
+						continue
+					}
+					q := NewQuery("indexedPrimativesModel").Filter(f1+" "+o1, v1).Filter(f2+" "+o2, v2)
+					testQuery(t, q, models)
+				}
+			}
+		}
+	}
+}
+
 func TestQueryLimitAndOffset(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
