@@ -46,11 +46,6 @@ func GetConn() redis.Conn {
 // will fallback to their default values. Init should be called once during
 // application startup.
 func Init(passedConfig *Configuration) {
-	// compile all the model specs
-	if err := compileModelSpecs(); err != nil {
-		panic(err)
-	}
-
 	config := getConfiguration(passedConfig)
 	pool = &redis.Pool{
 		MaxIdle:     10,
