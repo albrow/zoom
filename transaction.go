@@ -13,10 +13,7 @@ import (
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"reflect"
-	"sync"
 )
-
-var transactionMutex *sync.Mutex = &sync.Mutex{}
 
 type transaction struct {
 	conn       redis.Conn
@@ -83,16 +80,6 @@ func (t *transaction) command(cmd string, args []interface{}, handler func(inter
 }
 
 func (t *transaction) exec() error {
-	transactionMutex.Lock()
-	defer transactionMutex.Unlock()
-	if err := t.execNow(); err != nil {
-		return err
-	} else {
-		return nil
-	}
-}
-
-func (t *transaction) execNow() error {
 	defer t.discard()
 
 	// execute any of the waiting functions if they are ready before any commands
