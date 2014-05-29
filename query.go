@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -400,10 +401,74 @@ func (q *Query) Scan(in interface{}) error {
 // error that occured during the lifetime of the query object (if any).
 // Otherwise, the second return value will be nil.
 func (q *Query) Count() (int, error) {
-	if ids, err := q.IdsOnly(); err != nil {
-		return 0, err
+	if len(q.filters) != 0 {
+		if ids, err := q.IdsOnly(); err != nil {
+			return 0, err
+		} else {
+			return len(ids), nil
+		}
+	}
+	if q.err != nil {
+		return 0, q.err
+	}
+
+	conn := GetConn()
+	defer conn.Close()
+
+	args := redis.Args{}
+	var command string
+	if q.order.fieldName == "" {
+		// without ordering
+		if q.offset != 0 {
+			return 0, errors.New("zoom: offset cannot be applied to queries without an order.")
+		}
+		command = "SCARD"
+		indexKey := q.modelSpec.modelName + ":all"
+		args = args.Add(indexKey)
+		count, err := redis.Int(conn.Do("SCARD", args...))
+		if err != nil {
+			return 0, err
+		}
+		if q.limit == 0 {
+			// limit of 0 is the same as unlimited
+			return count, nil
+		} else {
+			limitInt := int(q.limit)
+			if count > limitInt {
+				return limitInt, nil
+			} else {
+				return count, nil
+			}
+		}
 	} else {
-		return len(ids), nil
+		// with ordering
+		// this is a little more complicated
+		command = "ZCARD"
+		indexKey := q.modelSpec.modelName + ":" + q.order.redisName
+		args = args.Add(indexKey)
+		count, err := redis.Int(conn.Do(command, args...))
+		if err != nil {
+			return 0, err
+		}
+		if q.limit == 0 && q.offset == 0 {
+			// simple case (no limit, no offset)
+			return count, nil
+		} else {
+			// we need to take limit and offset into account
+			// in order to return the correct number of models which
+			// would have been returned by running the query
+			if q.offset > uint(count) {
+				// special case for offset > count
+				return 0, nil
+			} else if q.limit == 0 {
+				// special case if limit = 0 (really means unlimited)
+				return count - int(q.offset), nil
+			} else {
+				// holy type coercion, batman!
+				// it's ugly but it works
+				return int(math.Min(float64(count-int(q.offset)), float64(q.limit))), nil
+			}
+		}
 	}
 }
 
