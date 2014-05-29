@@ -146,7 +146,7 @@ type indexedPrimativesModel struct {
 	Float64 float64 `zoom:"index" json:"-"`
 	Byte    byte    `zoom:"index" json:"-"`
 	Rune    rune    `zoom:"index" json:"-"`
-	String  string  `zoom:"index" json:"-"`
+	String  string  `zoom:"index"`
 	Bool    bool    `zoom:"index"`
 	DefaultData
 }
@@ -550,12 +550,12 @@ func compareModels(expected, got *indexedPrimativesModel) (bool, []string) {
 	}
 	if expected.Byte != got.Byte {
 		eql = false
-		msg := fmt.Sprintf("Byte was incorrect. Expected: %s but got: %s\n", expected.Byte, got.Byte)
+		msg := fmt.Sprintf("Byte was incorrect. Expected: %v but got: %v\n", expected.Byte, got.Byte)
 		msgs = append(msgs, msg)
 	}
 	if expected.Rune != got.Rune {
 		eql = false
-		msg := fmt.Sprintf("Rune was incorrect. Expected: %s but got: %s\n", expected.Rune, got.Rune)
+		msg := fmt.Sprintf("Rune was incorrect. Expected: %v but got: %v\n", expected.Rune, got.Rune)
 		msgs = append(msgs, msg)
 	}
 	if expected.String != got.String {

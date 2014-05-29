@@ -282,6 +282,32 @@ func TestQueryCombos(t *testing.T) {
 	}
 }
 
+func TestQueryIncludeExclude(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createFullModels(2)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	fields := [][]string{
+		[]string{"Int", "Bool"},
+		[]string{},
+		[]string{"Uint", "Uint8", "Uint16", "Uint32", "Uint64", "Int", "Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "Byte", "Rune", "String", "Bool"},
+	}
+
+	for _, fs := range fields {
+		q := NewQuery("indexedPrimativesModel")
+		q.Include(fs...)
+		testQuery(t, q, models)
+		q = NewQuery("indexedPrimativesModel")
+		q.Exclude(fs...)
+		testQuery(t, q, models)
+	}
+}
+
 // create a number of models with all fields filled out.
 // we will use these to test a lot of different queries.
 // on each iteration from i=0 to num-1 a model is created with:
@@ -465,10 +491,12 @@ func expectedResultsForQuery(q *Query, models []*indexedPrimativesModel) ([]*ind
 		expected = orderedIntersectModels(fmodels, expected)
 	}
 
+	// apply order
 	if q.order.fieldName != "" && !modelsContainDuplicatesForField(expected, q.order.fieldName) {
 		expected = sortModels(expected, q.order.fieldName, q.order.orderType == descending)
 	}
 
+	// apply limit/offset
 	start := q.offset
 	var end uint
 	if q.limit == 0 {
@@ -476,7 +504,6 @@ func expectedResultsForQuery(q *Query, models []*indexedPrimativesModel) ([]*ind
 	} else {
 		end = start + q.limit
 	}
-
 	if int(start) > len(expected) {
 		expected = []*indexedPrimativesModel{}
 	} else if int(end) > len(expected) {
@@ -485,12 +512,19 @@ func expectedResultsForQuery(q *Query, models []*indexedPrimativesModel) ([]*ind
 		expected = expected[start:end]
 	}
 
+	// apply includes/excludes
+	if len(q.includes) > 0 {
+		expected = applyIncludes(expected, q.includes)
+	} else if len(q.excludes) > 0 {
+		expected = applyExcludes(expected, q.excludes)
+	}
+
 	return expected, nil
 }
 
 // filterModels returns only those models which pass the filter,
 // or an error, if there was one. It constructs a selector function
-// to pass to mapModels. It relies on reflection.
+// to pass to selectModels. It relies on reflection.
 func filterModels(models []*indexedPrimativesModel, fieldName string, fType filterType, fVal interface{}, iType indexType) ([]*indexedPrimativesModel, error) {
 	var s func(m *indexedPrimativesModel) (bool, error)
 
@@ -620,13 +654,13 @@ func filterModels(models []*indexedPrimativesModel, fieldName string, fType filt
 		}
 	}
 
-	return mapModels(models, s)
+	return selectModels(models, s)
 }
 
-// mapModels returns only those models which return true
+// selectModels returns only those models which return true
 // when passed through the selector function or an error,
 // if there was one.
-func mapModels(models []*indexedPrimativesModel, selector func(*indexedPrimativesModel) (bool, error)) ([]*indexedPrimativesModel, error) {
+func selectModels(models []*indexedPrimativesModel, selector func(*indexedPrimativesModel) (bool, error)) ([]*indexedPrimativesModel, error) {
 	results := make([]*indexedPrimativesModel, 0)
 	for _, m := range models {
 		if match, err := selector(m); err != nil {
@@ -636,6 +670,48 @@ func mapModels(models []*indexedPrimativesModel, selector func(*indexedPrimative
 		}
 	}
 	return results, nil
+}
+
+// applies includes to all models and returns a copy. The original slice is left intact.
+func applyIncludes(models []*indexedPrimativesModel, includes []string) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, 0)
+	for _, m := range models {
+		result := &indexedPrimativesModel{}
+		results = append(results, result)
+		resVal := reflect.ValueOf(result).Elem()
+		origVal := reflect.ValueOf(m).Elem()
+		for i := 0; i < origVal.NumField(); i++ {
+			fieldType := origVal.Type().Field(i)
+			if fieldType.Name == "DefaultData" {
+				resVal.Field(i).Set(origVal.Field(i))
+			}
+			if stringSliceContains(fieldType.Name, includes) {
+				resVal.Field(i).Set(origVal.Field(i))
+			}
+		}
+	}
+	return results
+}
+
+// applies excludes to all models and returns a copy. The original slice is left intact.
+func applyExcludes(models []*indexedPrimativesModel, excludes []string) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, 0)
+	for _, m := range models {
+		result := &indexedPrimativesModel{}
+		results = append(results, result)
+		resVal := reflect.ValueOf(result).Elem()
+		origVal := reflect.ValueOf(m).Elem()
+		for i := 0; i < origVal.NumField(); i++ {
+			fieldType := origVal.Type().Field(i)
+			if fieldType.Name == "DefaultData" {
+				resVal.Field(i).Set(origVal.Field(i))
+			}
+			if !stringSliceContains(fieldType.Name, excludes) {
+				resVal.Field(i).Set(origVal.Field(i))
+			}
+		}
+	}
+	return results
 }
 
 // Test our internal model filter with numeric type indexes
