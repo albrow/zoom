@@ -597,25 +597,25 @@ func filterModels(models []*indexedPrimativesModel, fieldName string, fType filt
 			s = func(m *indexedPrimativesModel) (bool, error) {
 				fieldString := reflect.ValueOf(m).Elem().FieldByName(fieldName).String()
 				valueString := reflect.ValueOf(fVal).String()
-				return fieldString[0] > valueString[0], nil
+				return fieldString > valueString, nil
 			}
 		case less:
 			s = func(m *indexedPrimativesModel) (bool, error) {
 				fieldString := reflect.ValueOf(m).Elem().FieldByName(fieldName).String()
 				valueString := reflect.ValueOf(fVal).String()
-				return fieldString[0] < valueString[0], nil
+				return fieldString < valueString, nil
 			}
 		case greaterOrEqual:
 			s = func(m *indexedPrimativesModel) (bool, error) {
 				fieldString := reflect.ValueOf(m).Elem().FieldByName(fieldName).String()
 				valueString := reflect.ValueOf(fVal).String()
-				return fieldString[0] >= valueString[0], nil
+				return fieldString >= valueString, nil
 			}
 		case lessOrEqual:
 			s = func(m *indexedPrimativesModel) (bool, error) {
 				fieldString := reflect.ValueOf(m).Elem().FieldByName(fieldName).String()
 				valueString := reflect.ValueOf(fVal).String()
-				return fieldString[0] <= valueString[0], nil
+				return fieldString <= valueString, nil
 			}
 		}
 	}
