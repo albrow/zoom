@@ -8,35 +8,43 @@
 package zoom
 
 import (
-	"errors"
 	"fmt"
+	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"strconv"
 )
 
-func scanModel(bulk []interface{}, mr modelRef) error {
-	if len(bulk)%2 != 0 {
-		return errors.New("zoom: scanModel expects a list of key value pairs. len(bulk) must be even.")
-	}
-	for i := 0; i < len(bulk); i += 2 {
-		bytes, ok := bulk[i].([]byte)
-		if !ok {
-			return fmt.Errorf("zoom: could not convert bulk value %v of type %T to []byte\n", bulk[i], bulk[i])
+func scanModel(replies []interface{}, mr modelRef) error {
+	fieldNames := mr.modelSpec.mainHashFieldNames()
+	fmt.Println("fieldNames: ", fieldNames)
+	strings, _ := redis.Strings(reflect.ValueOf(replies).Interface(), nil)
+	fmt.Println("replies: ", strings)
+	for i, reply := range replies {
+		replyBytes, err := redis.Bytes(reply, nil)
+		if err != nil {
+			return err
+		} else if string(replyBytes) == "NULL" {
+			// skip null fields
+			fmt.Println("skipping")
+			continue
 		}
-		fieldName := string(bytes)
+		fmt.Println("not skipping")
+		fieldName := fieldNames[i]
+		fmt.Println("fieldName: ", fieldName)
+		fmt.Println(fieldName, string(replyBytes))
 		ms := mr.modelSpec
 		if _, found := ms.primatives[fieldName]; found {
-			if err := scanPrimativeVal(bulk[i+1], mr.value(fieldName)); err != nil {
+			if err := scanPrimativeVal(replyBytes, mr.value(fieldName)); err != nil {
 				return err
 			}
 		}
 		if _, found := ms.pointers[fieldName]; found {
-			if err := scanPointerVal(bulk[i+1], mr.value(fieldName)); err != nil {
+			if err := scanPointerVal(replyBytes, mr.value(fieldName)); err != nil {
 				return err
 			}
 		}
 		if _, found := ms.inconvertibles[fieldName]; found {
-			if err := scanInconvertibleVal(bulk[i+1], mr.value(fieldName)); err != nil {
+			if err := scanInconvertibleVal(replyBytes, mr.value(fieldName)); err != nil {
 				return err
 			}
 		}

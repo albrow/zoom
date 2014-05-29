@@ -32,63 +32,63 @@ type Model interface {
 type modelSpec struct {
 	modelType        reflect.Type
 	modelName        string
-	fieldNames       []string
-	primatives       map[string]primative     // primative types: int, float, string, etc.
-	pointers         map[string]pointer       // pointers to primative tyeps: *int, *float, *string, etc.
-	inconvertibles   map[string]inconvertible // types which cannot be directly converted. fallback to json/msgpack
-	sets             map[string]externalSet   // separate set entities
-	lists            map[string]externalList  // separate list entities
-	relationships    map[string]relationship  // pointers to structs of registered types
-	primativeIndexes map[string]primative     // indexes specified with the zoom:"index" tag on primative field types
-	pointerIndexes   map[string]pointer       // indexes specified with the zoom:"index" tag on pointer to primative field types
-	numKeys          int                      // number of keys which might be used to store the model (useful for determining whether the model was found)
+	fieldSpecs       []*fieldSpec
+	primatives       map[string]*fieldSpec // primative types: int, float, string, etc.
+	pointers         map[string]*fieldSpec // pointers to primative tyeps: *int, *float, *string, etc.
+	inconvertibles   map[string]*fieldSpec // types which cannot be directly converted. fallback to json/msgpack
+	sets             map[string]*fieldSpec // separate set entities
+	lists            map[string]*fieldSpec // separate list entities
+	relationships    map[string]*fieldSpec // pointers to structs of registered types
+	primativeIndexes map[string]*fieldSpec // indexes specified with the zoom:"index" tag on primative field types
+	pointerIndexes   map[string]*fieldSpec // indexes specified with the zoom:"index" tag on pointer to primative field types
+	numKeys          int                   // number of keys which might be used to store the model (useful for determining whether the model was found)
 	// TODO add external hashes
 }
 
-type primative struct {
-	redisName string
-	fieldName string
-	fieldType reflect.Type
-	indexType indexType
+func (ms modelSpec) fieldNames() []string {
+	result := []string{}
+	for _, fs := range ms.fieldSpecs {
+		result = append(result, fs.fieldName)
+	}
+	return result
 }
 
-type pointer struct {
-	redisName string
-	fieldName string
-	fieldType reflect.Type
-	elemType  reflect.Type
-	indexType indexType
+// returns only the fieldnames which are stored in the main redis hash
+// for the model
+func (ms modelSpec) mainHashFieldNames() []string {
+	result := []string{}
+	for _, fs := range ms.fieldSpecs {
+		switch fs.classification {
+		case primative, pointer, inconvertible, externalList, externalSet:
+			result = append(result, fs.fieldName)
+		}
+	}
+	return result
 }
 
-type inconvertible struct {
-	redisName string
-	fieldName string
-	fieldType reflect.Type
+type fieldSpec struct {
+	classification fieldClassification
+	redisName      string
+	fieldName      string
+	fieldType      reflect.Type
+	elemType       reflect.Type
+	indexType      indexType
+	relType        relationshipType
+	index          int
 }
 
-type externalSet struct {
-	redisName string
-	fieldName string
-	fieldType reflect.Type
-	elemType  reflect.Type
-}
+type fieldClassification int
 
-type externalList struct {
-	redisName string
-	fieldName string
-	fieldType reflect.Type
-	elemType  reflect.Type
-}
+const (
+	primative = iota
+	pointer
+	inconvertible
+	externalSet
+	externalList
+	relationship
+)
 
-type relationship struct {
-	redisName string
-	fieldName string
-	fieldType reflect.Type
-	elemType  reflect.Type
-	rType     relationType
-}
-
-type relationType int
+type relationshipType int
 
 const (
 	oneToOne = iota
@@ -104,9 +104,8 @@ const (
 )
 
 type modelRef struct {
-	model           Model
-	modelSpec       modelSpec
-	possibleKeyHits int
+	model     Model
+	modelSpec modelSpec
 }
 
 // maps a registered model type to a registered model name
@@ -122,15 +121,14 @@ func newModelSpec(name string, typ reflect.Type) modelSpec {
 	return modelSpec{
 		modelType:        typ,
 		modelName:        name,
-		fieldNames:       make([]string, 0),
-		primatives:       make(map[string]primative),
-		pointers:         make(map[string]pointer),
-		inconvertibles:   make(map[string]inconvertible),
-		sets:             make(map[string]externalSet),
-		lists:            make(map[string]externalList),
-		relationships:    make(map[string]relationship),
-		primativeIndexes: make(map[string]primative),
-		pointerIndexes:   make(map[string]pointer),
+		primatives:       make(map[string]*fieldSpec),
+		pointers:         make(map[string]*fieldSpec),
+		inconvertibles:   make(map[string]*fieldSpec),
+		sets:             make(map[string]*fieldSpec),
+		lists:            make(map[string]*fieldSpec),
+		relationships:    make(map[string]*fieldSpec),
+		primativeIndexes: make(map[string]*fieldSpec),
+		pointerIndexes:   make(map[string]*fieldSpec),
 	}
 }
 
@@ -143,7 +141,6 @@ func newModelRefFromModel(m Model) (modelRef, error) {
 		return mr, err
 	}
 	mr.modelSpec = modelSpecs[modelName]
-	mr.possibleKeyHits = mr.modelSpec.numKeys
 	return mr, nil
 }
 
@@ -160,7 +157,6 @@ func newModelRefFromInterface(in interface{}) (modelRef, error) {
 		return mr, err
 	}
 	mr.modelSpec = modelSpecs[modelName]
-	mr.possibleKeyHits = mr.modelSpec.numKeys
 	return mr, nil
 }
 
@@ -168,7 +164,6 @@ func newModelRefFromName(modelName string) (modelRef, error) {
 	mr := modelRef{
 		modelSpec: modelSpecs[modelName],
 	}
-	mr.possibleKeyHits = mr.modelSpec.numKeys
 	// create a new struct of the proper type
 	val := reflect.New(mr.modelSpec.modelType.Elem())
 	m, ok := val.Interface().(Model)
@@ -256,7 +251,8 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 		} else if redisName == "" {
 			redisName = field.Name
 		}
-		ms.fieldNames = append(ms.fieldNames, field.Name)
+		fs := &fieldSpec{fieldName: field.Name, redisName: redisName, fieldType: field.Type, index: i}
+		ms.fieldSpecs = append(ms.fieldSpecs, fs)
 		// parse additional options in the zoom tag (e.g. index)
 		zoomTag := tag.Get("zoom")
 		index := false
@@ -273,131 +269,91 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 		}
 		if typeIsPrimative(field.Type) {
 			// primative
-			p := primative{
-				redisName: redisName,
-				fieldName: field.Name,
-				fieldType: field.Type,
-			}
-			ms.primatives[field.Name] = p
+			fs.classification = primative
+			ms.primatives[field.Name] = fs
 			if index {
 				if typeIsNumeric(field.Type) {
-					p.indexType = indexNumeric
+					fs.indexType = indexNumeric
 				} else if typeIsString(field.Type) {
-					p.indexType = indexAlpha
+					fs.indexType = indexAlpha
 				} else if typeIsBool(field.Type) {
-					p.indexType = indexBoolean
+					fs.indexType = indexBoolean
 				} else {
 					return fmt.Errorf("zoom: Requested index on unsupported type %s\n", field.Type.String())
 				}
-				ms.primativeIndexes[field.Name] = p
+				ms.primativeIndexes[field.Name] = fs
 			}
 		} else if field.Type.Kind() == reflect.Ptr {
+			fs.elemType = field.Type.Elem()
 			if typeIsPrimative(field.Type.Elem()) {
 				// pointer to a primative
-				p := pointer{
-					redisName: redisName,
-					fieldName: field.Name,
-					fieldType: field.Type,
-					elemType:  field.Type.Elem(),
-				}
-				ms.pointers[field.Name] = p
+				fs.classification = pointer
+				ms.pointers[field.Name] = fs
 				if index {
 					if typeIsNumeric(field.Type.Elem()) {
-						p.indexType = indexNumeric
+						fs.indexType = indexNumeric
 					} else if typeIsString(field.Type.Elem()) {
-						p.indexType = indexAlpha
+						fs.indexType = indexAlpha
 					} else if typeIsBool(field.Type.Elem()) {
-						p.indexType = indexBoolean
+						fs.indexType = indexBoolean
 					} else {
 						return fmt.Errorf("zoom: Requested index on unsupported type %s\n", field.Type.Elem().String())
 					}
-					ms.pointerIndexes[field.Name] = p
+					ms.pointerIndexes[field.Name] = fs
 				}
 			} else if typeIsPointerToStruct(field.Type) {
 				if modelTypeIsRegistered(field.Type) {
 					// one-to-one relationship
-					ms.relationships[field.Name] = relationship{
-						redisName: redisName,
-						fieldName: field.Name,
-						fieldType: field.Type,
-						elemType:  field.Type.Elem(),
-						rType:     oneToOne,
-					}
+					fs.classification = relationship
+					fs.relType = oneToOne
+					ms.relationships[field.Name] = fs
 				} else {
 					// a pointer to a struct of unregistered type is incovertable
-					ms.addInconvertible(field, redisName)
+					fs.classification = inconvertible
+					ms.inconvertibles[field.Name] = fs
 				}
 			}
 		} else if typeIsSliceOrArray(field.Type) {
 			if typeIsPointerToStruct(field.Type.Elem()) {
 				if modelTypeIsRegistered(field.Type.Elem()) {
 					// one-to-many relationship
-					ms.relationships[field.Name] = relationship{
-						redisName: redisName,
-						fieldName: field.Name,
-						fieldType: field.Type,
-						elemType:  field.Type.Elem().Elem(),
-						rType:     oneToMany,
-					}
+					fs.classification = relationship
+					fs.relType = oneToMany
+					fs.elemType = field.Type.Elem().Elem()
+					ms.relationships[field.Name] = fs
 				} else {
 					// a slice or array of pointers to structs of unregistered type is incovertable
-					ms.addInconvertible(field, redisName)
+					fs.classification = inconvertible
+					ms.inconvertibles[field.Name] = fs
 				}
 			} else {
 				redisType := tag.Get("redisType")
 				if redisType == "list" {
-					l := externalList{
-						fieldName: field.Name,
-						redisName: redisName,
-						fieldType: field.Type,
-						elemType:  field.Type.Elem(),
-					}
-					ms.lists[field.Name] = l
+					fs.classification = externalList
+					fs.elemType = field.Type.Elem()
+					ms.lists[field.Name] = fs
 				} else if redisType == "set" {
-					s := externalSet{
-						fieldName: field.Name,
-						redisName: redisName,
-						fieldType: field.Type,
-						elemType:  field.Type.Elem(),
-					}
-					ms.sets[field.Name] = s
+					fs.classification = externalSet
+					fs.elemType = field.Type.Elem()
+					ms.sets[field.Name] = fs
 				} else if redisType == "" {
 					// if application did not specify it wanted an external list or external set, treat
 					// the array or slice as inconvertible. Later it will be encoded to a string format
 					// and written directly into the redis hash.
-					ms.addInconvertible(field, redisName)
+					fs.classification = inconvertible
+					ms.inconvertibles[field.Name] = fs
 				} else {
 					return fmt.Errorf("zoom: redisType tag for type %s was invalid.\nShould be either 'list' or 'set'.\nGot: %s", typ.String(), redisType)
 				}
 			}
 		} else {
 			// if we've reached here, the field type is inconvertible
-			ms.addInconvertible(field, redisName)
+			fs.classification = inconvertible
+			ms.inconvertibles[field.Name] = fs
 		}
 	}
 
-	// count up numKeys
-	ms.numKeys = 0
-	if len(ms.primatives) != 0 || len(ms.pointers) != 0 || len(ms.inconvertibles) != 0 {
-		// count 1 key for the main hash object
-		ms.numKeys += 1
-	}
-	// count 1 key for each external list
-	ms.numKeys += len(ms.lists)
-	// count 1 key for each external set
-	ms.numKeys += len(ms.lists)
-	// count 1 key for each relationship
-	ms.numKeys += len(ms.relationships)
-
 	return nil
-}
-
-func (ms *modelSpec) addInconvertible(field reflect.StructField, redisName string) {
-	ms.inconvertibles[field.Name] = inconvertible{
-		fieldName: field.Name,
-		redisName: redisName,
-		fieldType: field.Type,
-	}
 }
 
 // Unregister removes a model type from the list of registered types.
@@ -534,23 +490,29 @@ func (ms modelSpec) indexKey() string {
 func (mr modelRef) mainHashArgs() ([]interface{}, error) {
 	args := []interface{}{mr.key()}
 	ms := mr.modelSpec
-	for _, p := range ms.primatives {
-		args = append(args, p.redisName, mr.value(p.fieldName).Interface())
-	}
-	for _, p := range ms.pointers {
-		if !mr.value(p.fieldName).IsNil() {
-			args = append(args, p.redisName, mr.value(p.fieldName).Elem().Interface())
-		}
-	}
-	for _, inc := range ms.inconvertibles {
-		if !(mr.value(inc.fieldName).Type().Kind() == reflect.Ptr && mr.value(inc.fieldName).IsNil()) {
-			// TODO: account for the possibility of json, msgpack or custom fallbacks
-			valBytes, err := defaultMarshalerUnmarshaler.Marshal(mr.value(inc.fieldName).Interface())
-			if err != nil {
-				return args, err
+	for _, fs := range ms.fieldSpecs {
+		switch fs.classification {
+		case primative:
+			args = append(args, fs.redisName, mr.value(fs.fieldName).Interface())
+		case pointer:
+			if !mr.value(fs.fieldName).IsNil() {
+				args = append(args, fs.redisName, mr.value(fs.fieldName).Elem().Interface())
+			} else {
+				args = append(args, fs.redisName, "NULL")
 			}
-			args = append(args, inc.redisName, valBytes)
+		case inconvertible:
+			if mr.value(fs.fieldName).Type().Kind() == reflect.Ptr && mr.value(fs.fieldName).IsNil() {
+				args = append(args, fs.redisName, "NULL")
+			} else {
+				// TODO: account for the possibility of json, msgpack or custom fallbacks
+				valBytes, err := defaultMarshalerUnmarshaler.Marshal(mr.value(fs.fieldName).Interface())
+				if err != nil {
+					return args, err
+				}
+				args = append(args, fs.redisName, valBytes)
+			}
 		}
 	}
+	fmt.Println("args: ", args)
 	return args, nil
 }

@@ -216,7 +216,7 @@ func (q *Query) getIncludes() []string {
 	if len(q.includes) != 0 {
 		return q.includes
 	} else if len(q.excludes) != 0 {
-		results := q.modelSpec.fieldNames
+		results := q.modelSpec.fieldNames()
 		for _, name := range q.excludes {
 			results = removeElementFromStringSlice(results, name)
 		}
