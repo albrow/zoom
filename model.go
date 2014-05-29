@@ -513,6 +513,5 @@ func (mr modelRef) mainHashArgs() ([]interface{}, error) {
 			}
 		}
 	}
-	fmt.Println("args: ", args)
 	return args, nil
 }

@@ -16,22 +16,15 @@ import (
 
 func scanModel(replies []interface{}, mr modelRef) error {
 	fieldNames := mr.modelSpec.mainHashFieldNames()
-	fmt.Println("fieldNames: ", fieldNames)
-	strings, _ := redis.Strings(reflect.ValueOf(replies).Interface(), nil)
-	fmt.Println("replies: ", strings)
 	for i, reply := range replies {
 		replyBytes, err := redis.Bytes(reply, nil)
 		if err != nil {
 			return err
 		} else if string(replyBytes) == "NULL" {
 			// skip null fields
-			fmt.Println("skipping")
 			continue
 		}
-		fmt.Println("not skipping")
 		fieldName := fieldNames[i]
-		fmt.Println("fieldName: ", fieldName)
-		fmt.Println(fieldName, string(replyBytes))
 		ms := mr.modelSpec
 		if _, found := ms.primatives[fieldName]; found {
 			if err := scanPrimativeVal(replyBytes, mr.value(fieldName)); err != nil {
