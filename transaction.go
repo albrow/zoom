@@ -79,7 +79,7 @@ func (t *transaction) command(cmd string, args []interface{}, handler func(inter
 }
 
 func (t *transaction) exec() error {
-	defer t.discard()
+	defer t.conn.Close()
 
 	// execute any of the waiting functions if they are ready before any commands
 	// are run
@@ -88,27 +88,41 @@ func (t *transaction) exec() error {
 	}
 
 	for len(t.commands) > 0 {
-		// send all the pending commands at once using a redis transaction
-		t.conn.Send("MULTI")
-		for _, c := range t.commands {
-			if err := t.conn.Send(c.name, c.args...); err != nil {
+		if len(t.commands) == 1 {
+			// if there is only one command, no need to use MULTI/EXEC
+			c := t.commands[0]
+			reply, err := t.conn.Do(c.name, c.args...)
+			if err != nil {
 				return err
 			}
-		}
-
-		// invoke redis driver to execute the transaction
-		replies, err := redis.MultiBulk(t.conn.Do("EXEC"))
-		if err != nil {
-			t.discard()
-			return err
-		}
-
-		// iterate through the replies, calling the corresponding handler functions
-		for i, reply := range replies {
-			handler := t.handlers[i]
-			if handler != nil {
-				if err := handler(reply); err != nil {
+			if t.handlers[0] != nil {
+				if err := t.handlers[0](reply); err != nil {
 					return err
+				}
+			}
+		} else {
+			// send all the pending commands at once using MULTI/EXEC
+			t.conn.Send("MULTI")
+			for _, c := range t.commands {
+				if err := t.conn.Send(c.name, c.args...); err != nil {
+					return err
+				}
+			}
+
+			// invoke redis driver to execute the transaction
+			replies, err := redis.MultiBulk(t.conn.Do("EXEC"))
+			if err != nil {
+				t.discard()
+				return err
+			}
+
+			// iterate through the replies, calling the corresponding handler functions
+			for i, reply := range replies {
+				handler := t.handlers[i]
+				if handler != nil {
+					if err := handler(reply); err != nil {
+						return err
+					}
 				}
 			}
 		}
