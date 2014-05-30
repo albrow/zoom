@@ -8,7 +8,7 @@ A blazing-fast, lightweight ORM for Go built on Redis.
 Requires redis version >= 2.8.9 and Go version >= 1.0.
 
 Full documentation is available on
-[godoc.org](http://godoc.org/github.com/stephenalexbrowne/zoom).
+[godoc.org](http://godoc.org/github.com/albrow/zoom).
 
 **WARNING:** this isn't done yet and may change significantly before the official release. There is no
 promise of backwards compatibility until version 1.0. I do not advise using Zoom for production or
@@ -67,7 +67,7 @@ version of Redis is recommended.
 
 To install Zoom itself:
 
-    go get github.com/stephenalexbrowne/zoom
+    go get github.com/albrow/zoom
     
 This will pull the current master branch, which is (most likely) working but is quickly changing.
 
@@ -75,12 +75,12 @@ This will pull the current master branch, which is (most likely) working but is 
 Getting Started
 ---------------
 
-First, add github.com/stephenalexbrowne/zoom to your import statement:
+First, add github.com/albrow/zoom to your import statement:
 
 ``` go
 import (
     ...
-    github.com/stephenalexbrowne/zoom
+    github.com/albrow/zoom
 )
 ```
 
@@ -123,9 +123,7 @@ config := &zoom.Configuration {
 	Address: "/tmp/redis.sock",
 	Network: "unix",
 }
-if err := zoom.Init(config); err != nil {
-	// handle err
-}
+zoom.Init(config)
 ```
 
 
@@ -140,10 +138,12 @@ to the database. Here's an example of a Person model:
 
 ``` go
 type Person struct {
-    Name String
+    Name string
     zoom.DefaultData
 }
 ```
+
+Because of the way zoom uses reflection, all the fields you want to save need to be public.
 
 You must also call zoom.Register so that Zoom can spec out the different model types and the relations between them.
 You only need to do this once per type. For example, somewhere in your initialization sequence (e.g. in the main
@@ -278,6 +278,13 @@ of all the available modifiers:
 - Exclude
 - Filter
 
+You can run a query with one of the following query finishers:
+
+- Run
+- Scan
+- IdsOnly
+- Count
+
 Here's an example of a more complicated query using several modifiers:
 
 ``` go
@@ -285,8 +292,9 @@ q := zoom.NewQuery("Person").Order("-Name").Filter("Age >=", 25).Limit(10)
 result, err := q.Run()
 ```
 
-Full documentation on the different modifiers is available on
-[godoc.org](http://godoc.org/github.com/stephenalexbrowne/zoom).
+You can probably guess what each of these methods do, but full documentation
+on the different modifiers and finishers is available on
+[godoc.org](http://godoc.org/github.com/albrow/zoom).
 
 
 Relationships
@@ -458,9 +466,9 @@ go test .
 
 If everything passes, you should see something like:
 
-    ok  	github.com/stephenalexbrowne/zoom	0.355s
+    ok  	github.com/albrow/zoom	0.355s
     
-If any of the tests fail, please [open an issue](https://github.com/stephenalexbrowne/zoom/issues/new) and
+If any of the tests fail, please [open an issue](https://github.com/albrow/zoom/issues/new) and
 describe what happened.
 
 By default, tests and benchmarks will run on localhost:6379 and use database #9. You can change the address,
@@ -482,7 +490,7 @@ go test . -bench .
 You can use the same flags as above to change the network, address, and database used.
 
 You should see some runtimes for various operations. If you see an error or if the build fails, please
-[open an issue](https://github.com/stephenalexbrowne/zoom/issues/new).
+[open an issue](https://github.com/albrow/zoom/issues/new).
 
 Here are the results from my laptop (2.3GHz intel i7, 8GB ram) using a socket connection with Redis set
 to append-only mode:
@@ -520,7 +528,7 @@ one of the top priorities for this project.
 Example Usage
 -------------
 
-The [zoom_example repository](https://github.com/stephenalexbrowne/zoom_example) is an
+The [zoom_example repository](https://github.com/albrow/zoom_example) is an
 example of how to use Zoom in a json/rest application. NOTE: currently the example
 repository uses Zoom v0.3.3 and may not be compatible with the newest version.
 
@@ -530,7 +538,7 @@ TODO
 
 Ordered generally by priority, here's what I'm working on:
 
-- Fix bugs and improve general durability
+- Improve performance and get as close as possible to raw redis
 - Add more benchmarks
 - Add godoc compatible examples in the test files
 - Support AND and OR operators on Filters
