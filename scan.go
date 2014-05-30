@@ -8,36 +8,36 @@
 package zoom
 
 import (
-	"errors"
 	"fmt"
+	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"strconv"
 )
 
-func scanModel(bulk []interface{}, mr modelRef) error {
-	if len(bulk)%2 != 0 {
-		return errors.New("zoom: scanModel expects a list of key value pairs. len(bulk) must be even.")
-	}
-	for i := 0; i < len(bulk); i += 2 {
-		bytes, ok := bulk[i].([]byte)
-		if !ok {
-			msg := fmt.Sprintf("zoom: could not convert bulk value %v of type %T to []byte\n", bulk[i], bulk[i])
-			return errors.New(msg)
+func scanModel(replies []interface{}, mr modelRef) error {
+	fieldNames := mr.modelSpec.mainHashFieldNames()
+	for i, reply := range replies {
+		replyBytes, err := redis.Bytes(reply, nil)
+		if err != nil {
+			return err
+		} else if string(replyBytes) == "NULL" {
+			// skip null fields
+			continue
 		}
-		fieldName := string(bytes)
+		fieldName := fieldNames[i]
 		ms := mr.modelSpec
 		if _, found := ms.primatives[fieldName]; found {
-			if err := scanPrimativeVal(bulk[i+1], mr.value(fieldName)); err != nil {
+			if err := scanPrimativeVal(replyBytes, mr.value(fieldName)); err != nil {
 				return err
 			}
 		}
 		if _, found := ms.pointers[fieldName]; found {
-			if err := scanPointerVal(bulk[i+1], mr.value(fieldName)); err != nil {
+			if err := scanPointerVal(replyBytes, mr.value(fieldName)); err != nil {
 				return err
 			}
 		}
 		if _, found := ms.inconvertibles[fieldName]; found {
-			if err := scanInconvertibleVal(bulk[i+1], mr.value(fieldName)); err != nil {
+			if err := scanInconvertibleVal(replyBytes, mr.value(fieldName)); err != nil {
 				return err
 			}
 		}
@@ -49,8 +49,7 @@ func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 	typ := dest.Type()
 	srcBytes, ok := src.([]byte)
 	if !ok {
-		msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: could not convert %v of type %T to []byte.\n", src, src)
 	}
 	if len(srcBytes) == 0 {
 		return nil // skip blanks
@@ -65,8 +64,7 @@ func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 			// slice or array of bytes
 			dest.SetBytes(srcBytes)
 		default:
-			msg := fmt.Sprintf("zoom: don't know how to scan primative type: %T.\n", src)
-			return errors.New(msg)
+			return fmt.Errorf("zoom: don't know how to scan primative type: %T.\n", src)
 		}
 	} else if typeIsNumeric(typ) {
 		srcString := string(srcBytes)
@@ -75,41 +73,35 @@ func scanPrimativeVal(src interface{}, dest reflect.Value) error {
 			// float types
 			srcFloat, err := strconv.ParseFloat(srcString, 64)
 			if err != nil {
-				msg := fmt.Sprintf("zoom: could not convert %s to float.\n", srcString)
-				return errors.New(msg)
+				return fmt.Errorf("zoom: could not convert %s to float.\n", srcString)
 			}
 			dest.SetFloat(srcFloat)
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 			// int types
 			srcInt, err := strconv.ParseInt(srcString, 10, 0)
 			if err != nil {
-				msg := fmt.Sprintf("zoom: could not convert %s to int.\n", srcString)
-				return errors.New(msg)
+				return fmt.Errorf("zoom: could not convert %s to int.\n", srcString)
 			}
 			dest.SetInt(srcInt)
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 			// uint types
 			srcUint, err := strconv.ParseUint(srcString, 10, 0)
 			if err != nil {
-				msg := fmt.Sprintf("zoom: could not convert %s to uint.\n", srcString)
-				return errors.New(msg)
+				return fmt.Errorf("zoom: could not convert %s to uint.\n", srcString)
 			}
 			dest.SetUint(srcUint)
 		default:
-			msg := fmt.Sprintf("zoom: don't know how to scan primative type: %T.\n", src)
-			return errors.New(msg)
+			return fmt.Errorf("zoom: don't know how to scan primative type: %T.\n", src)
 		}
 	} else if typeIsBool(typ) {
 		srcString := string(srcBytes)
 		srcBool, err := strconv.ParseBool(srcString)
 		if err != nil {
-			msg := fmt.Sprintf("zoom: could not convert %s to bool.\n", srcString)
-			return errors.New(msg)
+			return fmt.Errorf("zoom: could not convert %s to bool.\n", srcString)
 		}
 		dest.SetBool(srcBool)
 	} else {
-		msg := fmt.Sprintf("zoom: don't know how to scan primative type: %T.\n", src)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: don't know how to scan primative type: %T.\n", src)
 	}
 	return nil
 }
@@ -122,8 +114,7 @@ func scanPointerVal(src interface{}, dest reflect.Value) error {
 func scanInconvertibleVal(src interface{}, dest reflect.Value) error {
 	srcBytes, ok := src.([]byte)
 	if !ok {
-		msg := fmt.Sprintf("zoom: could not convert %v of type %T to []byte.\n", src, src)
-		return errors.New(msg)
+		return fmt.Errorf("zoom: could not convert %v of type %T to []byte.\n", src, src)
 	}
 	if len(srcBytes) == 0 {
 		return nil // skip blanks

@@ -53,34 +53,58 @@ func TestInconvertibleTypes(t *testing.T) {
 	// make sure the copy equals the original
 	equal := true
 	equal = equal && (m.Complex == mCopy.Complex)
-	for i, mInt := range m.IntSlice {
-		mCopyInt := mCopy.IntSlice[i]
-		equal = equal && (mInt == mCopyInt)
-	}
-	for i, mString := range m.StringSlice {
-		mCopyString := mCopy.StringSlice[i]
-		equal = equal && (mString == mCopyString)
-	}
-	for i, mInt := range m.IntArray {
-		mCopyInt := mCopy.IntArray[i]
-		equal = equal && (mInt == mCopyInt)
-	}
-	for i, mString := range m.StringArray {
-		mCopyString := mCopy.StringArray[i]
-		equal = equal && (mString == mCopyString)
-	}
-	for mKey, mValue := range m.StringMap {
-		if mCopyValue, found := mCopy.StringMap[mKey]; !found {
-			equal = false
-		} else {
-			equal = equal && (mValue == mCopyValue)
+	if len(m.IntSlice) != len(mCopy.IntSlice) {
+		equal = false
+	} else {
+		for i, mInt := range m.IntSlice {
+			mCopyInt := mCopy.IntSlice[i]
+			equal = equal && (mInt == mCopyInt)
 		}
 	}
-	for mKey, mValue := range m.IntMap {
-		if mCopyValue, found := mCopy.IntMap[mKey]; !found {
-			equal = false
-		} else {
-			equal = equal && (mValue == mCopyValue)
+	if len(m.StringSlice) != len(mCopy.StringSlice) {
+		equal = false
+	} else {
+		for i, mString := range m.StringSlice {
+			mCopyString := mCopy.StringSlice[i]
+			equal = equal && (mString == mCopyString)
+		}
+	}
+	if len(m.IntArray) != len(mCopy.IntArray) {
+		equal = false
+	} else {
+		for i, mInt := range m.IntArray {
+			mCopyInt := mCopy.IntArray[i]
+			equal = equal && (mInt == mCopyInt)
+		}
+	}
+	if len(m.StringArray) != len(mCopy.StringArray) {
+		equal = false
+	} else {
+		for i, mString := range m.StringArray {
+			mCopyString := mCopy.StringArray[i]
+			equal = equal && (mString == mCopyString)
+		}
+	}
+	if len(m.StringMap) != len(mCopy.StringMap) {
+		equal = false
+	} else {
+		for mKey, mValue := range m.StringMap {
+			if mCopyValue, found := mCopy.StringMap[mKey]; !found {
+				equal = false
+			} else {
+				equal = equal && (mValue == mCopyValue)
+			}
+		}
+	}
+	if len(m.IntMap) != len(mCopy.IntMap) {
+		equal = false
+	} else {
+		for mKey, mValue := range m.IntMap {
+			if mCopyValue, found := mCopy.IntMap[mKey]; !found {
+				equal = false
+			} else {
+				equal = equal && (mValue == mCopyValue)
+			}
 		}
 	}
 	if !equal {

@@ -9,7 +9,6 @@ package zoom
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -191,8 +190,8 @@ func convertNumericToFloat64(val reflect.Value) (float64, error) {
 	case reflect.Float32, reflect.Float64:
 		return val.Float(), nil
 	default:
-		msg := fmt.Sprintf("zoom: attempt to call convertNumericToFloat64 on non-numeric type %s", val.Type().String())
-		return 0.0, errors.New(msg)
+		err := fmt.Errorf("zoom: attempt to call convertNumericToFloat64 on non-numeric type %s", val.Type().String())
+		return 0.0, err
 	}
 }
 
@@ -200,6 +199,53 @@ func modelIds(ms []Model) []string {
 	results := make([]string, len(ms))
 	for i, m := range ms {
 		results[i] = m.GetId()
+	}
+	return results
+}
+
+// converts a bool to an int using the following rule:
+// false = 0
+// true = 1
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	} else {
+		return 0
+	}
+}
+
+// intersects two string slices. The order will be preserved
+// with respect to the first slice. (The first slice is used
+// in the outer loop). The return value is a copy, so neither
+// the first or second slice will be mutated.
+func orderedIntersectStrings(first []string, second []string) []string {
+	results := make([]string, 0)
+	memo := make(map[string]struct{})
+	for _, a := range second {
+		memo[a] = struct{}{}
+	}
+	for _, a := range first {
+		if _, found := memo[a]; found {
+			results = append(results, a)
+		}
+	}
+	return results
+}
+
+// intersects two model slices. The order will be preserved
+// with respect to the first slice. (The first slice is used
+// in the outer loop). The return value is a copy, so neither
+// the first or second slice will be mutated.
+func orderedIntersectModels(first []*indexedPrimativesModel, second []*indexedPrimativesModel) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, 0)
+	memo := make(map[*indexedPrimativesModel]struct{})
+	for _, m := range second {
+		memo[m] = struct{}{}
+	}
+	for _, m := range first {
+		if _, found := memo[m]; found {
+			results = append(results, m)
+		}
 	}
 	return results
 }

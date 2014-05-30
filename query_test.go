@@ -7,97 +7,19 @@
 package zoom
 
 import (
+	"encoding/json"
+	"fmt"
+	"math/rand"
 	"reflect"
-	"strconv"
+	"sort"
 	"testing"
 )
 
-func TestQueryAllRun(t *testing.T) {
+func TestQueryAll(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	ms, err := newBasicModels(5)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
-	}
-	modelsMap := make(map[string]*basicModel)
-	for _, m := range ms {
-		modelsMap[m.Id] = m
-	}
-
-	results, err := NewQuery("basicModel").Run()
-	if err != nil {
-		t.Error(err)
-	}
-	gots := results.([]*basicModel)
-	if len(gots) != len(ms) {
-		t.Errorf("gots was not the right length.\nExpected: %d\nGot: %d\n", len(ms), len(gots))
-	}
-
-	for i, got := range gots {
-		if got.GetId() == "" {
-			t.Errorf("Got model has nil id on iteration %d", i)
-		}
-		expected, found := modelsMap[got.Id]
-		if !found {
-			t.Errorf("Got unexpected id: %s", got.Id)
-		}
-		if equal, err := looseEquals(expected, got); err != nil {
-			t.Error(err)
-		} else if !equal {
-			t.Errorf("Got model was not valid.\nExpected: %+v\nGot: %+v\n", expected, got)
-		}
-	}
-}
-
-func TestQueryAllScan(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := newBasicModels(5)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
-	}
-	modelsMap := make(map[string]*basicModel)
-	for _, m := range ms {
-		modelsMap[m.Id] = m
-	}
-
-	var gots []*basicModel
-	if err := NewQuery("basicModel").Scan(&gots); err != nil {
-		t.Error(err)
-	}
-	if len(gots) != len(ms) {
-		t.Errorf("gots was not the right length.\nExpected: %d\nGot: %d\n", len(ms), len(gots))
-	}
-
-	for i, got := range gots {
-		if got.GetId() == "" {
-			t.Errorf("Got model has nil id on iteration %d", i)
-		}
-		expected, found := modelsMap[got.Id]
-		if !found {
-			t.Errorf("Got unexpected id: %s", got.Id)
-		}
-		if equal, err := looseEquals(expected, got); err != nil {
-			t.Error(err)
-		} else if !equal {
-			t.Errorf("Got model was not valid.\nExpected: %+v\nGot: %+v\n", expected, got)
-		}
-	}
-}
-
-func TestQueryAllCount(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := newBasicModels(5)
+	ms, err := createFullModels(5)
 	if err != nil {
 		t.Error(err)
 	}
@@ -105,1153 +27,1407 @@ func TestQueryAllCount(t *testing.T) {
 		t.Error(err)
 	}
 
-	got, err := NewQuery("basicModel").Count()
-	if err != nil {
-		t.Error(err)
-	}
-
-	if got != 5 {
-		t.Errorf("Model count incorrect. Expected 5 but got %d\n", got)
-	}
+	q := NewQuery("indexedPrimativesModel")
+	testQuery(t, q, ms)
 }
 
-// Test all the corner cases for limits on unordered queries
-func TestQueryAllLimit(t *testing.T) {
+func TestQueryOrderNumeric(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	bms, err := newBasicModels(4)
+	// create models which we will try to sort
+	models, err := createFullModels(10)
 	if err != nil {
 		t.Error(err)
-	}
-	if err := MSave(Models(bms)); err != nil {
-		t.Error(err)
-	}
-	models := Models(bms)
-
-	limits := []uint{
-		0, 1, 2, 3, 4, 5,
-	}
-	expectedLengths := []int{
-		4, 1, 2, 3, 4, 4,
-	}
-	kCombinations := make(map[int][][]Model)
-	// 4 choose 1
-	kCombinations[1] = [][]Model{
-		[]Model{models[0]},
-		[]Model{models[1]},
-		[]Model{models[2]},
-		[]Model{models[3]},
-	}
-	// 4 choose 2
-	kCombinations[2] = [][]Model{
-		[]Model{models[0], models[1]},
-		[]Model{models[0], models[2]},
-		[]Model{models[0], models[3]},
-		[]Model{models[1], models[2]},
-		[]Model{models[1], models[3]},
-		[]Model{models[2], models[3]},
-	}
-	// 4 choose 3
-	kCombinations[3] = [][]Model{
-		[]Model{models[0], models[1], models[2]},
-		[]Model{models[0], models[1], models[3]},
-		[]Model{models[0], models[2], models[3]},
-		[]Model{models[1], models[2], models[3]},
-	}
-	// 4 choose 4
-	kCombinations[4] = [][]Model{
-		[]Model{models[0], models[1], models[2], models[3]},
+		t.FailNow()
 	}
 
-	for i, limit := range limits {
-		expectedLength := expectedLengths[i]
-		if expectedLength == len(models) {
-			q := NewQuery("basicModel").Limit(limit)
-			testQueryWithExpectedModels(t, q, models, false)
-		} else {
-			results, err := NewQuery("basicModel").Limit(limit).Run()
-			if err != nil {
-				t.Error(err)
+	// use reflection to get all the numeric field names for *indexedPrimativesModel
+	fieldNames := make([]string, 0)
+	typ := reflect.TypeOf(indexedPrimativesModel{})
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if !field.Anonymous {
+			if typeIsNumeric(field.Type) {
+				fieldNames = append(fieldNames, field.Name)
 			}
-			// We expect that at most N unique models will be returned, where
-			// N is the limit. Since the query is unordered, there is no definition
-			// of which N models zoom will return. So we have to check all possibilities
-			// of choosing N models from the slice of models. If one matches, then the
-			// test should pass. If none of the possible combinations match, it should fail
-			for _, expected := range kCombinations[int(limit)] {
-				if equal, _ := compareAsSet(expected, results); equal {
-					return
+		}
+	}
+
+	// create some test queries to sort the models by all possible numeric fields
+	for _, fieldName := range fieldNames {
+		q1 := NewQuery("indexedPrimativesModel").Order(fieldName)
+		testQuery(t, q1, models)
+		q2 := NewQuery("indexedPrimativesModel").Order("-" + fieldName)
+		testQuery(t, q2, models)
+	}
+}
+
+func TestQueryOrderBoolean(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to sort
+	models, err := createFullModels(10)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// create some test queries to sort the models
+	queries := []*Query{
+		NewQuery("indexedPrimativesModel").Order("Bool"),
+		NewQuery("indexedPrimativesModel").Order("-Bool"),
+	}
+	for _, q := range queries {
+		testQuery(t, q, models)
+	}
+}
+
+func TestQueryOrderAlpha(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to sort
+	models, err := createFullModels(10)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// create some test queries to sort the models
+	queries := []*Query{
+		NewQuery("indexedPrimativesModel").Order("String"),
+		NewQuery("indexedPrimativesModel").Order("-String"),
+	}
+
+	for _, q := range queries {
+		testQuery(t, q, models)
+	}
+}
+
+func TestQueryFilterNumeric(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to filter
+	models, err := createFullModels(10)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// use reflection to get all the numeric field names for *indexedPrimativesModel
+	fieldNames := make([]string, 0)
+	filterValues := make([]interface{}, 0)
+	typ := reflect.TypeOf(indexedPrimativesModel{})
+	for i := 0; i < typ.NumField(); i++ {
+		field := typ.Field(i)
+		if !field.Anonymous {
+			if typeIsNumeric(field.Type) {
+				fieldNames = append(fieldNames, field.Name)
+				fv := reflect.ValueOf(5).Convert(field.Type).Interface()
+				filterValues = append(filterValues, fv)
+			}
+		}
+	}
+
+	// create some test queries to filter the models using all possible numeric filters
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for i, fieldName := range fieldNames {
+		val := filterValues[i]
+		for _, op := range operators {
+			q := NewQuery("indexedPrimativesModel")
+			q.Filter(fieldName+" "+op, val)
+			testQuery(t, q, models)
+		}
+	}
+}
+
+func TestQueryFilterBoolean(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to filter
+	models, err := createFullModels(10)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// create some test queries to filter the models
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for _, op := range operators {
+		q1 := NewQuery("indexedPrimativesModel").Filter("Bool "+op, true)
+		testQuery(t, q1, models)
+		q2 := NewQuery("indexedPrimativesModel").Filter("Bool "+op, false)
+		testQuery(t, q2, models)
+	}
+}
+
+func TestQueryFilterAlpha(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to filter
+	// we create two with each letter of the alphabet so
+	// we can test what happens when there are multiple models
+	// with the same letter (the same String value)
+	models, err := createFullModels(26 * 2)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// create some test queries to filter the models
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for _, op := range operators {
+		q := NewQuery("indexedPrimativesModel").Filter("String "+op, "k")
+		testQuery(t, q, models)
+	}
+}
+
+func TestQueryDoubleFilters(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create enough models so that there are some
+	// collisions
+	models, err := createFullModels(100)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// create some test queries to filter the models
+	fieldNames := []string{"Int", "Bool", "String"}
+	filterValues := []interface{}{5, true, "k"}
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for i, f1 := range fieldNames {
+		v1 := filterValues[i]
+		for j, f2 := range fieldNames {
+			v2 := filterValues[j]
+			for _, o1 := range operators {
+				for _, o2 := range operators {
+					if f1 == f2 && o1 == o2 {
+						// no sense in doing the same filter twice
+						continue
+					}
+					q := NewQuery("indexedPrimativesModel").Filter(f1+" "+o1, v1).Filter(f2+" "+o2, v2)
+					testQuery(t, q, models)
 				}
 			}
-			// if we reached here, none of the possible combinations passed
-			t.Errorf("results were invalid on iteration %d\nExpected some combination of %d unique models\nGot: ", i, expectedLength, modelIds(Models(results)))
-		}
-	}
-
-}
-
-// Tests all the corner cases for counting with limits
-func TestQueryAllLimitCount(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	limits := []uint{
-		0, 2, 4,
-	}
-	expecteds := []int{
-		3, 2, 3,
-	}
-
-	ms, err := newBasicModels(3)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
-	}
-
-	for i, limit := range limits {
-		expected := expecteds[i]
-		got, err := NewQuery("basicModel").Limit(limit).Count()
-		if err != nil {
-			t.Error(err)
-		}
-
-		if got != expected {
-			t.Errorf("Model count incorrect on iteration %d. Expected %d but got %d\n", i, expected, got)
 		}
 	}
 }
 
-func TestQueryAllIdsOnly(t *testing.T) {
+func TestQueryLimitAndOffset(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	ms, err := newBasicModels(5)
+	models, err := createFullModels(10)
 	if err != nil {
 		t.Error(err)
-	}
-	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
+		t.FailNow()
 	}
 
-	gotIds, err := NewQuery("basicModel").IdsOnly()
-	if err != nil {
-		t.Error(err)
-	}
-	expectedIds := make([]string, 0)
-	for _, m := range ms {
-		expectedIds = append(expectedIds, m.Id)
-	}
-
-	if equal, msg := compareAsSet(expectedIds, gotIds); !equal {
-		t.Errorf("Ids were incorrect.\nExpected: %v\nGot: %v\n%s\n", expectedIds, gotIds, msg)
-	}
-}
-
-func TestQueryAllIncludes(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := newPrimativeTypesModels(1)
-	if err != nil {
-		t.Error(err)
-	}
-	m := ms[0]
-	if err := Save(m); err != nil {
-		t.Error(err)
-	}
-
-	mCopies := make([]*primativeTypesModel, 0)
-	if err := NewQuery("primativeTypesModel").Include("Int", "String").Scan(&mCopies); err != nil {
-		t.Error(err)
-	}
-	mCopy := mCopies[0]
-
-	// The Int and String fields, which were included, should be the same
-	if m.Int != mCopy.Int {
-		t.Errorf("Int field was incorrect.\nExpected: %d\nGot: %d\n", m.Int, mCopy.Int)
-	}
-	if m.String != mCopy.String {
-		t.Errorf("String field was incorrect.\nExpected: %d\nGot: %d\n", m.String, mCopy.String)
-	}
-
-	// The remaining fields in mCopy should be blank
-	if mCopy.Uint != 0 {
-		t.Errorf("Expected mCopy.Uint to be 0 but was %d", mCopy.Uint)
-	}
-	if mCopy.Uint8 != 0 {
-		t.Errorf("Expected mCopy.Uint8 to be 0 but was %d", mCopy.Uint8)
-	}
-	if mCopy.Uint16 != 0 {
-		t.Errorf("Expected mCopy.Uint16 to be 0 but was %d", mCopy.Uint16)
-	}
-	if mCopy.Uint32 != 0 {
-		t.Errorf("Expected mCopy.Uint32 to be 0 but was %d", mCopy.Uint32)
-	}
-	if mCopy.Uint64 != 0 {
-		t.Errorf("Expected mCopy.Uint64 to be 0 but was %d", mCopy.Uint64)
-	}
-	if mCopy.Int8 != 0 {
-		t.Errorf("Expected mCopy.Int8 to be 0 but was %d", mCopy.Int8)
-	}
-	if mCopy.Int16 != 0 {
-		t.Errorf("Expected mCopy.Int16 to be 0 but was %d", mCopy.Int16)
-	}
-	if mCopy.Int32 != 0 {
-		t.Errorf("Expected mCopy.Int32 to be 0 but was %d", mCopy.Int32)
-	}
-	if mCopy.Int64 != 0 {
-		t.Errorf("Expected mCopy.Int64 to be 0 but was %d", mCopy.Int64)
-	}
-	if mCopy.Float32 != 0.0 {
-		t.Errorf("Expected mCopy.Float32 to be 0 but was %1.1f", mCopy.Float32)
-	}
-	if mCopy.Float64 != 0.0 {
-		t.Errorf("Expected mCopy.Float64 to be 0 but was %1.1f", mCopy.Float64)
-	}
-	if mCopy.Byte != byte(0) {
-		t.Errorf("Expected mCopy.Byte to be 0 but was %d", mCopy.Byte)
-	}
-	if mCopy.Rune != rune(0) {
-		t.Errorf("Expected mCopy.Rune to be 0 but was %d", mCopy.Rune)
-	}
-	if mCopy.Bool != false {
-		t.Errorf("Expected mCopy.Bool to be false but was %t", mCopy.Bool)
-	}
-}
-
-func TestQueryAllExcludes(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := newPrimativeTypesModels(1)
-	if err != nil {
-		t.Error(err)
-	}
-	m := ms[0]
-	if err := Save(m); err != nil {
-		t.Error(err)
-	}
-
-	mCopies := make([]*primativeTypesModel, 0)
-	if err := NewQuery("primativeTypesModel").Exclude("Int", "String").Scan(&mCopies); err != nil {
-		t.Error(err)
-	}
-	mCopy := mCopies[0]
-
-	// The Int and String fields, which were excluded, should be blank.
-	if mCopy.Int != 0 {
-		t.Errorf("Expected mCopy.Int to be 0 but was %d", mCopy.Int)
-	}
-	if mCopy.String != "" {
-		t.Errorf("Expected mCopy.String to be '' but was %s", mCopy.String)
-	}
-
-	// The remaining fields in mCopy should be blank
-	if mCopy.Uint != m.Uint {
-		t.Errorf("mCopy.Uint was incorrect.\nExpected: %d\nGot: %d", m.Uint, mCopy.Uint)
-	}
-	if mCopy.Uint8 != m.Uint8 {
-		t.Errorf("mCopy.Uint8 was incorrect.\nExpected: %d\nGot: %d", m.Uint8, mCopy.Uint8)
-	}
-	if mCopy.Uint16 != m.Uint16 {
-		t.Errorf("mCopy.Uint16 was incorrect.\nExpected: %d\nGot: %d", m.Uint16, mCopy.Uint16)
-	}
-	if mCopy.Uint32 != m.Uint32 {
-		t.Errorf("mCopy.Uint32 was incorrect.\nExpected: %d\nGot: %d", m.Uint32, mCopy.Uint32)
-	}
-	if mCopy.Uint64 != m.Uint64 {
-		t.Errorf("mCopy.Uint64 was incorrect.\nExpected: %d\nGot: %d", m.Uint64, mCopy.Uint64)
-	}
-	if mCopy.Int8 != m.Int8 {
-		t.Errorf("mCopy.Int8 was incorrect.\nExpected: %d\nGot: %d", m.Int8, mCopy.Int8)
-	}
-	if mCopy.Int16 != m.Int16 {
-		t.Errorf("mCopy.Int16 was incorrect.\nExpected: %d\nGot: %d", m.Int16, mCopy.Int16)
-	}
-	if mCopy.Int32 != m.Int32 {
-		t.Errorf("mCopy.Int32 was incorrect.\nExpected: %d\nGot: %d", m.Int32, mCopy.Int32)
-	}
-	if mCopy.Int64 != m.Int64 {
-		t.Errorf("mCopy.Int64 was incorrect.\nExpected: %d\nGot: %d", m.Int64, mCopy.Int64)
-	}
-	if mCopy.Float32 != m.Float32 {
-		t.Errorf("mCopy.Float32 was incorrect.\nExpected: %1.1f\nGot: %1.1f\n", m.Float32, mCopy.Float32)
-	}
-	if mCopy.Float64 != m.Float64 {
-		t.Errorf("mCopy.Float64 was incorrect.\nExpected: %1.1f\nGot: %1.1f\n", m.Float64, mCopy.Float64)
-	}
-	if mCopy.Byte != m.Byte {
-		t.Errorf("mCopy.Byte was incorrect.\nExpected: %d\nGot: %d\n", m.Byte, mCopy.Byte)
-	}
-	if mCopy.Rune != m.Rune {
-		t.Errorf("mCopy.Rune was incorrect.\nExpected: %d\nGot: %d\n", m.Rune, mCopy.Rune)
-	}
-	if mCopy.Bool != m.Bool {
-		t.Errorf("mCopy.Bool was incorrect.\nExpected: %t\nGot: %t\n", m.Bool, mCopy.Bool)
-	}
-}
-
-func createOrderableNumericModels(num int) ([]*indexedPrimativesModel, error) {
-	ms := []*indexedPrimativesModel{}
-	for i := 0; i < num; i++ {
-		m := &indexedPrimativesModel{
-			Int: i,
-		}
-		ms = append(ms, m)
-	}
-
-	if err := MSave(Models(ms)); err != nil {
-		return ms, err
-	}
-	return ms, nil
-}
-
-func TestOrderNumericAsc(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	if ms, err := createOrderableNumericModels(5); err != nil {
-		t.Error(err)
-	} else {
-		q := NewQuery("indexedPrimativesModel").Order("Int")
-		testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
-	}
-}
-
-func TestOrderNumericDesc(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := createOrderableNumericModels(5)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// expected ids is reversed
-	expectedIds := make([]string, len(ms))
-	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
-	}
-
-	q := NewQuery("indexedPrimativesModel").Order("-Int")
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-}
-
-// only create 2 here. It's much easier to test
-func createOrderableBooleanModels() ([]*indexedPrimativesModel, error) {
-	ms := make([]*indexedPrimativesModel, 2)
-	ms[0] = &indexedPrimativesModel{
-		Bool: false,
-	}
-	ms[1] = &indexedPrimativesModel{
-		Bool: true,
-	}
-
-	if err := MSave(Models(ms)); err != nil {
-		return ms, err
-	}
-	return ms, nil
-}
-
-func TestOrderBooleanAsc(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	if ms, err := createOrderableBooleanModels(); err != nil {
-		t.Error(err)
-	} else {
-		q := NewQuery("indexedPrimativesModel").Order("Bool")
-		testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
-	}
-}
-
-func TestOrderBooleanDesc(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := createOrderableBooleanModels()
-	if err != nil {
-		t.Error(err)
-	}
-
-	// expected ids is reversed
-	expectedIds := make([]string, len(ms))
-	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
-	}
-
-	q := NewQuery("indexedPrimativesModel").Order("-Bool")
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-}
-
-// NOTE: numbers > 9 might not work the way you'd expect
-// From an alphanumeric perspective 123 < 2
-func createOrderableAlphaModels(num int) ([]*indexedPrimativesModel, error) {
-	ms := []*indexedPrimativesModel{}
-	for i := 0; i < num; i++ {
-		m := &indexedPrimativesModel{
-			String: strconv.Itoa(i),
-		}
-		ms = append(ms, m)
-	}
-
-	if err := MSave(Models(ms)); err != nil {
-		return ms, err
-	}
-	return ms, nil
-}
-
-func TestOrderAlphaAsc(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	if ms, err := createOrderableAlphaModels(5); err != nil {
-		t.Error(err)
-	} else {
-		q := NewQuery("indexedPrimativesModel").Order("String")
-		testQueryWithExpectedIds(t, q, modelIds(Models(ms)), true)
-	}
-}
-
-func TestOrderAlphaDesc(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := createOrderableAlphaModels(5)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// expected ids is reversed
-	expectedIds := make([]string, len(ms))
-	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
-	}
-
-	q := NewQuery("indexedPrimativesModel").Order("-String")
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-}
-
-func TestNumericOrderAscLimitOffset(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	testNumericOrderLimitOffset(t, ascending)
-}
-
-func TestNumericOrderDescLimitOffset(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	testNumericOrderLimitOffset(t, descending)
-}
-
-func testNumericOrderLimitOffset(t *testing.T, typ orderType) {
-	onms, err := createOrderableNumericModels(4)
-	if err != nil {
-		t.Error(err)
-	}
-	models := Models(onms)
-
-	limits := []uint{
-		0, 0, 0, 0, 1, 1, 1, 1, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
-	}
-	offsets := []uint{
-		0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5,
-	}
-	empty := Models([]*basicModel{})
-
-	if typ == descending {
-		// reverse models
-		for i, j := 0, len(models)-1; i <= j; i, j = i+1, j-1 {
-			models[i], models[j] = models[j], models[i]
+	limits := []uint{0, 1, 9, 10}
+	offsets := []uint{0, 1, 9, 10}
+	for _, l := range limits {
+		for _, o := range offsets {
+			q := NewQuery("indexedPrimativesModel").Order("Int").Limit(l).Offset(o)
+			testQuery(t, q, models)
 		}
 	}
-	expecteds := [][]Model{
-		models,
-		models[1:],
-		models[3:],
-		empty,
-		models[0:1],
-		models[1:2],
-		models[3:4],
-		empty,
-		models[0:3],
-		models[1:4],
-		models[3:4],
-		empty,
-		models,
-		models[1:4],
-		models[3:4],
-		empty,
-		models,
-		models[1:4],
-		models[3:4],
-		empty,
+}
+
+func TestQueryCombos(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createFullModels(50)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
 	}
 
-	for i, limit := range limits {
-		offset := offsets[i]
-		expected := expecteds[i]
-		var q *Query
-		if typ == ascending {
-			q = NewQuery("indexedPrimativesModel").Order("Int").Limit(limit).Offset(offset)
-		} else if typ == descending {
-			q = NewQuery("indexedPrimativesModel").Order("-Int").Limit(limit).Offset(offset)
-		}
-		if results, err := q.Run(); err != nil {
-			t.Error(err)
-		} else {
-			if len(expected) == 0 && len(Models(results)) == 0 {
-				continue
+	// use one numeric, one bool, and one string field
+	// fieldNames := []string{"Int", "Bool", "String"}
+	// filterValues := []interface{}{5, true, "k"}
+	// TODO: re-add string values when alpha implementation is fixed
+	fieldNames := []string{"Int", "Bool", "String"}
+	filterValues := []interface{}{5, true, "k"}
+	limits := []uint{0, 1, 5, 9, 10}
+	offsets := []uint{0, 1, 5, 9, 10}
+
+	// iterate and create queries for all possible combinations of filters and orders
+	// with the fields and values specified above
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for i, f1 := range fieldNames {
+		val := filterValues[i]
+		for _, op := range operators {
+			for _, f2 := range fieldNames {
+				for _, offset := range offsets {
+					for _, limit := range limits {
+						q := NewQuery("indexedPrimativesModel")
+						q.Filter(f1+" "+op, val).Order(f2).Limit(limit).Offset(offset)
+						testQuery(t, q, models)
+						q = NewQuery("indexedPrimativesModel")
+						q.Filter(f1+" "+op, val).Order("-" + f2).Limit(limit).Offset(offset)
+						testQuery(t, q, models)
+					}
+				}
 			}
-			if equal, err := looseEquals(expected, results); err != nil {
+		}
+	}
+}
+
+func TestQueryIncludeExclude(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createFullModels(2)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	fields := [][]string{
+		[]string{"Int", "Bool"},
+		[]string{},
+		[]string{"Uint", "Uint8", "Uint16", "Uint32", "Uint64", "Int", "Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "Byte", "Rune", "String", "Bool"},
+	}
+
+	for _, fs := range fields {
+		q := NewQuery("indexedPrimativesModel")
+		q.Include(fs...)
+		testQuery(t, q, models)
+		q = NewQuery("indexedPrimativesModel")
+		q.Exclude(fs...)
+		testQuery(t, q, models)
+	}
+}
+
+// create a number of models with all fields filled out.
+// we will use these to test a lot of different queries.
+// on each iteration from i=0 to num-1 a model is created with:
+// 	- numeric fields set to i (typecasted if needed)
+//		- bool field set to true if i%2 = 0 and false otherwise
+//		- string field set to the value at index i%26 from a slice of all lowercase letters a-z
+//			(i.e. i=0 corresponds to a, i=26 corresponds to z, and i=27 corresponds to a)
+func createFullModels(num int) ([]*indexedPrimativesModel, error) {
+	// alphabet holds every letter from a to z
+	alphabet := []string{}
+	for c := 'a'; c < 'z'+1; c++ {
+		alphabet = append(alphabet, string(c))
+	}
+	bools := []bool{true, false}
+
+	ms := []*indexedPrimativesModel{}
+	for i := 0; i < num; i++ {
+		m := &indexedPrimativesModel{
+			Uint:    uint(i),
+			Uint8:   uint8(i),
+			Uint16:  uint16(i),
+			Uint32:  uint32(i),
+			Uint64:  uint64(i),
+			Int:     i,
+			Int8:    int8(i),
+			Int16:   int16(i),
+			Int32:   int32(i),
+			Int64:   int64(i),
+			Float32: float32(i),
+			Float64: float64(i),
+			Byte:    byte(i),
+			Rune:    rune(i),
+			String:  alphabet[i%len(alphabet)],
+			Bool:    bools[i%len(bools)],
+		}
+		ms = append(ms, m)
+	}
+
+	// shuffle the order
+	for i := range ms {
+		j := rand.Intn(i + 1)
+		ms[i], ms[j] = ms[j], ms[i]
+	}
+
+	if err := MSave(Models(ms)); err != nil {
+		return ms, err
+	}
+	return ms, nil
+}
+
+// There's a huge amount of test cases to cover above.
+// Below is some code that makes it easier, but needs to be
+// tested itself. Testing for correctness using a brute force
+// approach (obviously slow compared to what Zoom is actually doing) is
+// fine because the tests in this file will typically use only a handful
+// of models. The brute force approach is also easier becuase you can apply
+// query modifiers independently, in any order. (Whereas behind the scenes
+// zoom actually does some clever optimization and changing any single paramater
+// or modifier of the query could completely change the command sent to Redis).
+// We're assuming that for most tests the indexedPrimativesModel
+// type will be used.
+
+// testQuery compares the results of the Query run by Zoom with the results
+// of a simpler implementation which doesn't touch the database. If the results match,
+// then the query was correct and the test will pass. Models should be an array of all
+// the models which are being queried against.
+func testQuery(t *testing.T, q *Query, models []*indexedPrimativesModel) {
+	expected, err := expectedResultsForQuery(q, models)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	stable := !modelsContainDuplicatesForField(models, q.order.fieldName)
+	testQueryScan(t, q, expected, stable)
+	testQueryIdsOnly(t, q, expected, stable)
+	testQueryCount(t, q, expected)
+}
+
+func testQueryScan(t *testing.T, q *Query, expected []*indexedPrimativesModel, stable bool) {
+	got := make([]*indexedPrimativesModel, 0)
+	if err := q.Scan(&got); err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	if q.order.fieldName != "" && !stable {
+		// since redis sorts are unstable, varying results from the query should
+		// all be considered correct. In this case, the best we can do is make sure
+		// that the length is rught and that the models were sorted correctly.
+		if len(expected) != len(got) {
+			t.Errorf("Length of results was not correct. Expected %d but got %d\n\tfor query %s", len(expected), len(got), q)
+			t.FailNow()
+		}
+
+		// check that the models are in the correct order (if applicable)
+		reverse := false
+		if q.order.orderType == descending {
+			reverse = true
+		}
+		if sorted, fields, err := modelsAreSortedByField(got, q.order.fieldName, reverse); err != nil {
+			t.Error(err)
+			t.FailNow()
+		} else if !sorted {
+			t.Errorf("models were not in the correct order. %v \n\tfor the query %s", fields, q)
+			t.FailNow()
+		}
+	} else {
+		// we can expect a stable sort since there are no duplicates. We can test
+		// the order of the models exactly.
+		orderMatters := false
+		if q.order.fieldName != "" {
+			orderMatters = true
+		}
+		match := compareModelSlices(t, expected, got, orderMatters)
+		if !match {
+			t.Errorf("\n\ttestQueryScan failed for query %s", q)
+			if eJS, err := json.Marshal(expected); err != nil {
 				t.Error(err)
-			} else if !equal {
-				t.Errorf("Fail on iteration %d\nLimit = %d, Offset = %d\nExpected: %v\nGot %v\n", i, limit, offset, modelIds(expected), modelIds(Models(results)))
+			} else {
+				t.Errorf("Expected JSON:\n\t%s", eJS)
+			}
+			if gJS, err := json.Marshal(got); err != nil {
+				t.Error(err)
+			} else {
+				t.Errorf("Got JSON:\n\t%s", gJS)
+			}
+			t.FailNow()
+		}
+	}
+}
+
+func testQueryCount(t *testing.T, q *Query, expectedModels []*indexedPrimativesModel) {
+	expected := len(expectedModels)
+	if got, err := q.Count(); err != nil {
+		t.Error(err)
+		t.FailNow()
+	} else if got != expected {
+		t.Errorf("testQueryCount failed for query %s. Expected %d but got %d.", q, expected, got)
+		t.FailNow()
+	}
+}
+
+func testQueryIdsOnly(t *testing.T, q *Query, expectedModels []*indexedPrimativesModel, stable bool) {
+	expected := modelIds(Models(expectedModels))
+	got, err := q.IdsOnly()
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	if stable {
+		// for queries with stable sorts we should expect an exact order
+		if q.order.fieldName == "" {
+			if match, msg := compareAsStringSet(expected, got); !match {
+				t.Errorf("%s\ntestQueryIdsOnly failed for query %s.", msg, q)
+				t.FailNow()
+			}
+		} else {
+			if !reflect.DeepEqual(expected, got) {
+				t.Errorf("testQueryIdsOnly failed for query %s.\nexpected %v but got %v", q, expected, got)
+				t.FailNow()
+			}
+		}
+	} else {
+		// for queries with unstable sorts, we can only check that the length is correct :(
+		if len(expected) != len(got) {
+			t.Errorf("testQueryIdsOnly failed for query %s.\nLengths did not match. Expected %s but got %s.", q, len(expected), len(got))
+		}
+	}
+}
+
+func expectedResultsForQuery(q *Query, models []*indexedPrimativesModel) ([]*indexedPrimativesModel, error) {
+	expected := make([]*indexedPrimativesModel, len(models))
+	copy(expected, models)
+
+	// apply filters
+	for _, f := range q.filters {
+		fmodels, err := filterModels(models, f.fieldName, f.filterType, f.filterValue.Interface(), f.indexType)
+		if err != nil {
+			return nil, err
+		}
+		expected = orderedIntersectModels(fmodels, expected)
+	}
+
+	// apply order
+	if q.order.fieldName != "" && !modelsContainDuplicatesForField(expected, q.order.fieldName) {
+		expected = sortModels(expected, q.order.fieldName, q.order.orderType == descending)
+	}
+
+	// apply limit/offset
+	start := q.offset
+	var end uint
+	if q.limit == 0 {
+		end = uint(len(expected))
+	} else {
+		end = start + q.limit
+	}
+	if int(start) > len(expected) {
+		expected = []*indexedPrimativesModel{}
+	} else if int(end) > len(expected) {
+		expected = expected[start:]
+	} else {
+		expected = expected[start:end]
+	}
+
+	// apply includes/excludes
+	if len(q.includes) > 0 {
+		expected = applyIncludes(expected, q.includes)
+	} else if len(q.excludes) > 0 {
+		expected = applyExcludes(expected, q.excludes)
+	}
+
+	return expected, nil
+}
+
+// filterModels returns only those models which pass the filter,
+// or an error, if there was one. It constructs a selector function
+// to pass to selectModels. It relies on reflection.
+func filterModels(models []*indexedPrimativesModel, fieldName string, fType filterType, fVal interface{}, iType indexType) ([]*indexedPrimativesModel, error) {
+	var s func(m *indexedPrimativesModel) (bool, error)
+
+	switch iType {
+
+	case indexNumeric:
+		switch fType {
+		case equal:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal == filterVal, nil
+			}
+		case notEqual:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal != filterVal, nil
+			}
+		case greater:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal > filterVal, nil
+			}
+		case less:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal < filterVal, nil
+			}
+		case greaterOrEqual:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal >= filterVal, nil
+			}
+		case lessOrEqual:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldVal := reflect.ValueOf(m).Elem().FieldByName(fieldName).Convert(reflect.TypeOf(0.0)).Float()
+				filterVal := reflect.ValueOf(fVal).Convert(reflect.TypeOf(0.0)).Float()
+				return fieldVal <= filterVal, nil
+			}
+		}
+
+	case indexBoolean:
+		switch fType {
+		case equal:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldBool := reflect.ValueOf(m).Elem().FieldByName(fieldName).Bool()
+				valueBool := reflect.ValueOf(fVal).Bool()
+				return fieldBool == valueBool, nil
+			}
+		case notEqual:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldBool := reflect.ValueOf(m).Elem().FieldByName(fieldName).Bool()
+				valueBool := reflect.ValueOf(fVal).Bool()
+				return fieldBool != valueBool, nil
+			}
+		case greater:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldBool := reflect.ValueOf(m).Elem().FieldByName(fieldName).Bool()
+				valueBool := reflect.ValueOf(fVal).Bool()
+				return boolToInt(fieldBool) > boolToInt(valueBool), nil
+			}
+		case less:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldBool := reflect.ValueOf(m).Elem().FieldByName(fieldName).Bool()
+				valueBool := reflect.ValueOf(fVal).Bool()
+				return boolToInt(fieldBool) < boolToInt(valueBool), nil
+			}
+		case greaterOrEqual:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldBool := reflect.ValueOf(m).Elem().FieldByName(fieldName).Bool()
+				valueBool := reflect.ValueOf(fVal).Bool()
+				return boolToInt(fieldBool) >= boolToInt(valueBool), nil
+			}
+		case lessOrEqual:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldBool := reflect.ValueOf(m).Elem().FieldByName(fieldName).Bool()
+				valueBool := reflect.ValueOf(fVal).Bool()
+				return boolToInt(fieldBool) <= boolToInt(valueBool), nil
+			}
+
+		}
+
+	// NOTE: this implementation only considers the first letter of the
+	// string! Makes it a lot easier to implement alphabetical sorting.
+	case indexAlpha:
+		switch fType {
+		case equal:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldString := reflect.ValueOf(m).Elem().FieldByName(fieldName).String()
+				valueString := reflect.ValueOf(fVal).String()
+				return fieldString == valueString, nil
+			}
+		case notEqual:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldString := reflect.ValueOf(m).Elem().FieldByName(fieldName).String()
+				valueString := reflect.ValueOf(fVal).String()
+				return fieldString != valueString, nil
+			}
+		case greater:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldString := reflect.ValueOf(m).Elem().FieldByName(fieldName).String()
+				valueString := reflect.ValueOf(fVal).String()
+				return fieldString > valueString, nil
+			}
+		case less:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldString := reflect.ValueOf(m).Elem().FieldByName(fieldName).String()
+				valueString := reflect.ValueOf(fVal).String()
+				return fieldString < valueString, nil
+			}
+		case greaterOrEqual:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldString := reflect.ValueOf(m).Elem().FieldByName(fieldName).String()
+				valueString := reflect.ValueOf(fVal).String()
+				return fieldString >= valueString, nil
+			}
+		case lessOrEqual:
+			s = func(m *indexedPrimativesModel) (bool, error) {
+				fieldString := reflect.ValueOf(m).Elem().FieldByName(fieldName).String()
+				valueString := reflect.ValueOf(fVal).String()
+				return fieldString <= valueString, nil
 			}
 		}
 	}
+
+	return selectModels(models, s)
 }
 
-func TestNumericOrderAscLimitOffsetCount(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	testNumericOrderLimitOffsetCount(t, ascending)
-}
-
-func TestNumericOrderDescLimitOffsetCount(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	testNumericOrderLimitOffsetCount(t, descending)
-}
-
-func TestFilterById(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := newBasicModels(2)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
-	}
-
-	q := NewQuery("basicModel").Filter("Id =", ms[0].Id)
-	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-}
-
-func TestNumericFilterEqual(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms := make([]*indexedPrimativesModel, 4)
-	ms[0] = &indexedPrimativesModel{Int: 0}
-	ms[1] = &indexedPrimativesModel{Int: 1}
-	ms[2] = &indexedPrimativesModel{Int: 2}
-	ms[3] = &indexedPrimativesModel{Int: 2}
-
-	// only save the first 3 models
-	if err := MSave(Models(ms[0:3])); err != nil {
-		t.Error(err)
-	}
-	// run some test queries
-	q := NewQuery("indexedPrimativesModel").Filter("Int =", 0)
-	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int =", 2)
-	testQueryWithExpectedModels(t, q, Models(ms[2:3]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int =", 3)
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int =", -1)
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// now save the 4th model
-	if err := Save(ms[3]); err != nil {
-		t.Error(err)
-	}
-	// now there should be two models with Int = 2
-	q = NewQuery("indexedPrimativesModel").Filter("Int =", 2)
-	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
-}
-
-func TestBooleanFilterEqual(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms := make([]*indexedPrimativesModel, 3)
-	ms[0] = &indexedPrimativesModel{Bool: false}
-	ms[1] = &indexedPrimativesModel{Bool: true}
-	ms[2] = &indexedPrimativesModel{Bool: true}
-
-	// save the first model
-	if err := Save(ms[0]); err != nil {
-		t.Error(err)
-	}
-	// run some test queries
-	q := NewQuery("indexedPrimativesModel").Filter("Bool =", true)
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// only save the 2nd model
-	if err := Save(ms[1]); err != nil {
-		t.Error(err)
-	}
-	// run some test queries
-	q = NewQuery("indexedPrimativesModel").Filter("Bool =", false)
-	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Bool =", true)
-	testQueryWithExpectedModels(t, q, Models(ms[1:2]), false)
-
-	// now save the 3rd model
-	if err := Save(ms[2]); err != nil {
-		t.Error(err)
-	}
-	// now there should be two models with Bool = true
-	q = NewQuery("indexedPrimativesModel").Filter("Bool =", true)
-	testQueryWithExpectedModels(t, q, Models(ms[1:3]), false)
-}
-
-func TestAlphaFilterEqual(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms := make([]*indexedPrimativesModel, 4)
-	ms[0] = &indexedPrimativesModel{String: "a"}
-	ms[1] = &indexedPrimativesModel{String: "b"}
-	ms[2] = &indexedPrimativesModel{String: "c"}
-	ms[3] = &indexedPrimativesModel{String: "c"}
-
-	// only save the first 3 models
-	if err := MSave(Models(ms[0:3])); err != nil {
-		t.Error(err)
-	}
-	// run some test queries
-	q := NewQuery("indexedPrimativesModel").Filter("String =", "a")
-	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String =", "c")
-	testQueryWithExpectedModels(t, q, Models(ms[2:3]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String =", "d")
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-	q = NewQuery("indexedPrimativesModel").Filter("String =", "å")
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// now save the 4th model
-	if err := Save(ms[3]); err != nil {
-		t.Error(err)
-	}
-	// now there should be two models with String = "c"
-	q = NewQuery("indexedPrimativesModel").Filter("String =", "c")
-	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
-}
-
-func TestNumericFilterNotEqual(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms := make([]*indexedPrimativesModel, 4)
-	ms[0] = &indexedPrimativesModel{Int: 0}
-	ms[1] = &indexedPrimativesModel{Int: 0}
-	ms[2] = &indexedPrimativesModel{Int: 2}
-	ms[3] = &indexedPrimativesModel{Int: 3}
-	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
-	}
-
-	// run some test queries
-	q := NewQuery("indexedPrimativesModel").Filter("Int !=", 0)
-	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int !=", 2)
-	testQueryWithExpectedModels(t, q, []Model{ms[0], ms[1], ms[3]}, false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int !=", -1)
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-
-}
-
-func TestBooleanFilterNotEqual(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms := make([]*indexedPrimativesModel, 3)
-	ms[0] = &indexedPrimativesModel{Bool: false}
-	ms[1] = &indexedPrimativesModel{Bool: true}
-	ms[2] = &indexedPrimativesModel{Bool: true}
-
-	// save the first model
-	if err := Save(ms[0]); err != nil {
-		t.Error(err)
-	}
-	// run some test queries
-	q := NewQuery("indexedPrimativesModel").Filter("Bool !=", false)
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// only save the 2nd model
-	if err := Save(ms[1]); err != nil {
-		t.Error(err)
-	}
-	// run some test queries
-	q = NewQuery("indexedPrimativesModel").Filter("Bool !=", true)
-	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Bool !=", false)
-	testQueryWithExpectedModels(t, q, Models(ms[1:2]), false)
-
-	// now save the 3rd model
-	if err := Save(ms[2]); err != nil {
-		t.Error(err)
-	}
-	// now there should be two models with Bool = true
-	q = NewQuery("indexedPrimativesModel").Filter("Bool !=", false)
-	testQueryWithExpectedModels(t, q, Models(ms[1:3]), false)
-}
-
-func TestAlphaFilterNotEqual(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms := make([]*indexedPrimativesModel, 4)
-	ms[0] = &indexedPrimativesModel{String: "a"}
-	ms[1] = &indexedPrimativesModel{String: "a"}
-	ms[2] = &indexedPrimativesModel{String: "b"}
-	ms[3] = &indexedPrimativesModel{String: "c"}
-	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
-	}
-
-	// run some test queries
-	q := NewQuery("indexedPrimativesModel").Filter("String !=", "a")
-	testQueryWithExpectedModels(t, q, Models(ms[2:4]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String !=", "c")
-	testQueryWithExpectedModels(t, q, Models(ms[0:3]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String !=", "d")
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-}
-
-func TestFilterEqualIntersect(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms := make([]*indexedPrimativesModel, 6)
-	ms[0] = &indexedPrimativesModel{Int: 1, Bool: true, String: "a"}
-	ms[1] = &indexedPrimativesModel{Int: 1, Bool: false, String: "b"}
-	ms[2] = &indexedPrimativesModel{Int: 1, Bool: true, String: "c"}
-	ms[3] = &indexedPrimativesModel{Int: 2, Bool: false, String: "a"}
-	ms[4] = &indexedPrimativesModel{Int: 2, Bool: true, String: "b"}
-	ms[5] = &indexedPrimativesModel{Int: 2, Bool: false, String: "c"}
-	if err := MSave(Models(ms)); err != nil {
-		t.Error(err)
-	}
-
-	// run some test queries with 2 attributes
-	ints := []int{1, 1, 2, 2, 3}
-	bools := []bool{true, false, true, false, true}
-	expecteds := [][]Model{
-		[]Model{ms[0], ms[2]},
-		[]Model{ms[1]},
-		[]Model{ms[4]},
-		[]Model{ms[3], ms[5]},
-		[]Model{},
-	}
-	for i, intFilter := range ints {
-		boolFilter := bools[i]
-		expected := expecteds[i]
-		q := NewQuery("indexedPrimativesModel").Filter("Int =", intFilter).Filter("Bool =", boolFilter)
-		testQueryWithExpectedModels(t, q, expected, false)
-	}
-	ints = []int{1, 1, 1, 2, 2, 2, 1, 3}
-	strings := []string{"a", "b", "c", "a", "b", "c", "e", "a"}
-	expecteds = [][]Model{
-		[]Model{ms[0]},
-		[]Model{ms[1]},
-		[]Model{ms[2]},
-		[]Model{ms[3]},
-		[]Model{ms[4]},
-		[]Model{ms[5]},
-		[]Model{},
-		[]Model{},
-	}
-	for i, intFilter := range ints {
-		stringFilter := strings[i]
-		expected := expecteds[i]
-		q := NewQuery("indexedPrimativesModel").Filter("Int =", intFilter).Filter("String =", stringFilter)
-		testQueryWithExpectedModels(t, q, expected, false)
-	}
-
-	ints = []int{1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 1}
-	bools = []bool{true, false, true, false, true, false, true, false, true, false, true, false, true, true}
-	strings = []string{"a", "a", "b", "b", "c", "c", "a", "a", "b", "b", "c", "c", "a", "d"}
-	expecteds = [][]Model{
-		[]Model{ms[0]},
-		[]Model{},
-		[]Model{},
-		[]Model{ms[1]},
-		[]Model{ms[2]},
-		[]Model{},
-		[]Model{},
-		[]Model{ms[3]},
-		[]Model{ms[4]},
-		[]Model{},
-		[]Model{},
-		[]Model{ms[5]},
-		[]Model{},
-		[]Model{},
-	}
-	for i, intFilter := range ints {
-		boolFilter := bools[i]
-		stringFilter := strings[i]
-		expected := expecteds[i]
-		q := NewQuery("indexedPrimativesModel").Filter("Int =", intFilter).Filter("Bool =", boolFilter).Filter("String =", stringFilter)
-		testQueryWithExpectedModels(t, q, expected, false)
-	}
-}
-
-func TestNumericRangeFilters(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := createOrderableNumericModels(5)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// less
-	q := NewQuery("indexedPrimativesModel").Filter("Int <", 5)
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int <", 3)
-	testQueryWithExpectedModels(t, q, Models(ms[:3]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int <", 0)
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// greater
-	q = NewQuery("indexedPrimativesModel").Filter("Int >", -1)
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int >", 2)
-	testQueryWithExpectedModels(t, q, Models(ms[3:]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int >", 5)
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// lessOrEqual
-	q = NewQuery("indexedPrimativesModel").Filter("Int <=", 4)
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int <=", 3)
-	testQueryWithExpectedModels(t, q, Models(ms[:4]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int <=", -1)
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// greaterOrEqual
-	q = NewQuery("indexedPrimativesModel").Filter("Int >=", 0)
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int >=", 2)
-	testQueryWithExpectedModels(t, q, Models(ms[2:]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Int >=", 5)
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-}
-
-func TestBooleanRangeFilters(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := createOrderableBooleanModels()
-	if err != nil {
-		t.Error(err)
-	}
-
-	// less
-	q := NewQuery("indexedPrimativesModel").Filter("Bool <", false)
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-	q = NewQuery("indexedPrimativesModel").Filter("Bool <", true)
-	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-
-	// greater
-	q = NewQuery("indexedPrimativesModel").Filter("Bool >", false)
-	testQueryWithExpectedModels(t, q, Models(ms[1:2]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Bool >", true)
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// lessOrEqual
-	q = NewQuery("indexedPrimativesModel").Filter("Bool <=", false)
-	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Bool <=", true)
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-
-	// greaterOrEqual
-	q = NewQuery("indexedPrimativesModel").Filter("Bool >=", false)
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-	q = NewQuery("indexedPrimativesModel").Filter("Bool >=", true)
-	testQueryWithExpectedModels(t, q, Models(ms[1:2]), false)
-}
-
-func TestAlphaRangeFilters(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := createOrderableAlphaModels(5)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// less
-	q := NewQuery("indexedPrimativesModel").Filter("String <", "5")
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String <", "3")
-	testQueryWithExpectedModels(t, q, Models(ms[:3]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String <", "1")
-	testQueryWithExpectedModels(t, q, Models(ms[0:1]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String <", "0")
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// greater
-	q = NewQuery("indexedPrimativesModel").Filter("String >", "-")
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String >", "2")
-	testQueryWithExpectedModels(t, q, Models(ms[3:]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String >", "5")
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// lessOrEqual
-	q = NewQuery("indexedPrimativesModel").Filter("String <=", "4")
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String <=", "3")
-	testQueryWithExpectedModels(t, q, Models(ms[:4]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String <=", "-")
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-	// greaterOrEqual
-	q = NewQuery("indexedPrimativesModel").Filter("String >=", "0")
-	testQueryWithExpectedModels(t, q, Models(ms), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String >=", "2")
-	testQueryWithExpectedModels(t, q, Models(ms[2:]), false)
-	q = NewQuery("indexedPrimativesModel").Filter("String >=", "5")
-	testQueryWithExpectedModels(t, q, []Model{}, false)
-
-}
-
-func TestNumericOrderDescRangeFilter(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := createOrderableNumericModels(5)
-	if err != nil {
-		t.Error(err)
-	}
-
-	// expected ids is reversed
-	expectedIds := make([]string, len(ms))
-	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
-	}
-
-	// less
-	q := NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <", 5)
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <", 3)
-	testQueryWithExpectedIds(t, q, expectedIds[2:], true)
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <", 0)
-	testQueryWithExpectedIds(t, q, []string{}, true)
-
-	// greater
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >", -1)
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >", 2)
-	testQueryWithExpectedIds(t, q, expectedIds[:2], true)
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >", 5)
-	testQueryWithExpectedIds(t, q, []string{}, true)
-
-	// lessOrEqual
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <=", 4)
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <=", 3)
-	testQueryWithExpectedIds(t, q, expectedIds[1:], true)
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int <=", -1)
-	testQueryWithExpectedIds(t, q, []string{}, true)
-
-	// greaterOrEqual
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >=", 0)
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >=", 2)
-	testQueryWithExpectedIds(t, q, expectedIds[:3], true)
-	q = NewQuery("indexedPrimativesModel").Order("-Int").Filter("Int >=", 5)
-	testQueryWithExpectedIds(t, q, []string{}, true)
-}
-
-func TestBooleanOrderDescRangeFilters(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := createOrderableBooleanModels()
-	if err != nil {
-		t.Error(err)
-	}
-
-	// expected ids is reversed
-	expectedIds := make([]string, len(ms))
-	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
-	}
-
-	// less
-	q := NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool <", false)
-	testQueryWithExpectedIds(t, q, []string{}, true)
-	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool <", true)
-	testQueryWithExpectedIds(t, q, expectedIds[1:2], true)
-
-	// greater
-	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool >", false)
-	testQueryWithExpectedIds(t, q, expectedIds[0:1], true)
-	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool >", true)
-	testQueryWithExpectedIds(t, q, []string{}, true)
-
-	// lessOrEqual
-	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool <=", false)
-	testQueryWithExpectedIds(t, q, expectedIds[1:2], true)
-	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool <=", true)
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-
-	// greaterOrEqual
-	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool >=", false)
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-	q = NewQuery("indexedPrimativesModel").Order("-Bool").Filter("Bool >=", true)
-	testQueryWithExpectedIds(t, q, expectedIds[0:1], true)
-}
-
-func TestAlphaDescOrderRangeFilters(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	ms, err := createOrderableAlphaModels(5)
-	if err != nil {
-		t.Error(err)
-	}
-	// expected ids is reversed
-	expectedIds := make([]string, len(ms))
-	for i, j := 0, len(ms)-1; i <= j; i, j = i+1, j-1 {
-		expectedIds[i], expectedIds[j] = ms[j].GetId(), ms[i].GetId()
-	}
-
-	// less
-	q := NewQuery("indexedPrimativesModel").Order("-String").Filter("String <", "5")
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <", "3")
-	testQueryWithExpectedIds(t, q, expectedIds[2:], true)
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <", "1")
-	testQueryWithExpectedIds(t, q, expectedIds[4:5], true)
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <", "0")
-	testQueryWithExpectedIds(t, q, []string{}, true)
-
-	// greater
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >", "-")
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >", "2")
-	testQueryWithExpectedIds(t, q, expectedIds[:2], true)
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >", "5")
-	testQueryWithExpectedIds(t, q, []string{}, true)
-
-	// lessOrEqual
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <=", "4")
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <=", "3")
-	testQueryWithExpectedIds(t, q, expectedIds[1:], true)
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String <=", "-")
-	testQueryWithExpectedIds(t, q, []string{}, true)
-
-	// greaterOrEqual
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >=", "0")
-	testQueryWithExpectedIds(t, q, expectedIds, true)
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >=", "2")
-	testQueryWithExpectedIds(t, q, expectedIds[:3], true)
-	q = NewQuery("indexedPrimativesModel").Order("-String").Filter("String >=", "5")
-	testQueryWithExpectedIds(t, q, []string{}, true)
-}
-
-func testNumericOrderLimitOffsetCount(t *testing.T, typ orderType) {
-	_, err := createOrderableNumericModels(4)
-	if err != nil {
-		t.Error(err)
-	}
-
-	limits := []uint{
-		0, 0, 0, 0, 1, 1, 1, 1, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5,
-	}
-	offsets := []uint{
-		0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5, 0, 1, 3, 5,
-	}
-	expecteds := []int{
-		4, 3, 1, 0, 1, 1, 1, 0, 3, 3, 1, 0, 4, 3, 1, 0, 4, 3, 1, 0,
-	}
-
-	for i, limit := range limits {
-		offset := offsets[i]
-		expected := expecteds[i]
-		var q *Query
-		if typ == ascending {
-			q = NewQuery("indexedPrimativesModel").Order("Int").Limit(limit).Offset(offset)
-		} else if typ == descending {
-			q = NewQuery("indexedPrimativesModel").Order("-Int").Limit(limit).Offset(offset)
+// selectModels returns only those models which return true
+// when passed through the selector function or an error,
+// if there was one.
+func selectModels(models []*indexedPrimativesModel, selector func(*indexedPrimativesModel) (bool, error)) ([]*indexedPrimativesModel, error) {
+	results := make([]*indexedPrimativesModel, 0)
+	for _, m := range models {
+		if match, err := selector(m); err != nil {
+			return results, err
+		} else if match {
+			results = append(results, m)
 		}
-		if count, err := q.Count(); err != nil {
+	}
+	return results, nil
+}
+
+// applies includes to all models and returns a copy. The original slice is left intact.
+func applyIncludes(models []*indexedPrimativesModel, includes []string) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, 0)
+	for _, m := range models {
+		result := &indexedPrimativesModel{}
+		results = append(results, result)
+		resVal := reflect.ValueOf(result).Elem()
+		origVal := reflect.ValueOf(m).Elem()
+		for i := 0; i < origVal.NumField(); i++ {
+			fieldType := origVal.Type().Field(i)
+			if fieldType.Name == "DefaultData" {
+				resVal.Field(i).Set(origVal.Field(i))
+			}
+			if stringSliceContains(fieldType.Name, includes) {
+				resVal.Field(i).Set(origVal.Field(i))
+			}
+		}
+	}
+	return results
+}
+
+// applies excludes to all models and returns a copy. The original slice is left intact.
+func applyExcludes(models []*indexedPrimativesModel, excludes []string) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, 0)
+	for _, m := range models {
+		result := &indexedPrimativesModel{}
+		results = append(results, result)
+		resVal := reflect.ValueOf(result).Elem()
+		origVal := reflect.ValueOf(m).Elem()
+		for i := 0; i < origVal.NumField(); i++ {
+			fieldType := origVal.Type().Field(i)
+			if fieldType.Name == "DefaultData" {
+				resVal.Field(i).Set(origVal.Field(i))
+			}
+			if !stringSliceContains(fieldType.Name, excludes) {
+				resVal.Field(i).Set(origVal.Field(i))
+			}
+		}
+	}
+	return results
+}
+
+// Test our internal model filter with numeric type indexes
+func TestInternalFilterModelsNumeric(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, _ := newIndexedPrimativesModels(5)
+	models[0].Int = -4
+	models[1].Int = 1
+	models[2].Int = 1
+	models[3].Int = 2
+	models[4].Int = 3
+
+	type testCase struct {
+		name     string
+		fType    filterType
+		fVal     interface{}
+		expected []*indexedPrimativesModel
+	}
+	testCases := []testCase{
+		testCase{
+			"Equal",
+			equal,
+			1,
+			models[1:3],
+		},
+		testCase{
+			"Not Equal",
+			notEqual,
+			3,
+			models[0:4],
+		},
+		testCase{
+			"Less: none",
+			less,
+			-4,
+			[]*indexedPrimativesModel{},
+		},
+		testCase{
+			"Less: middle",
+			less,
+			2,
+			models[0:3],
+		},
+		testCase{
+			"Less: all",
+			less,
+			4,
+			models,
+		},
+		testCase{
+			"Greater: none",
+			greater,
+			4,
+			[]*indexedPrimativesModel{},
+		},
+		testCase{
+			"Greater: middle",
+			greater,
+			1,
+			models[3:5],
+		},
+		testCase{
+			"Greater: all",
+			greater,
+			-5,
+			models,
+		},
+		testCase{
+			"Less Or Equal: none",
+			lessOrEqual,
+			-5,
+			[]*indexedPrimativesModel{},
+		},
+		testCase{
+			"Less Or Equal: middle",
+			lessOrEqual,
+			1,
+			models[0:3],
+		},
+		testCase{
+			"Less Or Equal: all",
+			lessOrEqual,
+			3,
+			models,
+		},
+		testCase{
+			"Greater Or Equal: none",
+			greaterOrEqual,
+			4,
+			[]*indexedPrimativesModel{},
+		},
+		testCase{
+			"Greater Or Equal: middle",
+			greaterOrEqual,
+			2,
+			models[3:5],
+		},
+		testCase{
+			"Greater Or Equal: all",
+			greaterOrEqual,
+			-4,
+			models,
+		},
+	}
+
+	for i, tc := range testCases {
+		if got, err := filterModels(models, "Int", tc.fType, tc.fVal, indexNumeric); err != nil {
 			t.Error(err)
 		} else {
-			if count != expected {
-				t.Errorf("Fail on iteration %d\nLimit = %d, Offset = %d\nExpected count to be %d, but got %d\n", i, limit, offset, expected, count)
+			if eql, msg := looseEquals(tc.expected, got); !eql {
+				t.Errorf("Test failed on iteration %d (%s)\nExpected: %v\nGot %v\n%s\n", i, tc.name, tc.expected, got, msg)
 			}
 		}
 	}
 }
 
-func testQueryWithExpectedModels(t *testing.T, query RunScanner, expected []Model, orderMatters bool) {
-	queryTester(t, query, func(t *testing.T, results interface{}) {
-		// make sure results is the right length
-		if reflect.ValueOf(results).Len() != len(expected) {
-			t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", len(expected), reflect.ValueOf(results).Len())
-		}
+// Test our internal model filter with boolean type indexes
+func TestInternalFilterModelsBoolean(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
 
-		// compare expected to results
-		if orderMatters {
-			if !reflect.DeepEqual(expected, results) {
-				t.Errorf("Results were incorrect.\nExpected: %v\nGot: %v\n", modelIds(expected), modelIds(Models(results)))
-			}
+	models, _ := newIndexedPrimativesModels(2)
+	models[0].Bool = false
+	models[1].Bool = true
+
+	type testCase struct {
+		name     string
+		fType    filterType
+		fVal     interface{}
+		expected []*indexedPrimativesModel
+	}
+	testCases := []testCase{
+		testCase{
+			"Equal",
+			equal,
+			true,
+			models[1:2],
+		},
+		testCase{
+			"Not Equal",
+			notEqual,
+			true,
+			models[0:1],
+		},
+		testCase{
+			"Less: none",
+			less,
+			false,
+			[]*indexedPrimativesModel{},
+		},
+		testCase{
+			"Less: middle",
+			less,
+			true,
+			models[0:1],
+		},
+		testCase{
+			"Greater: none",
+			greater,
+			true,
+			[]*indexedPrimativesModel{},
+		},
+		testCase{
+			"Greater: middle",
+			greater,
+			false,
+			models[1:2],
+		},
+		testCase{
+			"Less Or Equal: middle",
+			lessOrEqual,
+			false,
+			models[0:1],
+		},
+		testCase{
+			"Less Or Equal: all",
+			lessOrEqual,
+			true,
+			models,
+		},
+		testCase{
+			"Greater Or Equal: middle",
+			greaterOrEqual,
+			true,
+			models[1:2],
+		},
+		testCase{
+			"Greater Or Equal: all",
+			greaterOrEqual,
+			false,
+			models,
+		},
+	}
+
+	for i, tc := range testCases {
+		if got, err := filterModels(models, "Bool", tc.fType, tc.fVal, indexBoolean); err != nil {
+			t.Error(err)
 		} else {
-			equal, msg := compareAsSet(expected, results)
-			if !equal {
-				t.Errorf("Results were incorrect\n%s\nExpected: %v\nGot: %v\n", msg, modelIds(expected), modelIds(Models(results)))
+			if eql, msg := looseEquals(tc.expected, got); !eql {
+				t.Errorf("Test failed on iteration %d (%s)\nExpected: %v\nGot %v\n%s\n", i, tc.name, tc.expected, got, msg)
 			}
 		}
-	})
+	}
 }
 
-func testQueryWithExpectedIds(t *testing.T, query RunScanner, expected []string, orderMatters bool) {
-	queryTester(t, query, func(t *testing.T, results interface{}) {
-		gotIds := modelIds(Models(results))
+// Test our internal model filter with alpha (string) type indexes
+func TestInternalFilterModelsAlpha(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
 
-		// make sure results is the right length
-		if len(gotIds) != len(expected) {
-			t.Errorf("results was not the right length. Expected: %d. Got: %d.\n", len(expected), len(gotIds))
-		}
+	models, _ := newIndexedPrimativesModels(5)
+	models[0].String = "b"
+	models[1].String = "c"
+	models[2].String = "c"
+	models[3].String = "d"
+	models[4].String = "e"
 
-		// compare expected to results
-		if orderMatters {
-			if !reflect.DeepEqual(expected, gotIds) {
-				t.Errorf("Results were incorrect.\nExpected: %v\nGot: %v\n", expected, gotIds)
-			}
+	type testCase struct {
+		name     string
+		fType    filterType
+		fVal     interface{}
+		expected []*indexedPrimativesModel
+	}
+	testCases := []testCase{
+		testCase{
+			"Equal",
+			equal,
+			"c",
+			models[1:3],
+		},
+		testCase{
+			"Not Equal",
+			notEqual,
+			"e",
+			models[0:4],
+		},
+		testCase{
+			"Less: none",
+			less,
+			"b",
+			[]*indexedPrimativesModel{},
+		},
+		testCase{
+			"Less: middle",
+			less,
+			"d",
+			models[0:3],
+		},
+		testCase{
+			"Less: all",
+			less,
+			"f",
+			models,
+		},
+		testCase{
+			"Greater: none",
+			greater,
+			"e",
+			[]*indexedPrimativesModel{},
+		},
+		testCase{
+			"Greater: middle",
+			greater,
+			"c",
+			models[3:5],
+		},
+		testCase{
+			"Greater: all",
+			greater,
+			"a",
+			models,
+		},
+		testCase{
+			"Less Or Equal: none",
+			lessOrEqual,
+			"a",
+			[]*indexedPrimativesModel{},
+		},
+		testCase{
+			"Less Or Equal: middle",
+			lessOrEqual,
+			"c",
+			models[0:3],
+		},
+		testCase{
+			"Less Or Equal: all",
+			lessOrEqual,
+			"e",
+			models,
+		},
+		testCase{
+			"Greater Or Equal: none",
+			greaterOrEqual,
+			"f",
+			[]*indexedPrimativesModel{},
+		},
+		testCase{
+			"Greater Or Equal: middle",
+			greaterOrEqual,
+			"d",
+			models[3:5],
+		},
+		testCase{
+			"Greater Or Equal: all",
+			greaterOrEqual,
+			"b",
+			models,
+		},
+	}
+
+	for i, tc := range testCases {
+		if got, err := filterModels(models, "String", tc.fType, tc.fVal, indexAlpha); err != nil {
+			t.Error(err)
 		} else {
-			equal, msg := compareAsSet(expected, gotIds)
-			if !equal {
-				t.Errorf("Results were incorrect\n%s\nExpected: %v\nGot: %v\n", msg, expected, gotIds)
+			if eql, msg := looseEquals(tc.expected, got); !eql {
+				t.Errorf("Test failed on iteration %d (%s)\nExpected: %v\nGot %v\n%s\n", i, tc.name, tc.expected, got, msg)
 			}
 		}
-	})
+	}
 }
 
-func queryTester(t *testing.T, query RunScanner, checker func(*testing.T, interface{})) {
-	// execute the query
-	results, err := query.Run()
+// sorting interfaces. UGH. This is incredibly annoying, but this is the best
+// way I could find of doing it. based on the http://golang.org/pkg/sort/
+// example
+
+type lessFunc func(m1, m2 *indexedPrimativesModel) bool
+
+// multiSorter implements the Sort interface, sorting the models within.
+type multiSorter struct {
+	models []*indexedPrimativesModel
+	less   []lessFunc
+}
+
+// Sort sorts the argument slice according to the less functions passed to OrderedBy.
+func (ms *multiSorter) Sort(models []*indexedPrimativesModel) {
+	ms.models = models
+	sort.Sort(ms)
+}
+
+// OrderedBy returns a Sorter that sorts using the less functions, in order.
+// Call its Sort method to sort the data.
+func OrderedBy(less ...lessFunc) *multiSorter {
+	return &multiSorter{
+		less: less,
+	}
+}
+
+// Len is part of sort.Interface.
+func (ms *multiSorter) Len() int {
+	return len(ms.models)
+}
+
+// Swap is part of sort.Interface.
+func (ms *multiSorter) Swap(i, j int) {
+	ms.models[i], ms.models[j] = ms.models[j], ms.models[i]
+}
+
+// Less is part of sort.Interface. It is implemented by looping along the
+// less functions until it finds a comparison that is either Less or
+// !Less. Note that it can call the less functions twice per call. We
+// could change the functions to return -1, 0, 1 and reduce the
+// number of calls for greater efficiency: an exercise for the reader.
+func (ms *multiSorter) Less(i, j int) bool {
+	p, q := ms.models[i], ms.models[j]
+	// Try all but the last comparison.
+	var k int
+	for k = 0; k < len(ms.less)-1; k++ {
+		less := ms.less[k]
+		switch {
+		case less(p, q):
+			// p < q, so we have a decision.
+			return true
+		case less(q, p):
+			// p > q, so we have a decision.
+			return false
+		}
+		// p == q; try the next comparison.
+	}
+	// All comparisons to here said "equal", so just return whatever
+	// the final comparison reports.
+	return ms.less[k](p, q)
+}
+
+// Closures that order the Model structure.
+var lessFuncs map[string]lessFunc = map[string]lessFunc{
+	"Uint": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Uint < m2.Uint
+	},
+	"Uint8": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Uint8 < m2.Uint8
+	},
+	"Uint16": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Uint16 < m2.Uint16
+	},
+	"Uint32": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Uint32 < m2.Uint32
+	},
+	"Uint64": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Uint64 < m2.Uint64
+	},
+	"Int": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Int < m2.Int
+	},
+	"Int8": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Int8 < m2.Int8
+	},
+	"Int16": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Int16 < m2.Int16
+	},
+	"Int32": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Int32 < m2.Int32
+	},
+	"Int64": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Int64 < m2.Int64
+	},
+	"Float32": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Float32 < m2.Float32
+	},
+	"Float64": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Float64 < m2.Float64
+	},
+	"Byte": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Byte < m2.Byte
+	},
+	"Rune": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Rune < m2.Rune
+	},
+	"String": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.String < m2.String
+	},
+	"Bool": func(m1, m2 *indexedPrimativesModel) bool {
+		return m1.Bool == false && m2.Bool == true
+	},
+}
+
+// sortModels sorts the set of models by the given fieldName. Returns a copy,
+// so the original is unchanged.
+func sortModels(models []*indexedPrimativesModel, fieldName string, reverse bool) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, len(models))
+	copy(results, models)
+	OrderedBy(lessFuncs[fieldName]).Sort(results)
+	if reverse {
+		return reverseModels(results)
+	} else {
+		return results
+	}
+}
+
+// returns true iff the given models are sorted by field
+// redis sorts can be unstable, so here it is considered sorted even if it is unstable.
+// if revers is true, will check if the models are sorted in reverse (descending) order.
+func modelsAreSortedByField(models []*indexedPrimativesModel, fieldName string, reverse bool) (bool, []interface{}, error) {
+	ms := make([]*indexedPrimativesModel, len(models))
+	copy(ms, models)
+	typ, err := getRegisteredTypeFromName("indexedPrimativesModel")
 	if err != nil {
+		return false, nil, err
+	}
+	field, found := typ.Elem().FieldByName(fieldName)
+	if !found {
+		err := fmt.Errorf("Could not find field named %s in type %s", fieldName, typ.String())
+		return false, nil, err
+	}
+	fType := field.Type
+	if typeIsNumeric(fType) {
+		return modelsAreSortedByNumericField(ms, fieldName, reverse)
+	} else if typeIsBool(fType) {
+		return modelsAreSortedByBooleanField(ms, fieldName, reverse)
+	} else if typeIsString(fType) {
+		return modelsAreSortedByStringField(ms, fieldName, reverse)
+	}
+	return false, nil, fmt.Errorf("Don't know how to classify field type %s! Was not numeric, bool, or string.", fType.String())
+}
+
+// Note: it's okay to mutate models here because it was copied in the previous function.
+func modelsAreSortedByNumericField(models []*indexedPrimativesModel, fieldName string, reverse bool) (bool, []interface{}, error) {
+	fieldsAsFloats := make([]float64, len(models))
+	fieldsAsInterfaces := make([]interface{}, len(models))
+	floatType := reflect.TypeOf(0.0)
+	for i, m := range models {
+		val := reflect.ValueOf(m)
+		fVal := val.Elem().FieldByName(fieldName)
+		fValFloat := fVal.Convert(floatType)
+		fFloat := fValFloat.Float()
+		fieldsAsFloats[i] = fFloat
+		fieldsAsInterfaces[i] = fValFloat.Interface()
+	}
+	if reverse {
+		for i, j := 0, len(fieldsAsFloats)-1; i <= j; i, j = i+1, j-1 {
+			fieldsAsFloats[i], fieldsAsFloats[j] = fieldsAsFloats[j], fieldsAsFloats[i]
+		}
+	}
+	if sort.Float64sAreSorted(fieldsAsFloats) {
+		return true, fieldsAsInterfaces, nil
+	} else {
+		return false, fieldsAsInterfaces, nil
+	}
+}
+
+// Note: it's okay to mutate models here because it was copied in the previous function.
+func modelsAreSortedByBooleanField(models []*indexedPrimativesModel, fieldName string, reverse bool) (bool, []interface{}, error) {
+	// let false = 0, true = 1
+	fieldsAsInts := make([]int, len(models))
+	fieldsAsInterfaces := make([]interface{}, len(models))
+	for i, m := range models {
+		if m.Bool {
+			fieldsAsInts[i] = 1
+			fieldsAsInterfaces[i] = 1
+		} else {
+			fieldsAsInts[i] = 0
+			fieldsAsInterfaces[i] = 0
+		}
+	}
+	if reverse {
+		for i, j := 0, len(fieldsAsInts)-1; i <= j; i, j = i+1, j-1 {
+			fieldsAsInts[i], fieldsAsInts[j] = fieldsAsInts[j], fieldsAsInts[i]
+		}
+	}
+	if sort.IntsAreSorted(fieldsAsInts) {
+		return true, fieldsAsInterfaces, nil
+	} else {
+		return false, fieldsAsInterfaces, nil
+	}
+}
+
+// Note: it's okay to mutate models here because it was copied in the previous function.
+func modelsAreSortedByStringField(models []*indexedPrimativesModel, fieldName string, reverse bool) (bool, []interface{}, error) {
+	fieldsAsStrings := make([]string, len(models))
+	fieldsAsInterfaces := make([]interface{}, len(models))
+	for i, m := range models {
+		fieldsAsStrings[i] = m.String
+		fieldsAsInterfaces[i] = m.String
+	}
+	if reverse {
+		for i, j := 0, len(fieldsAsStrings)-1; i <= j; i, j = i+1, j-1 {
+			fieldsAsStrings[i], fieldsAsStrings[j] = fieldsAsStrings[j], fieldsAsStrings[i]
+		}
+	}
+	if sort.StringsAreSorted(fieldsAsStrings) {
+		return true, fieldsAsInterfaces, nil
+	} else {
+		return false, fieldsAsInterfaces, nil
+	}
+}
+
+// Test our model sort implementation for numeric fields
+func TestInternalSortModelsNumeric(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// make models which are sorted
+	presorted, _ := createFullModels(10)
+	models := shuffleModels(presorted)
+	fieldNames := []string{"Uint", "Uint8", "Uint16", "Uint32", "Uint64", "Int", "Int8", "Int16", "Int32", "Int64", "Float32", "Float64", "Byte", "Rune"}
+	for _, fn := range fieldNames {
+		asc := sortModels(models, fn, false)
+		if sorted, _, err := modelsAreSortedByField(asc, fn, false); err != nil {
+			t.Error(err)
+		} else if !sorted {
+			t.Errorf("Models were not correctly sorted by %s", fn)
+		}
+		des := sortModels(models, fn, true)
+		if sorted, _, err := modelsAreSortedByField(des, fn, true); err != nil {
+			t.Error(err)
+		} else if !sorted {
+			t.Errorf("Models were not correctly sorted by -%s", fn)
+		}
+	}
+}
+
+func TestInternalSortModelsAlpha(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+	presorted, _ := createFullModels(10)
+	models := shuffleModels(presorted)
+
+	asc := sortModels(models, "String", false)
+	if sorted, _, err := modelsAreSortedByField(asc, "String", false); err != nil {
 		t.Error(err)
+	} else if !sorted {
+		t.Error("Models were not correctly sorted by String")
+	}
+	des := sortModels(models, "String", true)
+	if sorted, _, err := modelsAreSortedByField(des, "String", true); err != nil {
+		t.Error(err)
+	} else if !sorted {
+		t.Error("Models were not correctly sorted by -String")
+	}
+}
+
+func TestInternalSortModelsBoolean(t *testing.T) {
+	// NOTE: we only get to create two models here if we want a stable sort.
+	// To rule out the possibility of the two models being sorted by chance (50%!),
+	// we repeat the test 10 times.
+	for i := 0; i < 10; i++ {
+		testingSetUp()
+		presorted, _ := createFullModels(2)
+		models := shuffleModels(presorted)
+
+		asc := sortModels(models, "Bool", false)
+		if sorted, _, err := modelsAreSortedByField(asc, "Bool", false); err != nil {
+			t.Error(err)
+		} else if !sorted {
+			t.Error("Models were not correctly sorted by Bool")
+		}
+		des := sortModels(models, "Bool", true)
+		if sorted, _, err := modelsAreSortedByField(des, "Bool", true); err != nil {
+			t.Error(err)
+		} else if !sorted {
+			t.Error("Models were not correctly sorted by -Bool")
+		}
+		testingTearDown()
+	}
+}
+
+// reverseModels reverses the order of the models slice. Returns a copy,
+// so the original is unchanged.
+func reverseModels(models []*indexedPrimativesModel) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, len(models))
+	copy(results, models)
+	for i, j := 0, len(results)-1; i <= j; i, j = i+1, j-1 {
+		results[i], results[j] = results[j], results[i]
+	}
+	return results
+}
+
+// Test our internal reverseModels function for numeric index types
+func TestInternalReverseModelsNumeric(t *testing.T) {
+	models, _ := newIndexedPrimativesModels(4)
+	models[0].Int = 0
+	models[1].Int = 1
+	models[2].Int = 2
+	models[3].Int = 3
+	expected := []*indexedPrimativesModel{models[3], models[2], models[1], models[0]}
+
+	got := reverseModels(models)
+	if eql, msg := looseEquals(expected, got); !eql {
+		t.Errorf("Expected: %v\nGot %v\n%s\n", expected, got, msg)
+	}
+}
+
+// randomizes the order of models. Good for testing sorts
+func shuffleModels(models []*indexedPrimativesModel) []*indexedPrimativesModel {
+	results := make([]*indexedPrimativesModel, len(models))
+	perm := rand.Perm(len(models))
+	for i, v := range perm {
+		results[v] = models[i]
+	}
+	return results
+}
+
+// returns true iff the set of models contains duplicate values for the given field name
+func modelsContainDuplicatesForField(models []*indexedPrimativesModel, fieldName string) bool {
+	prev := []interface{}{}
+	for _, m := range models {
+		mVal := reflect.ValueOf(m).Elem()
+		fVal := mVal.FieldByName(fieldName)
+		if !fVal.IsValid() {
+			continue
+		}
+		val := fVal.Interface()
+		for _, p := range prev {
+			if reflect.DeepEqual(p, val) {
+				return true
+			}
+		}
+		prev = append(prev, val)
+	}
+	return false
+}
+
+func TestInternalModelsContainDuplicates(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// should contain no duplicates
+	models, _ := createFullModels(2)
+	expecteds := map[string]bool{
+		"Bool":   false,
+		"Int":    false,
+		"String": false,
+	}
+	for fn, expected := range expecteds {
+		got := modelsContainDuplicatesForField(models, fn)
+		if expected != got {
+			t.Errorf("Duplicate check was incorrect. Expected %v but got %v", expected, got)
+		}
 	}
 
-	// run the checker function
-	checker(t, results)
+	// only Bool fields should be duplicated
+	models, _ = createFullModels(3)
+	expecteds = map[string]bool{
+		"Bool":   true,
+		"Int":    false,
+		"String": false,
+	}
+	for fn, expected := range expecteds {
+		got := modelsContainDuplicatesForField(models, fn)
+		if expected != got {
+			t.Errorf("Duplicate check was incorrect. Expected %v but got %v", expected, got)
+		}
+	}
+
+	// only Bool and String fields should be duplicated
+	models, _ = createFullModels(27)
+	expecteds = map[string]bool{
+		"Bool":   true,
+		"Int":    false,
+		"String": true,
+	}
+	for fn, expected := range expecteds {
+		got := modelsContainDuplicatesForField(models, fn)
+		if expected != got {
+			t.Errorf("Duplicate check was incorrect. Expected %v but got %v", expected, got)
+		}
+	}
 }

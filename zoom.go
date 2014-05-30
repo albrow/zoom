@@ -76,8 +76,8 @@ func FindById(modelName, id string) (Model, error) {
 	val := reflect.New(typ.Elem())
 	m, ok := val.Interface().(Model)
 	if !ok {
-		msg := fmt.Sprintf("zoom: could not convert val of type %T to Model\n", val.Interface())
-		return nil, errors.New(msg)
+		err := fmt.Errorf("zoom: could not convert val of type %T to Model\n", val.Interface())
+		return nil, err
 	}
 
 	// invoke ScanById
@@ -114,8 +114,8 @@ func MFindById(modelNames, ids []string) ([]Model, error) {
 		val := reflect.New(typ.Elem())
 		m, ok := val.Interface().(Model)
 		if !ok {
-			msg := fmt.Sprintf("zoom: could not convert val of type %T to Model\n", val.Interface())
-			return results, errors.New(msg)
+			err := fmt.Errorf("zoom: could not convert val of type %T to Model\n", val.Interface())
+			return results, err
 		}
 		results = append(results, m)
 
@@ -185,8 +185,7 @@ func MScanById(ids []string, models interface{}) error {
 	} else if !typeIsPointerToStruct(modelType) {
 		return errors.New("Zoom: error in MScanById: the elements in models should be pointers to structs")
 	} else if !modelTypeIsRegistered(modelType) {
-		msg := fmt.Sprintf("Zoom: error in MScanById: the elements in models should be of a registered type\nType %s has not been registered.", modelType.String())
-		return errors.New(msg)
+		return fmt.Errorf("Zoom: error in MScanById: the elements in models should be of a registered type\nType %s has not been registered.", modelType.String())
 	}
 
 	t := newTransaction()
@@ -230,9 +229,7 @@ func Delete(model Model) error {
 	if err != nil {
 		return err
 	}
-	if err := t.deleteModel(mr); err != nil {
-		return err
-	}
+	t.deleteModel(mr)
 
 	// execute the transaction
 	if err := t.exec(); err != nil {
@@ -259,9 +256,7 @@ func MDelete(models []Model) error {
 		if err != nil {
 			return err
 		}
-		if err := t.deleteModel(mr); err != nil {
-			return err
-		}
+		t.deleteModel(mr)
 	}
 
 	// execute the transaction

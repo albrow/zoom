@@ -9,8 +9,9 @@ import (
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"math/rand"
+	"sort"
 	"strconv"
-	"time"
+	"testing"
 )
 
 type basicModel struct {
@@ -131,20 +132,20 @@ type embed struct {
 }
 
 type indexedPrimativesModel struct {
-	Uint    uint    `zoom:"index"`
-	Uint8   uint8   `zoom:"index"`
-	Uint16  uint16  `zoom:"index"`
-	Uint32  uint32  `zoom:"index"`
-	Uint64  uint64  `zoom:"index"`
+	Uint    uint    `zoom:"index" json:"-"`
+	Uint8   uint8   `zoom:"index" json:"-"`
+	Uint16  uint16  `zoom:"index" json:"-"`
+	Uint32  uint32  `zoom:"index" json:"-"`
+	Uint64  uint64  `zoom:"index" json:"-"`
 	Int     int     `zoom:"index"`
-	Int8    int8    `zoom:"index"`
-	Int16   int16   `zoom:"index"`
-	Int32   int32   `zoom:"index"`
-	Int64   int64   `zoom:"index"`
-	Float32 float32 `zoom:"index"`
-	Float64 float64 `zoom:"index"`
-	Byte    byte    `zoom:"index"`
-	Rune    rune    `zoom:"index"`
+	Int8    int8    `zoom:"index" json:"-"`
+	Int16   int16   `zoom:"index" json:"-"`
+	Int32   int32   `zoom:"index" json:"-"`
+	Int64   int64   `zoom:"index" json:"-"`
+	Float32 float32 `zoom:"index" json:"-"`
+	Float64 float64 `zoom:"index" json:"-"`
+	Byte    byte    `zoom:"index" json:"-"`
+	Rune    rune    `zoom:"index" json:"-"`
 	String  string  `zoom:"index"`
 	Bool    bool    `zoom:"index"`
 	DefaultData
@@ -205,12 +206,12 @@ func testingSetUp() {
 		panic(err.Error())
 	}
 	if n != 0 {
-		msg := fmt.Sprintf("Database #%d is not empty, test can not continue", *database)
-		panic(msg)
+		err := fmt.Errorf("Database #%d is not empty, test can not continue", *database)
+		panic(err)
 	}
 
-	// generate a new seed for rand
-	rand.Seed(time.Now().UTC().UnixNano())
+	// use a seed for rand to make test runs consistent
+	rand.Seed(42)
 }
 
 // initialize zoom and test the connection
@@ -426,4 +427,147 @@ func newIndexedPointersModels(num int) ([]*indexedPointersModel, error) {
 		results[i] = ppt
 	}
 	return results, nil
+}
+
+// utility type for quickly sorting by id
+type ById []*indexedPrimativesModel
+
+func (ms ById) Len() int           { return len(ms) }
+func (ms ById) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
+func (ms ById) Less(i, j int) bool { return ms[i].Id < ms[j].Id }
+
+// returns true if the models are equal, false if they are not.
+// also calls.Error with a specific error message if they don't match
+func compareModelSlices(t *testing.T, expected []*indexedPrimativesModel, got []*indexedPrimativesModel, orderMatters bool) bool {
+	if len(expected) != len(got) {
+		t.Errorf("Lengths did not match. Expected: %d but got: %d\n", len(expected), len(got))
+		_, msg := compareAsStringSet(modelIds(Models(expected)), modelIds(Models(got)))
+		t.Error(msg)
+		return false
+	}
+	eCopy, gCopy := make([]*indexedPrimativesModel, len(expected)), make([]*indexedPrimativesModel, len(got))
+	copy(eCopy, expected)
+	copy(gCopy, got)
+	if !orderMatters {
+		// if order doesn't matter, first sort by Id, which is unique.
+		// this way we can do a straightforward comparison
+		sort.Sort(ById(eCopy))
+		sort.Sort(ById(gCopy))
+	}
+	for i, e := range eCopy {
+		g := gCopy[i]
+		if eql, msgs := compareModels(e, g); !eql {
+			t.Errorf("Inequality detected at iteration %d:", i)
+			for _, msg := range msgs {
+				t.Errorf("\t%s", msg)
+			}
+			return false
+		}
+	}
+	return true
+}
+
+func compareModels(expected, got *indexedPrimativesModel) (bool, []string) {
+	eql := true
+	msgs := []string{}
+
+	// Id field
+	if expected.Id != got.Id {
+		eql = false
+		msg := fmt.Sprintf("Id was incorrect. Expected: %s but got: %s\n", expected.Id, got.Id)
+		msgs = append(msgs, msg)
+	}
+
+	// Uint fields
+	if expected.Uint != got.Uint {
+		eql = false
+		msg := fmt.Sprintf("Uint was incorrect. Expected: %v but got: %v\n", expected.Uint, got.Uint)
+		msgs = append(msgs, msg)
+	}
+	if expected.Uint8 != got.Uint8 {
+		eql = false
+		msg := fmt.Sprintf("Uint8 was incorrect. Expected: %v but got: %v\n", expected.Uint8, got.Uint8)
+		msgs = append(msgs, msg)
+	}
+	if expected.Uint16 != got.Uint16 {
+		eql = false
+		msg := fmt.Sprintf("Uint16 was incorrect. Expected: %v but got: %v\n", expected.Uint16, got.Uint16)
+		msgs = append(msgs, msg)
+	}
+	if expected.Uint32 != got.Uint32 {
+		eql = false
+		msg := fmt.Sprintf("Uint32 was incorrect. Expected: %v but got: %v\n", expected.Uint32, got.Uint32)
+		msgs = append(msgs, msg)
+	}
+	if expected.Uint64 != got.Uint64 {
+		eql = false
+		msg := fmt.Sprintf("Uint64 was incorrect. Expected: %v but got: %v\n", expected.Uint64, got.Uint64)
+		msgs = append(msgs, msg)
+	}
+	if expected.Id != got.Id {
+		eql = false
+		msg := fmt.Sprintf("Id was incorrect. Expected: %v but got: %v\n", expected.Id, got.Id)
+		msgs = append(msgs, msg)
+	}
+
+	// Int fields
+	if expected.Int != got.Int {
+		eql = false
+		msg := fmt.Sprintf("Int was incorrect. Expected: %v but got: %v\n", expected.Int, got.Int)
+		msgs = append(msgs, msg)
+	}
+	if expected.Int8 != got.Int8 {
+		eql = false
+		msg := fmt.Sprintf("Int8 was incorrect. Expected: %v but got: %v\n", expected.Int8, got.Int8)
+		msgs = append(msgs, msg)
+	}
+	if expected.Int16 != got.Int16 {
+		eql = false
+		msg := fmt.Sprintf("Int16 was incorrect. Expected: %v but got: %v\n", expected.Int16, got.Int16)
+		msgs = append(msgs, msg)
+	}
+	if expected.Int32 != got.Int32 {
+		eql = false
+		msg := fmt.Sprintf("Int32 was incorrect. Expected: %v but got: %v\n", expected.Int32, got.Int32)
+		msgs = append(msgs, msg)
+	}
+	if expected.Int64 != got.Int64 {
+		eql = false
+		msg := fmt.Sprintf("Int64 was incorrect. Expected: %v but got: %v\n", expected.Int64, got.Int64)
+		msgs = append(msgs, msg)
+	}
+
+	// Other fields
+	if expected.Float32 != got.Float32 {
+		eql = false
+		msg := fmt.Sprintf("Float32 was incorrect. Expected: %f but got: %f\n", expected.Float32, got.Float32)
+		msgs = append(msgs, msg)
+	}
+	if expected.Float64 != got.Float64 {
+		eql = false
+		msg := fmt.Sprintf("Float64 was incorrect. Expected: %f but got: %f\n", expected.Float64, got.Float64)
+		msgs = append(msgs, msg)
+	}
+	if expected.Byte != got.Byte {
+		eql = false
+		msg := fmt.Sprintf("Byte was incorrect. Expected: %v but got: %v\n", expected.Byte, got.Byte)
+		msgs = append(msgs, msg)
+	}
+	if expected.Rune != got.Rune {
+		eql = false
+		msg := fmt.Sprintf("Rune was incorrect. Expected: %v but got: %v\n", expected.Rune, got.Rune)
+		msgs = append(msgs, msg)
+	}
+	if expected.String != got.String {
+		eql = false
+		msg := fmt.Sprintf("String was incorrect. Expected: %s but got: %s\n", expected.String, got.String)
+		msgs = append(msgs, msg)
+	}
+	if expected.Bool != got.Bool {
+		eql = false
+		msg := fmt.Sprintf("Bool was incorrect. Expected: %t but got: %t\n", expected.Bool, got.Bool)
+		msgs = append(msgs, msg)
+	}
+
+	return eql, msgs
 }

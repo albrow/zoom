@@ -8,7 +8,6 @@
 package zoom
 
 import (
-	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"testing"
@@ -172,7 +171,6 @@ func TestIndexedPointersModelSpec(t *testing.T) {
 					t.Errorf("Expected indexType to be alpha (%d) but got: %d", indexAlpha, index.indexType)
 				}
 			case typeIsBool(field.Type):
-				fmt.Println("checking that boolean shit")
 				if index.indexType != indexBoolean {
 					t.Errorf("Expected indexType to be bool (%d) but got: %d", indexBoolean, index.indexType)
 				}
