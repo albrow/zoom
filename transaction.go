@@ -554,7 +554,6 @@ func (t *transaction) saveModelPointerIndexBoolean(mr modelRef, pointer *fieldSp
 }
 
 func (t *transaction) findModel(mr modelRef, includes []string) error {
-
 	// check model cache to prevent infinite recursion or unnecessary queries
 	if prior, found := t.modelCache[mr.key()]; found {
 		reflect.ValueOf(mr.model).Elem().Set(reflect.ValueOf(prior).Elem())
@@ -653,7 +652,6 @@ func (t *transaction) findModelRelationships(mr modelRef, includes []string) err
 }
 
 func (t *transaction) findModelOneToOneRelation(mr modelRef, relationship *fieldSpec) error {
-
 	// TODO: use scripting to retain integrity of the transaction (we want
 	// to perform only one round trip per transaction).
 	conn := GetConn()
@@ -661,7 +659,13 @@ func (t *transaction) findModelOneToOneRelation(mr modelRef, relationship *field
 
 	// invoke redis driver to get the id
 	relationKey := mr.key() + ":" + relationship.redisName
-	id, err := redis.String(conn.Do("GET", relationKey))
+	response, err := conn.Do("GET", relationKey)
+	if err != nil {
+		return err
+	} else if response == nil {
+		return nil
+	}
+	id, err := redis.String(response, nil)
 	if err != nil {
 		return err
 	}

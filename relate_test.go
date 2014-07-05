@@ -137,7 +137,17 @@ func TestSaveOneToManyDifferentType(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	bms, m, err := setUpOneToManyDifferentyType()
+	// Test with the one-to-many attr set as nil
+	m1 := &oneToManyModelDifferentType{
+		Attr: "test",
+		Many: nil,
+	}
+	if err := Save(m1); err != nil {
+		t.Error(err)
+	}
+
+	// Test with a non-nil one-to-many attr
+	bms, m2, err := setUpOneToManyDifferentyType()
 	if err != nil {
 		t.Error(err)
 	}
@@ -147,7 +157,7 @@ func TestSaveOneToManyDifferentType(t *testing.T) {
 	defer conn.Close()
 
 	// invoke redis driver to check if the value was set appropriately
-	manyKey := "oneToManyModelDifferentType:" + m.Id + ":Many"
+	manyKey := "oneToManyModelDifferentType:" + m2.Id + ":Many"
 	gotIds, err := redis.Strings(conn.Do("SMEMBERS", manyKey))
 	if err != nil {
 		t.Error(err)
@@ -171,14 +181,28 @@ func TestFindOneToManyDifferentType(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	bms, m, err := setUpOneToManyDifferentyType()
+	// Test with the one-to-many attr set as nil
+	m1 := &oneToManyModelDifferentType{
+		Attr: "test",
+		Many: nil,
+	}
+	if err := Save(m1); err != nil {
+		t.Error(err)
+	}
+	m1Copy := new(oneToManyModelDifferentType)
+	if err := ScanById(m1.Id, m1Copy); err != nil {
+		t.Error(err)
+	}
+
+	// Test with a non-nil one-to-many attr
+	bms, m2, err := setUpOneToManyDifferentyType()
 	if err != nil {
 		t.Error(err)
 	}
 
 	// get a copy of the model from the database
-	mCopy := new(oneToManyModelDifferentType)
-	if err := ScanById(m.Id, mCopy); err != nil {
+	m2Copy := new(oneToManyModelDifferentType)
+	if err := ScanById(m2.Id, m2Copy); err != nil {
 		t.Error(err)
 	}
 
@@ -191,7 +215,7 @@ func TestFindOneToManyDifferentType(t *testing.T) {
 		expectedIds = append(expectedIds, bm.Id)
 	}
 	gotIds := make([]string, 0)
-	for _, bm := range mCopy.Many {
+	for _, bm := range m2Copy.Many {
 		if bm.Id == "" {
 			t.Errorf("basic model id was empty for %+v\n", bm)
 		}
