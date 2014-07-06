@@ -593,6 +593,16 @@ func extractModelIdFromAlphaIndexValue(valueAndId string) string {
 // It's type should be *[]*<T>, where <T> is some type which satisfies the Model
 // interface. The type *[]*Model is not equivalent and will not work.
 func (q *Query) executeAndScan(sliceVal reflect.Value) error {
+	// Check to make sure include contained all valid fields
+	if len(q.includes) > 0 {
+		fieldNames := q.modelSpec.fieldNames()
+		for _, inc := range q.includes {
+			if !stringSliceContains(inc, fieldNames) {
+				return fmt.Errorf("zoom: Model of type %s does not have field called %s", q.modelSpec.modelName, inc)
+			}
+		}
+	}
+
 	// wait for all the id data dependencies and then scan them
 	// into models
 	q.trans.doWhenDataReady(q.idData, func() error {
