@@ -308,6 +308,70 @@ func TestQueryIncludeExclude(t *testing.T) {
 	}
 }
 
+func TestQueryRunOne(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createFullModels(2)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// expect models[0]
+	q := NewQuery("indexedPrimativesModel").Order("String")
+	result, err := q.RunOne()
+	if err != nil {
+		t.Error(err)
+	}
+	first, ok := result.(*indexedPrimativesModel)
+	if !ok {
+		t.Error("Could not convert result to model")
+	}
+	if eql, msg := compareModels(models[0], first); !eql {
+		t.Error("Found first model was not equal to expected.")
+		t.Error(msg)
+	}
+
+	// expect an error
+	q.Filter("String =", "should not be found")
+	if _, err := q.RunOne(); err == nil {
+		t.Error("Expected an error but didn't get one!")
+	} else if _, ok := err.(*ModelNotFoundError); !ok {
+		t.Errorf("Expected ModelNotFoundError but got: %T: %s", err, err)
+	}
+}
+
+func TestQueryScanOne(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createFullModels(2)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// expect models[0]
+	first := new(indexedPrimativesModel)
+	q := NewQuery("indexedPrimativesModel").Order("String")
+	if err := q.ScanOne(first); err != nil {
+		t.Error(err)
+	}
+	if eql, msg := compareModels(models[0], first); !eql {
+		t.Error("Found first model was not equal to expected.")
+		t.Error(msg)
+	}
+
+	// expect an error
+	q.Filter("String =", "should not be found")
+	if err := q.ScanOne(first); err == nil {
+		t.Error("Expected an error but didn't get one!")
+	} else if _, ok := err.(*ModelNotFoundError); !ok {
+		t.Errorf("Expected ModelNotFoundError but got: %T: %s", err, err)
+	}
+}
+
 // create a number of models with all fields filled out.
 // we will use these to test a lot of different queries.
 // on each iteration from i=0 to num-1 a model is created with:
