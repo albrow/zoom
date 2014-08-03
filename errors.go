@@ -84,3 +84,15 @@ func (e *KeyNotFoundError) Error() string {
 func NewKeyNotFoundError(key string, modelType reflect.Type) *KeyNotFoundError {
 	return &KeyNotFoundError{key, modelType}
 }
+
+// ModelNotFoundError is returned from ScanOne and RunOne if a model that matches
+// the query criteria was not found.
+type ModelNotFoundError struct{}
+
+func (e *ModelNotFoundError) Error() string {
+	return "zoom: could not find a model which matches the query criteria"
+}
+
+func NewModelNotFoundError() *ModelNotFoundError {
+	return &ModelNotFoundError{}
+}

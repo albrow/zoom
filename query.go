@@ -361,9 +361,34 @@ func (q *Query) Run() (interface{}, error) {
 	}
 }
 
+// RunOne is exactly like Run, returns only the first model that fits the query
+// criteria, or if no models fit the critera, returns an error. If you need to do this
+// in a type-safe way, look at the ScanOne method.
+func (q *Query) RunOne() (interface{}, error) {
+	// optimize the query by limiting number of models to one
+	oldLimit := q.limit
+	q.limit = 1
+
+	result, err := q.Run()
+	if err != nil {
+		return nil, err
+	}
+
+	// set the limit back to the old limit in case the query will be run again
+	q.limit = oldLimit
+
+	// get the first item, if any
+	resultVal := reflect.ValueOf(result)
+	if resultVal.Len() == 0 {
+		return nil, NewModelNotFoundError()
+	}
+	first := resultVal.Index(0)
+	return first.Interface(), nil
+}
+
 // Scan (like Run) executes the query but instead of returning the results it
 // attempts to scan the results into in. The type of in should be a pointer to a
-// slice of pointers to a registered model type.  Run will return the first
+// slice of pointers to a registered model type.  Scan will return the first
 // error that occured during the lifetime of the query object (if any), or will
 // return an error if you provided an interface with an invalid type. Otherwise,
 // the return value will be nil.
@@ -394,6 +419,30 @@ func (q *Query) Scan(in interface{}) error {
 	resultsVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(q.modelSpec.modelType), 0, 0))
 
 	return q.executeAndScan(resultsVal)
+}
+
+// ScanOne is exactly like Scan but scans only the first model that fits the
+// query criteria. If no model fits the criteria, an error will be returned.
+// The type of in should be a pointer to a slice of pointers to a registered
+// model type.
+func (q *Query) ScanOne(in interface{}) error {
+	// make sure we are dealing with the right type
+	typ := reflect.TypeOf(in)
+	if !typeIsPointerToStruct(typ) {
+		return fmt.Errorf("zoom: Query.Scan requires a pointer to a model. Got: %T", in)
+	}
+	if typ != q.modelSpec.modelType {
+		return fmt.Errorf("zoom: argument for Query.Scan did not match the type corresponding to the model name given in the NewQuery constructor.\nExpected %T but got %T", reflect.SliceOf(q.modelSpec.modelType), in)
+	}
+
+	result, err := q.RunOne()
+	if err != nil {
+		return err
+	}
+
+	resultVal := reflect.ValueOf(result)
+	reflect.ValueOf(in).Elem().Set(resultVal.Elem())
+	return nil
 }
 
 // Count counts the number of models that would be returned by the query without
@@ -510,6 +559,8 @@ func (q *Query) IdsOnly() ([]string, error) {
 // transaction is eventually executed, each of the keys in idData should be
 // considered data dependencies.
 func (q *Query) sendIdData() error {
+	// clear out any previous id data
+	q.idData = []string{}
 	if len(q.filters) == 0 {
 		if cmd, args, err := q.getAllModelsArgs(true); err != nil {
 			return err

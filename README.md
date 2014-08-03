@@ -1,7 +1,7 @@
 Zoom
 ====
 
-Version: 0.5.2
+Version: 0.6.0
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
@@ -280,6 +280,8 @@ You can run a query with one of the following query finishers:
 - Scan
 - IdsOnly
 - Count
+- RunOne
+- ScanOne
 
 Here's an example of a more complicated query using several modifiers:
 
@@ -288,8 +290,8 @@ q := zoom.NewQuery("Person").Order("-Name").Filter("Age >=", 25).Limit(10)
 result, err := q.Run()
 ```
 
-You can probably guess what each of these methods do, but full documentation
-on the different modifiers and finishers is available on
+You might be able to guess what each of these methods do, but if anything is not obvious,
+full documentation on the different modifiers and finishers is available on
 [godoc.org](http://godoc.org/github.com/albrow/zoom).
 
 
