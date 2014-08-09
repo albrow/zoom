@@ -526,9 +526,10 @@ one of the top priorities for this project.
 Example Usage
 -------------
 
-The [zoom_example repository](https://github.com/albrow/zoom_example) is an
-example of how to use Zoom in a json/rest application. NOTE: currently the example
-repository uses Zoom v0.3.3 and may not be compatible with the newest version.
+I have built an [example json/rest application](https://github.com/albrow/peeps-negroni)
+which uses the latest version of zoom. It is a simple example that doesn't use all of
+zoom's features, but should be good enough for understanding how zoom can work in a
+real application.
 
 
 TODO
