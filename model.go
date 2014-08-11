@@ -240,8 +240,8 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 	numFields := elem.NumField()
 	for i := 0; i < numFields; i++ {
 		field := elem.Field(i)
-		if field.Name == "DefaultData" {
-			continue // skip default data
+		if field.Name == "DefaultData" || field.Name == "Sync" {
+			continue // skip default data and sync
 		}
 		// get the redisName
 		tag := field.Tag
