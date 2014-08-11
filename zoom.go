@@ -67,7 +67,6 @@ func MSave(models []Model) error {
 // or package prefix). If you used RegisterName instead of Register,
 // modelName should be the custom name you used.
 func FindById(modelName, id string) (Model, error) {
-
 	// create a new struct of proper type
 	typ, err := getRegisteredTypeFromName(modelName)
 	if err != nil {
@@ -143,6 +142,11 @@ func MFindById(modelNames, ids []string) ([]Model, error) {
 // if a model with that id does not exist or if there was a problem
 // connecting to the database.
 func ScanById(id string, model Model) error {
+	if s, ok := model.(Syncer); ok {
+		mutexId := fmt.Sprintf("%T:%s", model, id)
+		s.SetMutexId(mutexId)
+		s.Lock()
+	}
 
 	// create a modelRef
 	mr, err := newModelRefFromModel(model)
@@ -200,6 +204,11 @@ func MScanById(ids []string, models interface{}) error {
 		mr, err := newModelRefFromInterface(mVal.Interface())
 		if err != nil {
 			return err
+		}
+		if s, ok := mr.model.(Syncer); ok {
+			mutexId := fmt.Sprintf("%s:%s", mr.modelSpec.modelType.String(), id)
+			s.SetMutexId(mutexId)
+			s.Lock()
 		}
 		mr.model.SetId(id)
 

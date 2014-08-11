@@ -1,7 +1,7 @@
 Zoom
 ====
 
-Version: 0.6.1
+Version: 0.7.0
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
@@ -213,6 +213,55 @@ if err := zoom.DeleteById("Person", "some_person_id"); err != nil {
 	// handle err
 }
 ```
+
+Enforcing Thread-Safety
+-----------------------
+
+### How it Works
+
+If you wish to perform thread-safe updates, you can embed zoom.Sync into your model. zoom.Sync provides a default
+implementation of a Syncer. A Syncer consists of a unique identifier which is a reference to a global mutex map. By
+default the identifier is modelType + ":" + id. If a model implements the Syncer interface, any time the model is
+retrieved from the database, zoom will call Lock on the mutex referenced by Syncer. The effect is that you can
+gauruntee that only one reference to a given model is active at any given time.
+
+**IMPORTANT**: When you embed zoom.Sync into a model, you must remember to call Unlock() when you are done making
+changes to the model.
+
+### Example
+
+Here's what a model with an embedded Syncer should look like:
+
+``` go
+type Person struct {
+	Age int
+	Name string
+	zoom.DefaultData
+	zoom.Sync
+}
+```
+
+And here's what a thread-safe update would look like:
+
+``` go
+func UpdatePerson() {
+	p := &Person{}
+	// You must unlock the mutex associated with the id when you are
+	// done making changes. Using defer is sometimes a good way to do this.
+	defer p.Unlock()
+	// ScanById implicitly calls Lock(), so it will not return until any other
+	// references to the same model id are unlocked.
+	if err := zoom.ScanById("some valid id", p); err != nil {
+		// handle err
+	}
+	p.Name = "Bill"
+	p.Age = 27
+	if err := zoom.Save(p); err != nil {
+		// handle err
+	}	
+}
+```
+
 
 Running Queries
 ---------------

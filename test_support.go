@@ -171,6 +171,13 @@ type indexedPointersModel struct {
 	DefaultData
 }
 
+type modelWithSync struct {
+	Attr1 string
+	Attr2 string
+	DefaultData
+	Sync
+}
+
 var address *string = flag.String("address", "localhost:6379", "the address of a redis server to connect to")
 var network *string = flag.String("network", "tcp", "the network to use for the database connection (e.g. 'tcp' or 'unix')")
 var database *int = flag.Int("database", 9, "the redis database number to use for testing")
@@ -192,6 +199,7 @@ var testingTypes []Model = []Model{
 	&embeddedPointerToStructModel{},
 	&indexedPrimativesModel{},
 	&indexedPointersModel{},
+	&modelWithSync{},
 }
 
 func testingSetUp() {
