@@ -14,8 +14,13 @@ import (
 	"strconv"
 )
 
-func scanModel(replies []interface{}, mr modelRef) error {
-	fieldNames := mr.modelSpec.mainHashFieldNames()
+func scanModel(replies []interface{}, mr modelRef, includes []string) error {
+	fieldNames := []string{}
+	if len(includes) == 0 {
+		fieldNames = mr.modelSpec.mainHashFieldNames()
+	} else {
+		fieldNames = includes
+	}
 	for i, reply := range replies {
 		replyBytes, err := redis.Bytes(reply, nil)
 		if err != nil {

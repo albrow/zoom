@@ -182,27 +182,8 @@ func (t *transaction) discard() error {
 
 // Useful Handlers
 
-// newScanHandler invokes redis driver to scan single values into the corresponding scannable
-func newScanHandler(mr modelRef, scannables []interface{}) func(interface{}) error {
-	return func(reply interface{}) error {
-		replies, err := redis.Values(reply, nil)
-		if err != nil {
-			return err
-		}
-		if len(replies) == 0 {
-			// if there is nothing in the hash, we should check if the model exists
-			// it might still exist if there are relationships, but no other data
-			return checkModelExists(mr)
-		}
-		if _, err := redis.Scan(replies, scannables...); err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
 // newScanModelHandler invokes redis driver to scan multiple values into scannable (a struct)
-func newScanModelHandler(mr modelRef) func(interface{}) error {
+func newScanModelHandler(mr modelRef, includes []string) func(interface{}) error {
 	return func(reply interface{}) error {
 		bulk, err := redis.MultiBulk(reply, nil)
 		if err != nil {
@@ -213,7 +194,7 @@ func newScanModelHandler(mr modelRef) func(interface{}) error {
 			// it might still exist if there are relationships, but no other data
 			return checkModelExists(mr)
 		}
-		if err := scanModel(bulk, mr); err != nil {
+		if err := scanModel(bulk, mr, includes); err != nil {
 			return err
 		} else {
 			return nil
@@ -564,7 +545,7 @@ func (t *transaction) findModel(mr modelRef, includes []string) error {
 	// scan the hash values directly into the struct
 	if includes == nil {
 		// use HGETALL to get all the fields for the model
-		t.command("HVALS", redis.Args{}.Add(mr.key()), newScanModelHandler(mr))
+		t.command("HVALS", redis.Args{}.Add(mr.key()), newScanModelHandler(mr, nil))
 	} else {
 		// get the appropriate scannable fields
 		fields := make([]interface{}, 0)
@@ -575,7 +556,7 @@ func (t *transaction) findModel(mr modelRef, includes []string) error {
 		// use HMGET to get only certain fields for the model
 		if len(fields) != 0 {
 			args := redis.Args{}.Add(mr.key()).AddFlat(includes)
-			t.command("HMGET", args, newScanHandler(mr, fields))
+			t.command("HMGET", args, newScanModelHandler(mr, includes))
 		}
 	}
 
