@@ -142,12 +142,6 @@ func MFindById(modelNames, ids []string) ([]Model, error) {
 // if a model with that id does not exist or if there was a problem
 // connecting to the database.
 func ScanById(id string, model Model) error {
-	if s, ok := model.(Syncer); ok {
-		mutexId := fmt.Sprintf("%T:%s", model, id)
-		s.SetMutexId(mutexId)
-		s.Lock()
-	}
-
 	// create a modelRef
 	mr, err := newModelRefFromModel(model)
 	if err != nil {
@@ -204,11 +198,6 @@ func MScanById(ids []string, models interface{}) error {
 		mr, err := newModelRefFromInterface(mVal.Interface())
 		if err != nil {
 			return err
-		}
-		if s, ok := mr.model.(Syncer); ok {
-			mutexId := fmt.Sprintf("%s:%s", mr.modelSpec.modelType.String(), id)
-			s.SetMutexId(mutexId)
-			s.Lock()
 		}
 		mr.model.SetId(id)
 
