@@ -21,7 +21,7 @@ func getMutexForId(id string) *sync.Mutex {
 }
 
 type Sync struct {
-	MutexId string
+	MutexId string `json:"-",redis:"-"`
 }
 
 func (s Sync) Lock() {
