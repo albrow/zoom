@@ -535,6 +535,13 @@ func (t *transaction) saveModelPointerIndexBoolean(mr modelRef, pointer *fieldSp
 }
 
 func (t *transaction) findModel(mr modelRef, includes []string) error {
+	// check for mutex
+	if s, ok := mr.model.(Syncer); ok {
+		mutexId := fmt.Sprintf("%T:%s", mr.model, mr.model.GetId())
+		s.SetMutexId(mutexId)
+		s.Lock()
+	}
+
 	// check model cache to prevent infinite recursion or unnecessary queries
 	if prior, found := t.modelCache[mr.key()]; found {
 		reflect.ValueOf(mr.model).Elem().Set(reflect.ValueOf(prior).Elem())
