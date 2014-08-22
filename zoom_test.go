@@ -98,7 +98,7 @@ func TestFindByIdWithInvalidIdThrowsError(t *testing.T) {
 	if err == nil {
 		t.Error("Expected error when finding a model by an invalid id")
 	} else if _, ok := err.(*KeyNotFoundError); !ok {
-		t.Errorf("Error was not the right type.\nExpected: KeyNotFoundError\nGot: %T\n", err)
+		t.Errorf("Error was not the right type.\nExpected: KeyNotFoundError\nGot: %T - %s\n", err, err)
 	}
 }
 

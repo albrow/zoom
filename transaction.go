@@ -551,8 +551,9 @@ func (t *transaction) findModel(mr modelRef, includes []string) error {
 
 	// scan the hash values directly into the struct
 	if includes == nil {
-		// use HGETALL to get all the fields for the model
-		t.command("HVALS", redis.Args{}.Add(mr.key()), newScanModelHandler(mr, nil))
+		// use HMGET to get all the fields for the model
+		args := redis.Args{}.Add(mr.key()).AddFlat(mr.modelSpec.mainHashFieldNames())
+		t.command("HMGET", args, newScanModelHandler(mr, nil))
 	} else {
 		// get the appropriate scannable fields
 		fields := make([]interface{}, 0)
@@ -560,7 +561,7 @@ func (t *transaction) findModel(mr modelRef, includes []string) error {
 			fields = append(fields, mr.value(fieldName).Addr().Interface())
 		}
 
-		// use HMGET to get only certain fields for the model
+		// use HMGET to get only the included fields for the model
 		if len(fields) != 0 {
 			args := redis.Args{}.Add(mr.key()).AddFlat(includes)
 			t.command("HMGET", args, newScanModelHandler(mr, includes))
