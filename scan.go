@@ -22,6 +22,9 @@ func scanModel(replies []interface{}, mr modelRef, includes []string) error {
 		fieldNames = includes
 	}
 	for i, reply := range replies {
+		if reply == nil {
+			return checkModelExists(mr)
+		}
 		replyBytes, err := redis.Bytes(reply, nil)
 		if err != nil {
 			return err
