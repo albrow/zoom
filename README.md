@@ -1,7 +1,7 @@
 Zoom
 ====
 
-Version: 0.7.2
+Version: 0.7.3
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
@@ -86,9 +86,7 @@ also call zoom.Close when your application exits, so it's a good idea to use def
 ``` go
 func main() {
     // ...
-    if err := zoom.Init(nil); err != nil {
-        // handle err
-    }
+    zoom.Init(nil)
     defer zoom.Close()
     // ...
 }
