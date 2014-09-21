@@ -1,7 +1,7 @@
 Zoom
 ====
 
-Version: 0.7.3
+Version: 0.7.4
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
@@ -54,7 +54,7 @@ it manages its own connection pool, performs transactions when possible, and aut
 structs to and from a format suitable for the database. If needed, you can still execute redis commands
 directly.
 
-If you want to use advanced or complicated SQL queries, Zoom is not for you. Most notably, Zoom
+If you want to use advanced or complicated SQL queries, Zoom is not for you. For example, Zoom
 currently lacks an equivalent of the SQL keywords `IN` and `OR`. Although support for more
 types of queries may be added in the future, it is not a high priority.
 
