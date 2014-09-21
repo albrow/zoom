@@ -21,7 +21,7 @@ Table of Contents
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Working with Models](#working-with-models)
-- [Enforcing Thread-Safety](#enforcing-thread-saftey)
+- [Enforcing Thread-Safety](#enforcing-thread-safety)
 - [Running Queries](#running-queries)
 - [Relationships](#relationships)
 - [Testing & Benchmarking](#testing--benchmarking)
