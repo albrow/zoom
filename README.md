@@ -21,6 +21,7 @@ Table of Contents
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Working with Models](#working-with-models)
+- [Enforcing Thread-Safety](#enforcing-thread-saftey)
 - [Running Queries](#running-queries)
 - [Relationships](#relationships)
 - [Testing & Benchmarking](#testing--benchmarking)
@@ -537,29 +538,26 @@ You can use the same flags as above to change the network, address, and database
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/albrow/zoom/issues/new).
 
-Here are the results from my laptop (2.3GHz intel i7, 8GB ram) using a socket connection with Redis set
+Here are the results from my laptop (2.3GHz quad-core i7, 8GB RAM) using a socket connection with Redis set
 to append-only mode:
 
 ```
-BenchmarkConnection		20000000	      95.4 ns/op
-BenchmarkPing	   		   50000	     48033 ns/op
-BenchmarkSet	   		   50000	     57117 ns/op
-BenchmarkGet	   		   50000	     48612 ns/op
-BenchmarkSave	   		   20000	     96096 ns/op
-BenchmarkMSave100	        2000	    837420 ns/op
-BenchmarkFindById	   	   20000	     87540 ns/op
-BenchmarkMFindById100	    5000	    618841 ns/op
-BenchmarkScanById	   	   20000	     88400 ns/op
-BenchmarkMScanById100	    2000	    624335 ns/op
-BenchmarkRepeatDeleteById	   20000	     90814 ns/op
-BenchmarkRandomDeleteById	   20000	     90636 ns/op
-BenchmarkFindAllQuery1	   	   10000	    229207 ns/op
-BenchmarkFindAllQuery1000	     500	   5878403 ns/op
-BenchmarkFindAllQuery100000	       2	 660701316 ns/op
-BenchmarkCountAllQuery1	   	   50000	     52983 ns/op
-BenchmarkCountAllQuery1000	   50000	     53110 ns/op
-BenchmarkCountAllQuery100000   50000	     54126 ns/op
-BenchmarkMDeleteById	    	2000	    603538 ns/op
+BenchmarkConnection         20000000	      93.7 ns/op
+BenchmarkPing                 100000	     24472 ns/op
+BenchmarkSet                   50000	     32703 ns/op
+BenchmarkGet                  100000	     25795 ns/op
+BenchmarkSave                  50000	     59899 ns/op
+BenchmarkMSave100               2000	    908596 ns/op
+BenchmarkFindById              50000	     41050 ns/op
+BenchmarkMFindById100	        2000	    671383 ns/op
+BenchmarkDeleteById	          50000	     48800 ns/op
+BenchmarkMDeleteById100	        2000	    617435 ns/op
+BenchmarkFindAllQuery10	       10000	    165903 ns/op
+BenchmarkFindAllQuery1000	      500	   7224478 ns/op
+BenchmarkFindAllQuery100000	     2	 850699127 ns/op
+BenchmarkCountAllQuery10	   100000	     29838 ns/op
+BenchmarkCountAllQuery1000	   100000	     29739 ns/op
+BenchmarkCountAllQuery100000	100000	     29798 ns/op
 ```
 
 Currently, there are not many benchmarks for queries; I'm working on adding more.
