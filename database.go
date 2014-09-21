@@ -1,4 +1,4 @@
-// Copyright 2013 Alex Browne.  All rights reserved.
+// Copyright 2014 Alex Browne.  All rights reserved.
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
@@ -61,10 +61,6 @@ func Init(passedConfig *Configuration) {
 				return nil, err
 			}
 			return c, err
-		},
-		TestOnBorrow: func(c redis.Conn, t time.Time) error {
-			_, err := c.Do("PING")
-			return err
 		},
 	}
 }

@@ -1,7 +1,7 @@
 Zoom
 ====
 
-Version: 0.7.3
+Version: 0.7.4
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
@@ -21,6 +21,7 @@ Table of Contents
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Working with Models](#working-with-models)
+- [Enforcing Thread-Safety](#enforcing-thread-safety)
 - [Running Queries](#running-queries)
 - [Relationships](#relationships)
 - [Testing & Benchmarking](#testing--benchmarking)
@@ -42,16 +43,20 @@ Zoom allows you to:
 - Preserve relationships between structs
 - Preform *limited* queries
 
-Zoom consciously makes the trade off of using more memory in order to increase performance. However,
-you can configure it to use less memory if you want. Zoom does not do sharding (but might in the future),
-so be aware that memory could be a hard constraint for larger applications.
+Zoom consciously makes the trade off of using more memory in order to increase performance.
+Zoom stores all data in memory at all times, so if your machine runs out of memory, zoom will
+either crash or start using swap space (resulting in huge performance penalties). 
+Zoom does not do sharding (but might in the future), so be aware that memory could be a
+hard constraint for larger applications.
 
 Zoom is a high-level library and abstracts away more complicated aspects of the Redis API. For example,
 it manages its own connection pool, performs transactions when possible, and automatically converts
 structs to and from a format suitable for the database. If needed, you can still execute redis commands
 directly.
 
-If you want to use advanced or complicated SQL queries, Zoom is not for you.
+If you want to use advanced or complicated SQL queries, Zoom is not for you. For example, Zoom
+currently lacks an equivalent of the SQL keywords `IN` and `OR`. Although support for more
+types of queries may be added in the future, it is not a high priority.
 
 
 Installation
@@ -537,29 +542,26 @@ You can use the same flags as above to change the network, address, and database
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/albrow/zoom/issues/new).
 
-Here are the results from my laptop (2.3GHz intel i7, 8GB ram) using a socket connection with Redis set
+Here are the results from my laptop (2.3GHz quad-core i7, 8GB RAM) using a socket connection with Redis set
 to append-only mode:
 
 ```
-BenchmarkConnection		20000000	      95.4 ns/op
-BenchmarkPing	   		   50000	     48033 ns/op
-BenchmarkSet	   		   50000	     57117 ns/op
-BenchmarkGet	   		   50000	     48612 ns/op
-BenchmarkSave	   		   20000	     96096 ns/op
-BenchmarkMSave100	        2000	    837420 ns/op
-BenchmarkFindById	   	   20000	     87540 ns/op
-BenchmarkMFindById100	    5000	    618841 ns/op
-BenchmarkScanById	   	   20000	     88400 ns/op
-BenchmarkMScanById100	    2000	    624335 ns/op
-BenchmarkRepeatDeleteById	   20000	     90814 ns/op
-BenchmarkRandomDeleteById	   20000	     90636 ns/op
-BenchmarkFindAllQuery1	   	   10000	    229207 ns/op
-BenchmarkFindAllQuery1000	     500	   5878403 ns/op
-BenchmarkFindAllQuery100000	       2	 660701316 ns/op
-BenchmarkCountAllQuery1	   	   50000	     52983 ns/op
-BenchmarkCountAllQuery1000	   50000	     53110 ns/op
-BenchmarkCountAllQuery100000   50000	     54126 ns/op
-BenchmarkMDeleteById	    	2000	    603538 ns/op
+BenchmarkConnection         20000000	      93.7 ns/op
+BenchmarkPing                 100000	     24472 ns/op
+BenchmarkSet                   50000	     32703 ns/op
+BenchmarkGet                  100000	     25795 ns/op
+BenchmarkSave                  50000	     59899 ns/op
+BenchmarkMSave100               2000	    908596 ns/op
+BenchmarkFindById              50000	     41050 ns/op
+BenchmarkMFindById100	        2000	    671383 ns/op
+BenchmarkDeleteById	          50000	     48800 ns/op
+BenchmarkMDeleteById100	        2000	    617435 ns/op
+BenchmarkFindAllQuery10	       10000	    165903 ns/op
+BenchmarkFindAllQuery1000	      500	   7224478 ns/op
+BenchmarkFindAllQuery100000	     2	 850699127 ns/op
+BenchmarkCountAllQuery10	   100000	     29838 ns/op
+BenchmarkCountAllQuery1000	   100000	     29739 ns/op
+BenchmarkCountAllQuery100000	100000	     29798 ns/op
 ```
 
 Currently, there are not many benchmarks for queries; I'm working on adding more.
@@ -587,14 +589,16 @@ Ordered generally by priority, here's what I'm working on:
 - Improve performance and get as close as possible to raw redis
 - Add more benchmarks
 - Add godoc compatible examples in the test files
-- Support AND and OR operators on Filters
-- Support combining queries into a single transaction
-- Use scripting to reduce round-trip latencies in queries
-- Implement high-level watching for record changes
 - Support callbacks (BeforeSave, AfterSave, BeforeDelete, AfterDelete, etc.)
+- Implement high-level watching for record changes
 - Add option to make relationships reflexive (inverseOf struct tag?)
 - Add a dependent:delete struct tag
+- Support AND and OR operators on Filters
+- Support combining queries into a single transaction
 - Support automatic sharding
+
+If you have an idea or suggestion for a feature, please [open an issue](https://github.com/albrow/zoom/issues/new)
+and describe it.
 
 
 License
