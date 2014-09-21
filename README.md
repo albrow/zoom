@@ -43,16 +43,20 @@ Zoom allows you to:
 - Preserve relationships between structs
 - Preform *limited* queries
 
-Zoom consciously makes the trade off of using more memory in order to increase performance. However,
-you can configure it to use less memory if you want. Zoom does not do sharding (but might in the future),
-so be aware that memory could be a hard constraint for larger applications.
+Zoom consciously makes the trade off of using more memory in order to increase performance.
+Zoom stores all data in memory at all times, so if your machine runs out of memory, zoom will
+either crash or start using swap space (resulting in huge performance penalties). 
+Zoom does not do sharding (but might in the future), so be aware that memory could be a
+hard constraint for larger applications.
 
 Zoom is a high-level library and abstracts away more complicated aspects of the Redis API. For example,
 it manages its own connection pool, performs transactions when possible, and automatically converts
 structs to and from a format suitable for the database. If needed, you can still execute redis commands
 directly.
 
-If you want to use advanced or complicated SQL queries, Zoom is not for you.
+If you want to use advanced or complicated SQL queries, Zoom is not for you. Most notably, Zoom
+currently lacks an equivalent of the SQL keywords `IN` and `OR`. Although support for more
+types of queries may be added in the future, it is not a high priority.
 
 
 Installation
@@ -587,14 +591,16 @@ Ordered generally by priority, here's what I'm working on:
 - Improve performance and get as close as possible to raw redis
 - Add more benchmarks
 - Add godoc compatible examples in the test files
-- Support AND and OR operators on Filters
-- Support combining queries into a single transaction
-- Use scripting to reduce round-trip latencies in queries
-- Implement high-level watching for record changes
 - Support callbacks (BeforeSave, AfterSave, BeforeDelete, AfterDelete, etc.)
+- Implement high-level watching for record changes
 - Add option to make relationships reflexive (inverseOf struct tag?)
 - Add a dependent:delete struct tag
+- Support AND and OR operators on Filters
+- Support combining queries into a single transaction
 - Support automatic sharding
+
+If you have an idea or suggestion for a feature, please [open an issue](https://github.com/albrow/zoom/issues/new)
+and describe it.
 
 
 License
