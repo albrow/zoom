@@ -588,7 +588,7 @@ func (q *Query) sendIdData() error {
 			q.idData = append(q.idData, filterIdsKey)
 			q.sendIdDataForFilter(f, filterIdsKey)
 		}
-		if !primaryCovered {
+		if !primaryCovered && q.order.fieldName != "" {
 			// no filter had the same field name as the order, so we need to add a
 			// command to get the ordered ids and use them as a basis for ordering
 			// all the others.

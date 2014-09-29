@@ -199,6 +199,174 @@ func BenchmarkFindAllQuery100000(b *testing.B) {
 	benchmarkFindAllQuery(b, 100000)
 }
 
+// BenchmarkFilterIntQuery1From1 times a query which selects 1
+// model out of 1 total, filtering by the Int field
+func BenchmarkFilterIntQuery1From1(b *testing.B) {
+	benchmarkFilterIntQuery(b, 1, 1)
+}
+
+// BenchmarkFilterIntQuery1From10 times a query which selects 1
+// model out of 10 total, filtering by the Int field
+func BenchmarkFilterIntQuery1From10(b *testing.B) {
+	benchmarkFilterIntQuery(b, 1, 10)
+}
+
+// BenchmarkFilterIntQuery10From100 times a query which selects 10
+// models out of 100 total, filtering by the Int field
+func BenchmarkFilterIntQuery10From100(b *testing.B) {
+	benchmarkFilterIntQuery(b, 10, 100)
+}
+
+// BenchmarkFilterIntQuery100From1000 times a query which selects 100
+// models out of 1000 total, filtering by the Int field
+func BenchmarkFilterIntQuery100From1000(b *testing.B) {
+	benchmarkFilterIntQuery(b, 100, 1000)
+}
+
+//  BenchmarkFilterStringQuery1From1 times a query which selects
+// 1 model out of 1 models total, filtering by the String field
+func BenchmarkFilterStringQuery1From1(b *testing.B) {
+	benchmarkFilterStringQuery(b, 1, 1)
+}
+
+//  BenchmarkFilterStringQuery1From10 times a query which selects
+// 1 model out of 10 models total, filtering by the String field
+func BenchmarkFilterStringQuery1From10(b *testing.B) {
+	benchmarkFilterStringQuery(b, 1, 10)
+}
+
+//  BenchmarkFilterStringQuery10From100 times a query which selects
+// 10 models out of 100 models total, filtering by the String field
+func BenchmarkFilterStringQuery10From100(b *testing.B) {
+	benchmarkFilterStringQuery(b, 10, 100)
+}
+
+//  BenchmarkFilterStringQuery100From1000 times a query which selects
+// 100 models out of 1,000 models total, filtering by the String field
+func BenchmarkFilterStringQuery100From1000(b *testing.B) {
+	benchmarkFilterStringQuery(b, 100, 1000)
+}
+
+// BenchmarkFilterBoolQuery1From1 times a query which selects
+// 1 model out of 1 models total, filtering by the Bool field
+func BenchmarkFilterBoolQuery1From1(b *testing.B) {
+	benchmarkFilterBoolQuery(b, 1, 1)
+}
+
+// BenchmarkFilterBoolQuery1From10 times a query which selects
+// 1 model out of 10 models total, filtering by the Bool field
+func BenchmarkFilterBoolQuery1From10(b *testing.B) {
+	benchmarkFilterBoolQuery(b, 1, 10)
+}
+
+// BenchmarkFilterBoolQuery10From100 times a query which selects
+// 10 models out of 100 models total, filtering by the Bool field
+func BenchmarkFilterBoolQuery10From100(b *testing.B) {
+	benchmarkFilterBoolQuery(b, 10, 100)
+}
+
+// BenchmarkFilterBoolQuery100From1000 times a query which selects
+// 100 models out of 1000 models total, filtering by the Bool field
+func BenchmarkFilterBoolQuery100From1000(b *testing.B) {
+	benchmarkFilterBoolQuery(b, 100, 1000)
+}
+
+// BenchmarkOrderInt1000 times a query which selects 1,000
+// models, ordered by the Int field
+func BenchmarkOrderInt1000(b *testing.B) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create a sequence of models to be saved
+	ms, err := newIndexedPrimativesModels(1000)
+	if err != nil {
+		b.Error(err)
+	}
+	if err := MSave(Models(ms)); err != nil {
+		b.Error(err)
+		b.FailNow()
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("Int").Include("Int")
+	benchmarkQuery(b, q)
+}
+
+// BenchmarkOrderString1000 times a query which selects 1,000
+// models, ordered by the String field
+func BenchmarkOrderString1000(b *testing.B) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create a sequence of models to be saved
+	ms, err := newIndexedPrimativesModels(1000)
+	if err != nil {
+		b.Error(err)
+	}
+	if err := MSave(Models(ms)); err != nil {
+		b.Error(err)
+		b.FailNow()
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("String").Include("String")
+	benchmarkQuery(b, q)
+}
+
+// BenchmarkOrderBool1000 times a query which selects 1,000
+// models, ordered by the Bool field
+func BenchmarkOrderBool1000(b *testing.B) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create a sequence of models to be saved
+	ms, err := newIndexedPrimativesModels(1000)
+	if err != nil {
+		b.Error(err)
+	}
+	if err := MSave(Models(ms)); err != nil {
+		b.Error(err)
+		b.FailNow()
+	}
+
+	q := NewQuery("indexedPrimativesModel").Order("Bool").Include("Bool")
+	benchmarkQuery(b, q)
+}
+
+// BenchmarkComplexQuery times a query which incorporates nearly all options.
+// The query has a filter on the Bool and Int Fields, is ordered in reverse
+// by the String field, and includes only Bool, Int, and String. Out of 1,000
+// models created, 100 should fit the query criteria, but the query limits the
+// number of results to 10.
+func BenchmarkComplexQuery(b *testing.B) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create a sequence of models to be saved
+	ms, err := newIndexedPrimativesModels(1000)
+	if err != nil {
+		b.Error(err)
+	}
+	// give some models a searchable Int field
+	for _, m := range ms[100:200] {
+		m.Int = -1
+	}
+	// give some models a Bool attr of true and
+	// all others a Bool attribute of false
+	for _, m := range ms {
+		m.Bool = false
+	}
+	for _, m := range ms[150:250] {
+		m.Bool = true
+	}
+
+	if err := MSave(Models(ms)); err != nil {
+		b.Error(err)
+		b.FailNow()
+	}
+
+	q := NewQuery("indexedPrimativesModel").Filter("Int =", -1).Filter("Bool =", true).Order("-String").Include("Int", "String", "Bool").Limit(10).Offset(10)
+	benchmarkQuery(b, q)
+}
+
 // BenchmarkCountAllQuery10 times counting 10 models
 func BenchmarkCountAllQuery10(b *testing.B) {
 	benchmarkCountAllQuery(b, 10)
@@ -265,6 +433,18 @@ func benchmarkDeleteById(b *testing.B, num int, idSelect func(int, []string) str
 	}
 }
 
+func benchmarkQuery(b *testing.B, q *Query) {
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		b.StartTimer()
+		_, err := q.Run()
+		b.StopTimer()
+		if err != nil {
+			b.Error(err)
+		}
+	}
+}
+
 func benchmarkFindAllQuery(b *testing.B, num int) {
 	testingSetUp()
 	defer testingTearDown()
@@ -276,17 +456,61 @@ func benchmarkFindAllQuery(b *testing.B, num int) {
 	if err := MSave(Models(ms)); err != nil {
 		b.Error(err)
 	}
+	benchmarkQuery(b, NewQuery("basicModel"))
+}
 
-	b.ResetTimer()
+func benchmarkFilterIntQuery(b *testing.B, selected int, total int) {
+	testingSetUp()
+	defer testingTearDown()
 
-	for i := 0; i < b.N; i++ {
-		b.StartTimer()
-		_, err := NewQuery("basicModel").Run()
-		b.StopTimer()
-		if err != nil {
-			b.Error(err)
-		}
+	ms, err := newIndexedPrimativesModels(total)
+	if err != nil {
+		b.Error(err)
 	}
+	for i := 0; i < selected; i++ {
+		ms[i].Int = -1
+	}
+	if err := MSave(Models(ms)); err != nil {
+		b.Error(err)
+	}
+	benchmarkQuery(b, NewQuery("indexedPrimativesModel").Filter("Int =", -1).Include("Int"))
+}
+
+func benchmarkFilterStringQuery(b *testing.B, selected int, total int) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newIndexedPrimativesModels(total)
+	if err != nil {
+		b.Error(err)
+	}
+	for i := 0; i < selected; i++ {
+		ms[i].String = "findMe"
+	}
+	if err := MSave(Models(ms)); err != nil {
+		b.Error(err)
+	}
+	benchmarkQuery(b, NewQuery("indexedPrimativesModel").Filter("String =", "findMe").Include("String"))
+}
+
+func benchmarkFilterBoolQuery(b *testing.B, selected int, total int) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := newIndexedPrimativesModels(total)
+	if err != nil {
+		b.Error(err)
+	}
+	for i := 0; i < selected; i++ {
+		ms[i].Bool = true
+	}
+	for i := selected; i < total; i++ {
+		ms[i].Bool = false
+	}
+	if err := MSave(Models(ms)); err != nil {
+		b.Error(err)
+	}
+	benchmarkQuery(b, NewQuery("indexedPrimativesModel").Filter("Bool =", true).Include("Bool"))
 }
 
 func benchmarkCountAllQuery(b *testing.B, num int) {
