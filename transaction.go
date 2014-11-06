@@ -11,164 +11,165 @@ package zoom
 import (
 	"fmt"
 	"github.com/garyburd/redigo/redis"
+	"github.com/gyuho/goraph/algorithm/tskahn"
+	"github.com/gyuho/goraph/graph/gs"
 	"reflect"
+	"strings"
 )
 
+// replyHandler is a callback function used to handle the response from
+// some redis command
+type replyHandler func(interface{}) error
+
+// transaction is an abstraction around a multi-phase transaction. It
+// consists of one or more phases, where each phase is an atomic redis
+// transaction.
 type transaction struct {
 	conn       redis.Conn
-	commands   []command
-	handlers   []func(interface{}) error
-	dataReady  map[string]bool
-	data       map[string]interface{}
-	waiters    []waiter
+	phases     map[string]*phase
+	graph      *gs.Graph
 	modelCache map[string]interface{}
 }
 
-type command struct {
-	name string
-	args []interface{}
-}
-
-type waiter struct {
-	trans *transaction
-	keys  []string
-	do    func() error
-	done  bool
-}
-
-func (w waiter) ready() bool {
-	for _, key := range w.keys {
-		if key == "" {
-			return true
-		}
-		if !w.trans.dataReady[key] {
-			return false
-		}
-	}
-	return true
-}
-
 func newTransaction() *transaction {
-	t := &transaction{
+	return &transaction{
+		phases:     map[string]*phase{},
+		graph:      gs.NewGraph(),
 		conn:       GetConn(),
-		modelCache: make(map[string]interface{}),
-		dataReady:  make(map[string]bool),
-		data:       make(map[string]interface{}),
+		modelCache: map[string]interface{}{},
 	}
-	return t
 }
 
-func (t *transaction) sendData(key string, data interface{}) {
-	t.data[key] = data
-	t.dataReady[key] = true
-}
-
-func (t *transaction) doWhenDataReady(dataKeys []string, do func() error) {
-	w := waiter{
-		trans: t,
-		keys:  dataKeys,
-		do:    do,
-		done:  false,
+func (t *transaction) linearize() ([]*phase, error) {
+	result, ok := tskahn.TSKahn(t.graph)
+	if !ok {
+		return nil, fmt.Errorf("Could not linearize transaction dependencies.\n%s", result)
+	} else {
+		orderdphases := []*phase{}
+		phaseIds := strings.Split(result, " → ")
+		for _, phaseId := range phaseIds {
+			phase, found := t.phases[phaseId]
+			if !found {
+				return nil, fmt.Errorf("Could not find phase with id: %s", phaseId)
+			}
+			orderdphases = append(orderdphases, phase)
+		}
+		return orderdphases, nil
 	}
-	t.waiters = append(t.waiters, w)
-}
-
-func (t *transaction) command(cmd string, args []interface{}, handler func(interface{}) error) {
-	t.commands = append(t.commands, command{name: cmd, args: args})
-	t.handlers = append(t.handlers, handler)
+	return nil, nil
 }
 
 func (t *transaction) exec() error {
-	defer t.conn.Close()
-
-	// execute any of the waiting functions if they are ready before any commands
-	// are run
-	if err := t.executeWaitersIfReady(); err != nil {
+	orderedPhases, err := t.linearize()
+	if err != nil {
 		return err
 	}
-
-	for len(t.commands) > 0 {
-		if len(t.commands) == 1 {
-			// if there is only one command, no need to use MULTI/EXEC
-			c := t.commands[0]
-			reply, err := t.conn.Do(c.name, c.args...)
-			if err != nil {
-				return err
-			}
-			if t.handlers[0] != nil {
-				if err := t.handlers[0](reply); err != nil {
-					return err
-				}
-			}
-		} else {
-			// send all the pending commands at once using MULTI/EXEC
-			t.conn.Send("MULTI")
-			for _, c := range t.commands {
-				if err := t.conn.Send(c.name, c.args...); err != nil {
-					return err
-				}
-			}
-
-			// invoke redis driver to execute the transaction
-			replies, err := redis.MultiBulk(t.conn.Do("EXEC"))
-			if err != nil {
-				t.discard()
-				return err
-			}
-
-			// iterate through the replies, calling the corresponding handler functions
-			for i, reply := range replies {
-				handler := t.handlers[i]
-				if handler != nil {
-					if err := handler(reply); err != nil {
-						return err
-					}
-				}
-			}
+	for _, phase := range orderedPhases {
+		if err := phase.exec(t.conn); err != nil {
+			return err
 		}
+	}
+	return nil
+}
 
-		// reset all handlers and commands and prepare for the next stage
-		t.commands = make([]command, 0)
-		t.handlers = make([]func(interface{}) error, 0)
+type phase struct {
+	t        *transaction
+	id       string
+	commands []*command
+	vertex   *gs.Vertex
+	pre      func(*phase) error
+	post     func(*phase) error
+}
 
-		// execute any of the waiting functions if they are now ready
-		if err := t.executeWaitersIfReady(); err != nil {
+func (t *transaction) addPhase(id string, pre func(*phase) error, post func(*phase) error) *phase {
+	if id == "" {
+		id = generateRandomId()
+	}
+	p := &phase{
+		t:      t,
+		id:     id,
+		vertex: gs.NewVertex(id),
+		pre:    pre,
+		post:   post,
+	}
+	t.graph.AddVertex(p.vertex)
+	t.phases[p.id] = p
+	return p
+}
+
+func (p *phase) String() string {
+	result := fmt.Sprintf("%s:\n", p.id)
+	for _, c := range p.commands {
+		result += fmt.Sprintf("\t%s\n", c)
+	}
+	return result
+}
+
+func (p *phase) exec(conn redis.Conn) error {
+	// execute the pre-handler for this phase
+	if p.pre != nil {
+		if err := p.pre(p); err != nil {
 			return err
 		}
 	}
 
-	if len(t.waiters) > 0 {
-		pendingData := []string{}
-		for _, w := range t.waiters {
-			for _, key := range w.keys {
-				if !t.dataReady[key] {
-					pendingData = append(pendingData, key)
+	if len(p.commands) > 0 {
+		// send all the commands for this phase using MULTI
+		conn.Send("MULTI")
+		for _, c := range p.commands {
+			if err := conn.Send(c.name, c.args...); err != nil {
+				return err
+			}
+		}
+		// use EXEC to execute all the commands at once
+		replies, err := redis.Values(conn.Do("EXEC"))
+		if err != nil {
+			p.t.discard()
+			return err
+		}
+		// iterate through the replies, calling the corresponding handler functions
+		for i, reply := range replies {
+			handler := p.commands[i].handler
+			if handler != nil {
+				if err := handler(reply); err != nil {
+					return err
 				}
 			}
 		}
-		return fmt.Errorf(`zoom: transaction finished executing but some pending data was never sent.
-		This is probably either because you forgot to send the data or there was a dependency cycle.
-		%d function(s) were still waiting on data to be sent and were never executed.
-		The following data was still pending: %v`, len(t.waiters), pendingData)
 	}
 
+	// execute the post-handler for this phase
+	if p.post != nil {
+		return p.post(p)
+	}
 	return nil
 }
 
-func (t *transaction) executeWaitersIfReady() error {
-	stillWaiting := make([]waiter, 0)
-	for _, w := range t.waiters {
-		if w.ready() && !w.done {
-			if err := w.do(); err != nil {
-				return err
-			}
-		} else {
-			stillWaiting = append(stillWaiting, w)
-		}
-	}
-	t.waiters = stillWaiting
+func (p *phase) addDependency(dep *phase) {
+	p.t.graph.Connect(dep.vertex, p.vertex, 0)
+}
 
-	return nil
+type command struct {
+	name    string
+	args    []interface{}
+	handler replyHandler
+}
+
+func (p *phase) addCommand(name string, args []interface{}, handler replyHandler) {
+	c := &command{
+		name:    name,
+		args:    args,
+		handler: handler,
+	}
+	p.commands = append(p.commands, c)
+}
+
+func (c *command) String() string {
+	argStrings := []string{}
+	for _, arg := range c.args {
+		argStrings = append(argStrings, fmt.Sprint(arg))
+	}
+	return fmt.Sprintf("\t%s %s", c.name, strings.Join(argStrings, " "))
 }
 
 func (t *transaction) discard() error {
@@ -229,20 +230,11 @@ func newScanModelSliceHandler(mr modelRef, scanVal reflect.Value) func(interface
 	}
 }
 
-// newSendDataHandler returns a function which will send the reply of the command
-// to the transaction data
-func newSendDataHandler(t *transaction, key string) func(interface{}) error {
-	return func(reply interface{}) error {
-		t.sendData(key, reply)
-		return nil
-	}
-}
+// Shortcuts for adding common commands to a phase
 
-// Useful Operations for Transactions
-
-// saveModel adds all the necessary commands to save a given model to the redis database
-// this includes indeces and external sets/lists
-func (t *transaction) saveModel(m Model) error {
+// saveModel adds all the necessary commands to save a given model to the redis database.
+// this includes indexes and relationships
+func (p *phase) saveModel(m Model) error {
 	mr, err := newModelRefFromModel(m)
 	if err != nil {
 		return err
@@ -253,46 +245,43 @@ func (t *transaction) saveModel(m Model) error {
 		m.SetId(generateRandomId())
 	}
 
-	// add operations to save the model indexes
+	// add operations to save the model field indexes
 	// we do this first becuase it may require a read before write :(
-	if err := t.saveModelIndexes(mr); err != nil {
+	if err := p.saveModelIndexes(mr); err != nil {
 		return err
 	}
 
 	// add an operation to write data to database
-	if err := t.saveModelStruct(mr); err != nil {
+	if err := p.saveModelStruct(mr); err != nil {
 		return err
 	}
 
-	// add an operation to add to index for this model
-	t.index(mr)
-
-	// add operations to save external lists and sets
-	t.saveModelLists(mr)
-	t.saveModelSets(mr)
+	// add an operation to add to index this model id in the
+	// set of all model ids for this type
+	p.index(mr)
 
 	// add operations to save model relationships
-	t.saveModelRelationships(mr)
+	p.saveModelRelationships(mr)
 	return nil
 }
 
-func (t *transaction) saveModelStruct(mr modelRef) error {
+func (p *phase) saveModelStruct(mr modelRef) error {
 	if args, err := mr.mainHashArgs(); err != nil {
 		return err
 	} else {
 		if len(args) > 1 {
-			t.command("HMSET", args, nil)
+			p.addCommand("HMSET", args, nil)
 		}
 		return nil
 	}
 }
 
-func (t *transaction) index(mr modelRef) {
+func (p *phase) index(mr modelRef) {
 	args := redis.Args{}.Add(mr.indexKey()).Add(mr.model.GetId())
-	t.command("SADD", args, nil)
+	p.addCommand("SADD", args, nil)
 }
 
-func (t *transaction) saveModelLists(mr modelRef) {
+func (p *phase) saveModelLists(mr modelRef) {
 	for _, list := range mr.modelSpec.lists {
 		field := mr.value(list.fieldName)
 		if field.IsNil() {
@@ -300,11 +289,11 @@ func (t *transaction) saveModelLists(mr modelRef) {
 		}
 		listKey := mr.key() + ":" + list.redisName
 		args := redis.Args{}.Add(listKey).AddFlat(field.Interface())
-		t.command("RPUSH", args, nil)
+		p.addCommand("RPUSH", args, nil)
 	}
 }
 
-func (t *transaction) saveModelSets(mr modelRef) {
+func (p *phase) saveModelSets(mr modelRef) {
 	for _, set := range mr.modelSpec.sets {
 		field := mr.value(set.fieldName)
 		if field.IsNil() {
@@ -312,18 +301,18 @@ func (t *transaction) saveModelSets(mr modelRef) {
 		}
 		setKey := mr.key() + ":" + set.redisName
 		args := redis.Args{}.Add(setKey).AddFlat(field.Interface())
-		t.command("SADD", args, nil)
+		p.addCommand("SADD", args, nil)
 	}
 }
 
-func (t *transaction) saveModelRelationships(mr modelRef) error {
+func (p *phase) saveModelRelationships(mr modelRef) error {
 	for _, r := range mr.modelSpec.relationships {
 		if r.relType == oneToOne {
-			if err := t.saveModelOneToOneRelationship(mr, r); err != nil {
+			if err := p.saveModelOneToOneRelationship(mr, r); err != nil {
 				return err
 			}
 		} else if r.relType == oneToMany {
-			if err := t.saveModelOneToManyRelationship(mr, r); err != nil {
+			if err := p.saveModelOneToManyRelationship(mr, r); err != nil {
 				return err
 			}
 		}
@@ -331,7 +320,7 @@ func (t *transaction) saveModelRelationships(mr modelRef) error {
 	return nil
 }
 
-func (t *transaction) saveModelOneToOneRelationship(mr modelRef, relationship *fieldSpec) error {
+func (p *phase) saveModelOneToOneRelationship(mr modelRef, relationship *fieldSpec) error {
 	field := mr.value(relationship.fieldName)
 	if field.IsNil() {
 		return nil
@@ -347,11 +336,11 @@ func (t *transaction) saveModelOneToOneRelationship(mr modelRef, relationship *f
 	// add a command to the transaction to set the relation key
 	relationKey := mr.key() + ":" + relationship.redisName
 	args := redis.Args{relationKey, rModel.GetId()}
-	t.command("SET", args, nil)
+	p.addCommand("SET", args, nil)
 	return nil
 }
 
-func (t *transaction) saveModelOneToManyRelationship(mr modelRef, relationship *fieldSpec) error {
+func (p *phase) saveModelOneToManyRelationship(mr modelRef, relationship *fieldSpec) error {
 	field := mr.value(relationship.fieldName)
 	if field.IsNil() {
 		return nil
@@ -382,50 +371,50 @@ func (t *transaction) saveModelOneToManyRelationship(mr modelRef, relationship *
 		// add a command to the transaction to save the ids
 		relationKey := mr.key() + ":" + relationship.redisName
 		args := redis.Args{}.Add(relationKey).AddFlat(ids)
-		t.command("SADD", args, nil)
+		p.addCommand("SADD", args, nil)
 	}
 	return nil
 }
 
-func (t *transaction) saveModelIndexes(mr modelRef) error {
-	for _, p := range mr.modelSpec.primativeIndexes {
-		if p.indexType == indexNumeric {
-			if err := t.saveModelPrimativeIndexNumeric(mr, p); err != nil {
+func (p *phase) saveModelIndexes(mr modelRef) error {
+	for _, pi := range mr.modelSpec.primativeIndexes {
+		if pi.indexType == indexNumeric {
+			if err := p.saveModelPrimativeIndexNumeric(mr, pi); err != nil {
 				return err
 			}
-		} else if p.indexType == indexAlpha {
-			t.saveModelPrimativeIndexAlpha(mr, p)
-		} else if p.indexType == indexBoolean {
-			t.saveModelPrimativeIndexBoolean(mr, p)
+		} else if pi.indexType == indexAlpha {
+			p.saveModelPrimativeIndexAlpha(mr, pi)
+		} else if pi.indexType == indexBoolean {
+			p.saveModelPrimativeIndexBoolean(mr, pi)
 		}
 	}
 
-	for _, p := range mr.modelSpec.pointerIndexes {
-		if p.indexType == indexNumeric {
-			if err := t.saveModelPointerIndexNumeric(mr, p); err != nil {
+	for _, pi := range mr.modelSpec.pointerIndexes {
+		if pi.indexType == indexNumeric {
+			if err := p.saveModelPointerIndexNumeric(mr, pi); err != nil {
 				return err
 			}
-		} else if p.indexType == indexAlpha {
-			t.saveModelPointerIndexAlpha(mr, p)
-		} else if p.indexType == indexBoolean {
-			t.saveModelPointerIndexBoolean(mr, p)
+		} else if pi.indexType == indexAlpha {
+			p.saveModelPointerIndexAlpha(mr, pi)
+		} else if pi.indexType == indexBoolean {
+			p.saveModelPointerIndexBoolean(mr, pi)
 		}
 	}
 	return nil
 }
 
-func (t *transaction) saveModelPrimativeIndexNumeric(mr modelRef, primative *fieldSpec) error {
+func (p *phase) saveModelPrimativeIndexNumeric(mr modelRef, primative *fieldSpec) error {
 	indexKey := mr.modelSpec.modelName + ":" + primative.redisName
 	score, err := convertNumericToFloat64(mr.value(primative.fieldName))
 	if err != nil {
 		return err
 	}
 	id := mr.model.GetId()
-	t.indexNumeric(indexKey, score, id)
+	p.indexNumeric(indexKey, score, id)
 	return nil
 }
 
-func (t *transaction) saveModelPointerIndexNumeric(mr modelRef, pointer *fieldSpec) error {
+func (p *phase) saveModelPointerIndexNumeric(mr modelRef, pointer *fieldSpec) error {
 	if mr.value(pointer.fieldName).IsNil() {
 		// TODO: special case for indexing nil pointers?
 		return nil // skip nil pointers for now
@@ -436,25 +425,25 @@ func (t *transaction) saveModelPointerIndexNumeric(mr modelRef, pointer *fieldSp
 		return err
 	}
 	id := mr.model.GetId()
-	t.indexNumeric(indexKey, score, id)
+	p.indexNumeric(indexKey, score, id)
 	return nil
 }
 
-func (t *transaction) indexNumeric(indexKey string, score float64, id string) {
+func (p *phase) indexNumeric(indexKey string, score float64, id string) {
 	args := redis.Args{}.Add(indexKey).Add(score).Add(id)
-	t.command("ZADD", args, nil)
+	p.addCommand("ZADD", args, nil)
 }
 
-func (t *transaction) saveModelPrimativeIndexAlpha(mr modelRef, primative *fieldSpec) {
-	t.removeOldAlphaIndex(mr, primative.fieldName, primative.redisName)
+func (p *phase) saveModelPrimativeIndexAlpha(mr modelRef, primative *fieldSpec) {
+	p.removeOldAlphaIndex(mr, primative.fieldName, primative.redisName)
 	indexKey := mr.modelSpec.modelName + ":" + primative.redisName
 	value := mr.value(primative.fieldName).String()
 	id := mr.model.GetId()
-	t.indexAlpha(indexKey, value, id)
+	p.indexAlpha(indexKey, value, id)
 }
 
-func (t *transaction) saveModelPointerIndexAlpha(mr modelRef, pointer *fieldSpec) {
-	t.removeOldAlphaIndex(mr, pointer.fieldName, pointer.redisName)
+func (p *phase) saveModelPointerIndexAlpha(mr modelRef, pointer *fieldSpec) {
+	p.removeOldAlphaIndex(mr, pointer.fieldName, pointer.redisName)
 	if mr.value(pointer.fieldName).IsNil() {
 		// TODO: special case for indexing nil pointers?
 		return // skip nil pointers for now
@@ -462,22 +451,22 @@ func (t *transaction) saveModelPointerIndexAlpha(mr modelRef, pointer *fieldSpec
 	indexKey := mr.modelSpec.modelName + ":" + pointer.redisName
 	value := mr.value(pointer.fieldName).Elem().String()
 	id := mr.model.GetId()
-	t.indexAlpha(indexKey, value, id)
+	p.indexAlpha(indexKey, value, id)
 }
 
-func (t *transaction) indexAlpha(indexKey, value, id string) {
+func (p *phase) indexAlpha(indexKey, value, id string) {
 	member := value + " " + id
 	args := redis.Args{}.Add(indexKey).Add(0).Add(member)
-	t.command("ZADD", args, nil)
+	p.addCommand("ZADD", args, nil)
 }
 
 // Remove the alpha index that may have existed before an update or resave of the model
 // this requires a read before write, which is a performance penalty but unfortunatlely
 // is unavoidable because of the hacky way we're indexing alpha fields.
-func (t *transaction) removeOldAlphaIndex(mr modelRef, fieldName string, redisName string) {
+func (p *phase) removeOldAlphaIndex(mr modelRef, fieldName string, redisName string) {
 	key := mr.key()
 	args := redis.Args{}.Add(key).Add(redisName)
-	t.command("HGET", args, func(reply interface{}) error {
+	p.addCommand("HGET", args, func(reply interface{}) error {
 		if reply == nil {
 			return nil
 		}
@@ -504,7 +493,7 @@ func (t *transaction) removeOldAlphaIndex(mr modelRef, fieldName string, redisNa
 	})
 }
 
-func (t *transaction) saveModelPrimativeIndexBoolean(mr modelRef, primative *fieldSpec) {
+func (p *phase) saveModelPrimativeIndexBoolean(mr modelRef, primative *fieldSpec) {
 	value := mr.value(primative.fieldName).Bool()
 	id := mr.model.GetId()
 	indexKey := mr.modelSpec.modelName + ":" + primative.redisName
@@ -514,10 +503,10 @@ func (t *transaction) saveModelPrimativeIndexBoolean(mr modelRef, primative *fie
 	} else {
 		score = 0.0
 	}
-	t.indexNumeric(indexKey, score, id)
+	p.indexNumeric(indexKey, score, id)
 }
 
-func (t *transaction) saveModelPointerIndexBoolean(mr modelRef, pointer *fieldSpec) {
+func (p *phase) saveModelPointerIndexBoolean(mr modelRef, pointer *fieldSpec) {
 	if mr.value(pointer.fieldName).IsNil() {
 		// TODO: special case for indexing nil pointers?
 		return // skip nil pointers for now
@@ -531,10 +520,10 @@ func (t *transaction) saveModelPointerIndexBoolean(mr modelRef, pointer *fieldSp
 	} else {
 		score = 0.0
 	}
-	t.indexNumeric(indexKey, score, id)
+	p.indexNumeric(indexKey, score, id)
 }
 
-func (t *transaction) findModel(mr modelRef, includes []string) error {
+func (p *phase) scanModel(mr modelRef, includes []string) error {
 	// check for mutex
 	if s, ok := mr.model.(Syncer); ok {
 		mutexId := fmt.Sprintf("%T:%s", mr.model, mr.model.GetId())
@@ -543,17 +532,17 @@ func (t *transaction) findModel(mr modelRef, includes []string) error {
 	}
 
 	// check model cache to prevent infinite recursion or unnecessary queries
-	if prior, found := t.modelCache[mr.key()]; found {
+	if prior, found := p.t.modelCache[mr.key()]; found {
 		reflect.ValueOf(mr.model).Elem().Set(reflect.ValueOf(prior).Elem())
 		return nil
 	}
-	t.modelCache[mr.key()] = mr.model
+	p.t.modelCache[mr.key()] = mr.model
 
 	// scan the hash values directly into the struct
 	if includes == nil {
 		// use HMGET to get all the fields for the model
 		args := redis.Args{}.Add(mr.key()).AddFlat(mr.modelSpec.mainHashFieldNames())
-		t.command("HMGET", args, newScanModelHandler(mr, nil))
+		p.addCommand("HMGET", args, newScanModelHandler(mr, nil))
 	} else {
 		// get the appropriate scannable fields
 		fields := make([]interface{}, 0)
@@ -564,21 +553,13 @@ func (t *transaction) findModel(mr modelRef, includes []string) error {
 		// use HMGET to get only the included fields for the model
 		if len(fields) != 0 {
 			args := redis.Args{}.Add(mr.key()).AddFlat(includes)
-			t.command("HMGET", args, newScanModelHandler(mr, includes))
+			p.addCommand("HMGET", args, newScanModelHandler(mr, includes))
 		}
-	}
-
-	// find all the external sets and lists for the model
-	if len(mr.modelSpec.lists) != 0 {
-		t.findModelLists(mr, includes)
-	}
-	if len(mr.modelSpec.sets) != 0 {
-		t.findModelSets(mr, includes)
 	}
 
 	// find the relationships for the model
 	if len(mr.modelSpec.relationships) != 0 {
-		if err := t.findModelRelationships(mr, includes); err != nil {
+		if err := p.findModelRelationships(mr, includes); err != nil {
 			return err
 		}
 	}
@@ -586,7 +567,7 @@ func (t *transaction) findModel(mr modelRef, includes []string) error {
 	return nil
 }
 
-func (t *transaction) findModelLists(mr modelRef, includes []string) {
+func (p *phase) findModelLists(mr modelRef, includes []string) {
 	for _, list := range mr.modelSpec.lists {
 		if includes != nil {
 			if !stringSliceContains(list.fieldName, includes) {
@@ -599,11 +580,11 @@ func (t *transaction) findModelLists(mr modelRef, includes []string) {
 		// use LRANGE to get all the members of the list
 		listKey := mr.key() + ":" + list.redisName
 		args := redis.Args{listKey, 0, -1}
-		t.command("LRANGE", args, newScanModelSliceHandler(mr, field))
+		p.addCommand("LRANGE", args, newScanModelSliceHandler(mr, field))
 	}
 }
 
-func (t *transaction) findModelSets(mr modelRef, includes []string) {
+func (p *phase) findModelSets(mr modelRef, includes []string) {
 	for _, set := range mr.modelSpec.sets {
 		if includes != nil {
 			if !stringSliceContains(set.fieldName, includes) {
@@ -616,11 +597,11 @@ func (t *transaction) findModelSets(mr modelRef, includes []string) {
 		// use SMEMBERS to get all the members of the set
 		setKey := mr.key() + ":" + set.redisName
 		args := redis.Args{setKey}
-		t.command("SMEMBERS", args, newScanModelSliceHandler(mr, field))
+		p.addCommand("SMEMBERS", args, newScanModelSliceHandler(mr, field))
 	}
 }
 
-func (t *transaction) findModelRelationships(mr modelRef, includes []string) error {
+func (p *phase) findModelRelationships(mr modelRef, includes []string) error {
 	for _, r := range mr.modelSpec.relationships {
 		if includes != nil {
 			if !stringSliceContains(r.fieldName, includes) {
@@ -628,11 +609,11 @@ func (t *transaction) findModelRelationships(mr modelRef, includes []string) err
 			}
 		}
 		if r.relType == oneToOne {
-			if err := t.findModelOneToOneRelation(mr, r); err != nil {
+			if err := p.findModelOneToOneRelation(mr, r); err != nil {
 				return err
 			}
 		} else if r.relType == oneToMany {
-			if err := t.findModelOneToManyRelation(mr, r); err != nil {
+			if err := p.findModelOneToManyRelation(mr, r); err != nil {
 				return err
 			}
 		}
@@ -640,7 +621,7 @@ func (t *transaction) findModelRelationships(mr modelRef, includes []string) err
 	return nil
 }
 
-func (t *transaction) findModelOneToOneRelation(mr modelRef, relationship *fieldSpec) error {
+func (p *phase) findModelOneToOneRelation(mr modelRef, relationship *fieldSpec) error {
 	// TODO: use scripting to retain integrity of the transaction (we want
 	// to perform only one round trip per transaction).
 	conn := GetConn()
@@ -665,7 +646,7 @@ func (t *transaction) findModelOneToOneRelation(mr modelRef, relationship *field
 	// check if a model with key is already cached in this transaction
 	rModelName, _ := getRegisteredNameFromType(field.Type())
 	rModelKey := rModelName + ":" + id
-	if prior, found := t.modelCache[rModelKey]; found {
+	if prior, found := p.t.modelCache[rModelKey]; found {
 		// use the same pointer (it's the same object)
 		field.Set(reflect.ValueOf(prior))
 		return nil
@@ -688,14 +669,14 @@ func (t *transaction) findModelOneToOneRelation(mr modelRef, relationship *field
 	}
 
 	// add a find operation to the transaction
-	if err := t.findModel(rModelRef, nil); err != nil {
+	if err := p.scanModel(rModelRef, nil); err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func (t *transaction) findModelOneToManyRelation(mr modelRef, relationship *fieldSpec) error {
+func (p *phase) findModelOneToManyRelation(mr modelRef, relationship *fieldSpec) error {
 
 	// TODO: use scripting to retain integrity of the transaction (we want
 	// to perform only one round trip per transaction).
@@ -718,7 +699,7 @@ func (t *transaction) findModelOneToManyRelation(mr modelRef, relationship *fiel
 		// check if a model with key is already cached in this transaction
 		rModelName, _ := getRegisteredNameFromType(rType)
 		rModelKey := rModelName + ":" + id
-		if prior, found := t.modelCache[rModelKey]; found {
+		if prior, found := p.t.modelCache[rModelKey]; found {
 			// use the same pointer (it's the same object)
 			sliceVal := reflect.Append(field, reflect.ValueOf(prior))
 			field.Set(sliceVal)
@@ -739,7 +720,7 @@ func (t *transaction) findModelOneToManyRelation(mr modelRef, relationship *fiel
 		}
 
 		// add a find operation to the transaction
-		if err := t.findModel(rModelRef, nil); err != nil {
+		if err := p.scanModel(rModelRef, nil); err != nil {
 			return err
 		}
 
@@ -751,23 +732,23 @@ func (t *transaction) findModelOneToManyRelation(mr modelRef, relationship *fiel
 	return nil
 }
 
-func (t *transaction) deleteModel(mr modelRef) {
+func (p *phase) deleteModel(mr modelRef) {
 	modelName := mr.modelSpec.modelName
 	id := mr.model.GetId()
 
 	// add an operation to delete the model itself
 	key := modelName + ":" + id
-	t.delete(key)
+	p.delete(key)
 
 	// add an operation to remove the model id from the index
 	indexKey := modelName + ":all"
-	t.unindex(indexKey, id)
+	p.unindex(indexKey, id)
 
 	// add an operation to remove all the field indexes for the model
-	t.removeModelIndexes(mr)
+	p.removeModelIndexes(mr)
 }
 
-func (t *transaction) deleteModelById(modelName, id string) error {
+func (p *phase) deleteModelById(modelName, id string) error {
 
 	ms, found := modelSpecs[modelName]
 	if !found {
@@ -793,80 +774,80 @@ func (t *transaction) deleteModelById(modelName, id string) error {
 		if err != nil {
 			return err
 		}
-		t.removeModelIndexes(mr)
+		p.removeModelIndexes(mr)
 	}
 
 	// add an operation to delete the model itself
 	key := modelName + ":" + id
-	t.delete(key)
+	p.delete(key)
 
 	// add an operation to remove the model id from the index
 	indexKey := modelName + ":all"
-	t.unindex(indexKey, id)
+	p.unindex(indexKey, id)
 
 	return nil
 }
 
-func (t *transaction) delete(key string) {
-	t.command("DEL", redis.Args{}.Add(key), nil)
+func (p *phase) delete(key string) {
+	p.addCommand("DEL", redis.Args{}.Add(key), nil)
 }
 
-func (t *transaction) unindex(key, value string) {
+func (p *phase) unindex(key, value string) {
 	args := redis.Args{}.Add(key).Add(value)
-	t.command("SREM", args, nil)
+	p.addCommand("SREM", args, nil)
 }
 
-func (t *transaction) removeModelIndexes(mr modelRef) {
-	for _, p := range mr.modelSpec.primativeIndexes {
-		if p.indexType == indexNumeric {
-			t.removeModelPrimativeIndexNumeric(mr, p)
-		} else if p.indexType == indexAlpha {
-			t.removeModelPrimativeIndexAlpha(mr, p)
-		} else if p.indexType == indexBoolean {
-			t.removeModelPrimativeIndexBoolean(mr, p)
+func (p *phase) removeModelIndexes(mr modelRef) {
+	for _, pi := range mr.modelSpec.primativeIndexes {
+		if pi.indexType == indexNumeric {
+			p.removeModelPrimativeIndexNumeric(mr, pi)
+		} else if pi.indexType == indexAlpha {
+			p.removeModelPrimativeIndexAlpha(mr, pi)
+		} else if pi.indexType == indexBoolean {
+			p.removeModelPrimativeIndexBoolean(mr, pi)
 		}
 	}
 
-	for _, p := range mr.modelSpec.pointerIndexes {
-		if p.indexType == indexNumeric {
-			t.removeModelPointerIndexNumeric(mr, p)
-		} else if p.indexType == indexAlpha {
-			t.removeModelPointerIndexAlpha(mr, p)
-		} else if p.indexType == indexBoolean {
-			t.removeModelPointerIndexBoolean(mr, p)
+	for _, pi := range mr.modelSpec.pointerIndexes {
+		if pi.indexType == indexNumeric {
+			p.removeModelPointerIndexNumeric(mr, pi)
+		} else if pi.indexType == indexAlpha {
+			p.removeModelPointerIndexAlpha(mr, pi)
+		} else if pi.indexType == indexBoolean {
+			p.removeModelPointerIndexBoolean(mr, pi)
 		}
 	}
 }
 
-func (t *transaction) removeModelPrimativeIndexNumeric(mr modelRef, primative *fieldSpec) {
+func (p *phase) removeModelPrimativeIndexNumeric(mr modelRef, primative *fieldSpec) {
 	indexKey := mr.modelSpec.modelName + ":" + primative.redisName
 	id := mr.model.GetId()
-	t.unindexNumeric(indexKey, id)
+	p.unindexNumeric(indexKey, id)
 }
 
-func (t *transaction) removeModelPointerIndexNumeric(mr modelRef, pointer *fieldSpec) {
+func (p *phase) removeModelPointerIndexNumeric(mr modelRef, pointer *fieldSpec) {
 	if mr.value(pointer.fieldName).IsNil() {
 		// TODO: special case for indexing nil pointers?
 		return // skip nil pointers for now
 	}
 	indexKey := mr.modelSpec.modelName + ":" + pointer.redisName
 	id := mr.model.GetId()
-	t.unindexNumeric(indexKey, id)
+	p.unindexNumeric(indexKey, id)
 }
 
-func (t *transaction) unindexNumeric(indexKey string, id string) {
+func (p *phase) unindexNumeric(indexKey string, id string) {
 	args := redis.Args{}.Add(indexKey).Add(id)
-	t.command("ZREM", args, nil)
+	p.addCommand("ZREM", args, nil)
 }
 
-func (t *transaction) removeModelPrimativeIndexAlpha(mr modelRef, primative *fieldSpec) {
+func (p *phase) removeModelPrimativeIndexAlpha(mr modelRef, primative *fieldSpec) {
 	indexKey := mr.modelSpec.modelName + ":" + primative.redisName
 	value := mr.value(primative.fieldName).String()
 	id := mr.model.GetId()
-	t.unindexAlpha(indexKey, value, id)
+	p.unindexAlpha(indexKey, value, id)
 }
 
-func (t *transaction) removeModelPointerIndexAlpha(mr modelRef, pointer *fieldSpec) {
+func (p *phase) removeModelPointerIndexAlpha(mr modelRef, pointer *fieldSpec) {
 	if mr.value(pointer.fieldName).IsNil() {
 		// TODO: special case for indexing nil pointers?
 		return // skip nil pointers for now
@@ -874,25 +855,25 @@ func (t *transaction) removeModelPointerIndexAlpha(mr modelRef, pointer *fieldSp
 	indexKey := mr.modelSpec.modelName + ":" + pointer.redisName
 	value := mr.value(pointer.fieldName).Elem().String()
 	id := mr.model.GetId()
-	t.unindexAlpha(indexKey, value, id)
+	p.unindexAlpha(indexKey, value, id)
 }
 
-func (t *transaction) unindexAlpha(indexKey, value, id string) {
+func (p *phase) unindexAlpha(indexKey, value, id string) {
 	member := value + " " + id
 	args := redis.Args{}.Add(indexKey).Add(member)
-	t.command("ZREM", args, nil)
+	p.addCommand("ZREM", args, nil)
 }
 
-func (t *transaction) removeModelPrimativeIndexBoolean(mr modelRef, primative *fieldSpec) {
+func (p *phase) removeModelPrimativeIndexBoolean(mr modelRef, primative *fieldSpec) {
 	id := mr.model.GetId()
 	indexKey := mr.modelSpec.modelName + ":" + primative.redisName
-	t.unindexNumeric(indexKey, id)
+	p.unindexNumeric(indexKey, id)
 }
 
-func (t *transaction) removeModelPointerIndexBoolean(mr modelRef, pointer *fieldSpec) {
+func (p *phase) removeModelPointerIndexBoolean(mr modelRef, pointer *fieldSpec) {
 	id := mr.model.GetId()
 	indexKey := mr.modelSpec.modelName + ":" + pointer.redisName
-	t.unindexNumeric(indexKey, id)
+	p.unindexNumeric(indexKey, id)
 }
 
 // check to see if the model id exists in the index. If it doesn't,

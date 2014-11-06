@@ -214,24 +214,6 @@ func boolToInt(b bool) int {
 	}
 }
 
-// intersects two string slices. The order will be preserved
-// with respect to the first slice. (The first slice is used
-// in the outer loop). The return value is a copy, so neither
-// the first or second slice will be mutated.
-func orderedIntersectStrings(first []string, second []string) []string {
-	results := make([]string, 0)
-	memo := make(map[string]struct{})
-	for _, a := range second {
-		memo[a] = struct{}{}
-	}
-	for _, a := range first {
-		if _, found := memo[a]; found {
-			results = append(results, a)
-		}
-	}
-	return results
-}
-
 // intersects two model slices. The order will be preserved
 // with respect to the first slice. (The first slice is used
 // in the outer loop). The return value is a copy, so neither

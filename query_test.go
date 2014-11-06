@@ -133,7 +133,8 @@ func TestQueryFilterNumeric(t *testing.T) {
 	}
 
 	// create some test queries to filter the models using all possible numeric filters
-	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	// operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	operators := []string{"!="}
 	for i, fieldName := range fieldNames {
 		val := filterValues[i]
 		for _, op := range operators {
@@ -475,7 +476,7 @@ func testQueryScan(t *testing.T, q *Query, expected []*indexedPrimativesModel, s
 			t.Error(err)
 			t.FailNow()
 		} else if !sorted {
-			t.Errorf("models were not in the correct order. %v \n\tfor the query %s", fields, q)
+			t.Errorf("models were not in the correct order. Got: %v \n\tfor the query %s", fields, q)
 			t.FailNow()
 		}
 	} else {
