@@ -11,10 +11,12 @@
 package zoom
 
 import (
-	"github.com/dchest/uniuri"
-	"github.com/garyburd/redigo/redis"
+	"net/url"
 	"strconv"
 	"time"
+
+	"github.com/dchest/uniuri"
+	"github.com/garyburd/redigo/redis"
 )
 
 // Configuration contains various options. It should be created once
@@ -52,10 +54,35 @@ func Init(passedConfig *Configuration) {
 		MaxActive:   0,
 		IdleTimeout: 240 * time.Second,
 		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial(config.Network, config.Address)
+
+			u, err := url.Parse(config.Address)
 			if err != nil {
 				return nil, err
 			}
+
+			address := config.Address
+
+			if u.Host != "" {
+				address = u.Host
+			}
+
+			c, err := redis.Dial(config.Network, address)
+			if err != nil {
+				return nil, err
+			}
+
+			if u.User != nil {
+				pw, ok := u.User.Password()
+				if !ok {
+					return nil, err
+				}
+				_, err = c.Do("AUTH", pw)
+				if err != nil {
+					return nil, err
+				}
+
+			}
+
 			if _, err := c.Do("select", strconv.Itoa(config.Database)); err != nil {
 				c.Close()
 				return nil, err
