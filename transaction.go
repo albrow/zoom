@@ -9,10 +9,11 @@
 package zoom
 
 import (
+	"errors"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
-	"github.com/gyuho/goraph/algorithm/tskahn"
-	"github.com/gyuho/goraph/graph/gs"
+	"github.com/twmb/algoimpl/go/graph"
+
 	"reflect"
 	"strings"
 )
@@ -27,36 +28,92 @@ type replyHandler func(interface{}) error
 type transaction struct {
 	conn       redis.Conn
 	phases     map[string]*phase
-	graph      *gs.Graph
+	graph      *graph.Graph
 	modelCache map[string]interface{}
 }
 
 func newTransaction() *transaction {
 	return &transaction{
 		phases:     map[string]*phase{},
-		graph:      gs.NewGraph(),
+		graph:      graph.New(graph.Directed),
 		conn:       GetConn(),
 		modelCache: map[string]interface{}{},
 	}
 }
 
 func (t *transaction) linearize() ([]*phase, error) {
-	result, ok := tskahn.TSKahn(t.graph)
-	if !ok {
-		return nil, fmt.Errorf("Could not linearize transaction dependencies.\n%s", result)
-	} else {
-		orderdphases := []*phase{}
-		phaseIds := strings.Split(result, " → ")
-		for _, phaseId := range phaseIds {
-			phase, found := t.phases[phaseId]
-			if !found {
-				return nil, fmt.Errorf("Could not find phase with id: %s", phaseId)
+	// If the nodes could be linearized, components is a [][]graph.Node where
+	// each inner slice contains a single node. We need to iterate through and
+	// 1) get the id of the node, 2) get the phase corresponding to that id,
+	// and 3) add each phase to a list of ordered phases, which we'll return
+	// Example of correct output:
+	// [
+	//   [a]
+	//   [b]
+	//   [c]
+	// ]
+	// Where a, b, and c represent nodes
+	// Example of what the output will look like if there is a cycle:
+	// [
+	//   [a, b]
+	//   [c]
+	// ]
+	components := t.graph.StronglyConnectedComponents()
+	if len(components) != len(t.phases) {
+		// There was at least one cycle. Find a piece of components which has
+		// more than one node in it. The nodes in that piece are a cycle because
+		// they are strongly connected.
+		cycleIds := []string{}
+		for _, nodes := range components {
+			if len(nodes) > 1 {
+				// Get the phase ids of the nodes in the cycle
+				for _, node := range nodes {
+					if id, err := getIdForNode(node); err != nil {
+						return nil, err
+					} else {
+						cycleIds = append(cycleIds, id)
+					}
+				}
+				break
 			}
-			orderdphases = append(orderdphases, phase)
 		}
-		return orderdphases, nil
+		cycleExplanation := strings.Join(cycleIds, " -> ")
+		return nil, fmt.Errorf("Could not linearize transaction phases because there was a cycle: %s", cycleExplanation)
 	}
-	return nil, nil
+	orderedPhases := []*phase{}
+	for _, nodes := range components {
+		node := nodes[0]
+		phaseId, err := getIdForNode(node)
+		if err != nil {
+			return nil, err
+		}
+		phase, found := t.phases[phaseId]
+		if !found {
+			return nil, fmt.Errorf("Could not find phase with id: %s", phaseId)
+		}
+		orderedPhases = append(orderedPhases, phase)
+	}
+	// phaseIds := []string{}
+	// for _, phase := range orderedPhases {
+	// 	phaseIds = append(phaseIds, phase.id)
+	// }
+	// fmt.Printf("linearized results: %v\n", phaseIds)
+	return orderedPhases, nil
+}
+
+func getIdForNode(node graph.Node) (string, error) {
+	if id, ok := (*node.Value).(string); !ok {
+		msg := fmt.Sprintf("Could not convert node value: %v to string!", node.Value)
+		if node.Value != nil {
+			typ := reflect.TypeOf(*node.Value)
+			msg += fmt.Sprintf(" Had type: %s", typ.String())
+		} else {
+			msg += " Node was nil"
+		}
+		return "", errors.New(msg)
+	} else {
+		return id, nil
+	}
 }
 
 func (t *transaction) exec() error {
@@ -69,14 +126,16 @@ func (t *transaction) exec() error {
 			return err
 		}
 	}
-	return nil
+	// Close this transaction's connection to add it
+	// back into the pool
+	return t.conn.Close()
 }
 
 type phase struct {
 	t        *transaction
 	id       string
 	commands []*command
-	vertex   *gs.Vertex
+	node     graph.Node
 	pre      func(*phase) error
 	post     func(*phase) error
 }
@@ -86,13 +145,13 @@ func (t *transaction) addPhase(id string, pre func(*phase) error, post func(*pha
 		id = generateRandomId()
 	}
 	p := &phase{
-		t:      t,
-		id:     id,
-		vertex: gs.NewVertex(id),
-		pre:    pre,
-		post:   post,
+		t:    t,
+		id:   id,
+		node: t.graph.MakeNode(),
+		pre:  pre,
+		post: post,
 	}
-	t.graph.AddVertex(p.vertex)
+	*p.node.Value = id
 	t.phases[p.id] = p
 	return p
 }
@@ -146,7 +205,7 @@ func (p *phase) exec(conn redis.Conn) error {
 }
 
 func (p *phase) addDependency(dep *phase) {
-	p.t.graph.Connect(dep.vertex, p.vertex, 0)
+	p.t.graph.MakeEdge(dep.node, p.node)
 }
 
 type command struct {
