@@ -3,11 +3,11 @@ Zoom
 
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
-Version: 0.7.5
+Version: 0.8.0
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
-Requires redis version >= 2.8.9 and Go version >= 1.0.
+Requires Redis version >= 2.8.9 and Go version >= 1.0.
 
 Full documentation is available on
 [godoc.org](http://godoc.org/github.com/albrow/zoom).
@@ -20,6 +20,7 @@ Table of Contents
 -----------------
 
 - [Philosophy](#philosophy)
+- [Relationships are Deprecated](#relationships-are-deprecated)
 - [Installation](#installation)
 - [Getting Started](#getting-started)
 - [Working with Models](#working-with-models)
@@ -42,23 +43,34 @@ Zoom allows you to:
 
 - Persistently save structs of any type
 - Retrieve structs from the database
-- Preserve relationships between structs
+- Preserve relationships between structs (deprecated)
 - Preform *limited* queries
 
 Zoom consciously makes the trade off of using more memory in order to increase performance.
-Zoom stores all data in memory at all times, so if your machine runs out of memory, zoom will
+Zoom stores all data in memory at all times, so if your machine runs out of memory, Zoom will
 either crash or start using swap space (resulting in huge performance penalties). 
 Zoom does not do sharding (but might in the future), so be aware that memory could be a
 hard constraint for larger applications.
 
 Zoom is a high-level library and abstracts away more complicated aspects of the Redis API. For example,
-it manages its own connection pool, performs transactions when possible, and automatically converts
-structs to and from a format suitable for the database. If needed, you can still execute redis commands
-directly.
+it manages its own connection pool, performs transactions via MULTI/EXEC when possible, automatically converts
+structs to and from a format suitable for the database, and manages indexes using sorted sets. If needed, you
+can still execute Redis commands directly.
 
 If you want to use advanced or complicated SQL queries, Zoom is not for you. For example, Zoom
 currently lacks an equivalent of the SQL keywords `IN` and `OR`. Although support for more
 types of queries may be added in the future, it is not a high priority.
+
+
+Relationships are Deprecated
+----------------------------
+
+***WARNING***: Support for relationships is likely going to be removed before Zoom hits version 1.0.
+There are bugs in the current implementation and the abstraction is leaky. Before relationships
+support is removed, I will refactor and export the transaction abstraction I've built, making it
+easy for you to manage relationships manually. This will allow you to make your own implementation
+decisions and avoid the problem of a leaky abstraction. See the [TODO](#todo) section for a rough
+roadmap.
 
 
 Installation
@@ -112,7 +124,7 @@ type Configuration struct {
 
 If possible, it is ***strongly recommended*** that you use a unix socket connection instead of tcp.
 Redis is roughly [50% faster](http://redis.io/topics/benchmarks) this way. To connect with a unix
-socket, you must first configure redis to accept socket connections (typically on /tmp/redis.sock).
+socket, you must first configure Redis to accept socket connections (typically on /tmp/redis.sock).
 If you are unsure how to do this, refer to the [official redis docs](http://redis.io/topics/config)
 for help. You might also find the [redis quickstart guide](http://redis.io/topics/quickstart) helpful,
 especially the bottom sections.
@@ -127,24 +139,30 @@ config := &zoom.Configuration {
 zoom.Init(config)
 ```
 
+You can connect to a Redis server that requires authentication by using the following
+format for config.Address: `redis://user:pass@host:123`. Zoom will use the AUTH command
+to authenticate before establishing a connection.
+
 
 Working with Models
 -------------------
 
 ### Creating Models
 
-In order to save a struct using Zoom, you need to embed an anonymous DefaultData field. DefaultData
-gives you an Id and getters and setters for that id, which are required in order to save the model
-to the database. Here's an example of a Person model:
+Models in Zoom are just structs which implement the
+[zoom.Model interface](http://godoc.org/github.com/albrow/zoom#Model).
+If you like, you can embed zoom.DefaultData to give your model all the required methods. A struct
+definition serves as a sort of schema for your model. Here's an example of a Person model:
 
 ``` go
 type Person struct {
     Name string
+    Age  int
     zoom.DefaultData
 }
 ```
 
-Because of the way zoom uses reflection, all the fields you want to save need to be public.
+Because of the way Zoom uses reflection, all the fields you want to save need to be public.
 
 You must also call zoom.Register so that Zoom can spec out the different model types and the relations between them.
 You only need to do this once per type. For example, somewhere in your initialization sequence (e.g. in the main
@@ -157,25 +175,31 @@ if err := zoom.Register(&Person{}); err != nil {
 }
 ```
 
-Now the *Person type will be associated with the string name "Person." You can also use the RegisterName
-funcion to specify a custom name for the model type.
+Now the *Person type will be associated with the unique string name "Person". The string name is important for querying,
+so that you can avoid passing in an instance of the struct itself. By default the name for a model is just its type
+without any pointer symbols. If you want to specify a name other than the default, you can use the RegisterName
+function.
 
 ### Saving Models
 
 To persistently save a Person model to the databse, simply call zoom.Save.
 
 ``` go
-p := &Person{Name: "Alice"}
+p := &Person{Name: "Alice", Age: 27}
 if err := zoom.Save(p); err != nil {
     // handle error
 }
 ```
 
+When you call Save, Zoom converts all the fields of the model into a format suitable for Redis and stores them
+as a Redis hash. Struct fields can any custom or builtin types, but cannot be functions or recursive data
+structures. If the model you are saving does not already have an id, Zoom will mutate the model by generating and
+assinging one.
+
 ### Finding a Single Model
 
-Zoom will automatically assign a random, unique id to each saved model. To retrieve a model by id,
-use the FindById function, which also requires the name associated with the model type. The return
-type is interface{} so you may need to type assert.
+To retrieve a model by id, use the FindById function, which also requires the name associated with the model
+type. The return type is interface{} so you may need to type assert.
 
 ``` go
 result, err := zoom.FindById("Person", "a_valid_person_id")
@@ -191,8 +215,8 @@ if !ok {
 ```
 
 Alternatively, you can use the ScanById function to avoid type assertion. It expects a pointer
-to a struct as an argument(some registered model type).
-
+to a struct as an argument, and the type must also be registered. Zoom will overwrite any existing
+data in the model when you call Scan.
 
 ``` go
 p := &Person{}
@@ -222,12 +246,17 @@ if err := zoom.DeleteById("Person", "some_person_id"); err != nil {
 Enforcing Thread-Safety
 -----------------------
 
+***WARNING***: Zoom currently only provides thread-safety in the context of a single application server. If you have
+multiple servers using Zoom to communicate to the same Redis database, it is currently not thread-safe. In the future,
+Zoom will enforce thread-safety accross different servers, most likely via optimistic locking. See the [TODO](#todo)
+section for a general roadmap for new features.
+
 ### How it Works
 
 If you wish to perform thread-safe updates, you can embed zoom.Sync into your model. zoom.Sync provides a default
 implementation of a Syncer. A Syncer consists of a unique identifier which is a reference to a global mutex map. By
 default the identifier is modelType + ":" + id. If a model implements the Syncer interface, any time the model is
-retrieved from the database, zoom will call Lock on the mutex referenced by Syncer. The effect is that you can
+retrieved from the database, Zoom will call Lock on the mutex referenced by Syncer. The effect is that you can
 gauruntee that only one reference to a given model is active at any given time.
 
 **IMPORTANT**: When you embed zoom.Sync into a model, you must remember to call Unlock() when you are done making
@@ -316,6 +345,10 @@ if _, err := zoom.NewQuery("Person").Scan(persons); err != nil {
 }
 ```
 
+If you only expect the query to return one model, you can use the RunOne and ScanOne methods
+for convenience. Those methods will return an error if no model matches the given criteria,
+since by using them you are declaring you expect one model. 
+
 ### Using Query Modifiers
 
 You can chain a query object together with one or more different modifiers. Here's a list
@@ -340,8 +373,11 @@ You can run a query with one of the following query finishers:
 Here's an example of a more complicated query using several modifiers:
 
 ``` go
+persons := []*Person{}
 q := zoom.NewQuery("Person").Order("-Name").Filter("Age >=", 25).Limit(10)
-result, err := q.Run()
+if err := q.scan(&persons); err != nil {
+	// handle error
+}
 ```
 
 You might be able to guess what each of these methods do, but if anything is not obvious,
@@ -351,6 +387,9 @@ full documentation on the different modifiers and finishers is available on
 
 Relationships
 -------------
+
+*WARNING*: Support for relationships is likely going to be removed before Zoom hits version 1.0.
+See the [relevant section in the README](#relationships-are-deprecated) for more information.
 
 Relationships in Zoom are simple. There are no special return types or functions for using relationships.
 What you put in is what you get out.
@@ -518,7 +557,7 @@ go test .
 
 If everything passes, you should see something like:
 
-    ok  	github.com/albrow/zoom	0.355s
+    ok  	github.com/albrow/zoom	4.151s
     
 If any of the tests fail, please [open an issue](https://github.com/albrow/zoom/issues/new) and
 describe what happened.
@@ -528,18 +567,20 @@ network, and database used with flags. So to run on a unix socket at /tmp/redis.
 you could use:
 
 ```
-go test . -network unix -address /tmp/redis.sock -database 3
+go test . -network=unix -address=/tmp/redis.sock -database=3
 ```
 
 ### Running the Benchmarks:
 
-To run the benchmarks, again make sure you're in the root directory and run:
+To run the benchmarks, make sure you're in the root directory for the project and run:
 
 ```
-go test . -bench .
+go test . -run=none -bench .
 ```   
 
-You can use the same flags as above to change the network, address, and database used.
+The `-run=none` flag is optional, and just tells the test runner to skip the tests and run only the benchmarks
+(because no test function matches the pattern "none"). You can also use the same flags as above to change the
+network, address, and database used.
 
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/albrow/zoom/issues/new).
@@ -548,27 +589,41 @@ Here are the results from my laptop (2.3GHz quad-core i7, 8GB RAM) using a socke
 to append-only mode:
 
 ```
-BenchmarkConnection         20000000	      93.7 ns/op
-BenchmarkPing                 100000	     24472 ns/op
-BenchmarkSet                   50000	     32703 ns/op
-BenchmarkGet                  100000	     25795 ns/op
-BenchmarkSave                  50000	     59899 ns/op
-BenchmarkMSave100               2000	    908596 ns/op
-BenchmarkFindById              50000	     41050 ns/op
-BenchmarkMFindById100	        2000	    671383 ns/op
-BenchmarkDeleteById	          50000	     48800 ns/op
-BenchmarkMDeleteById100	        2000	    617435 ns/op
-BenchmarkFindAllQuery10	       10000	    165903 ns/op
-BenchmarkFindAllQuery1000	      500	   7224478 ns/op
-BenchmarkFindAllQuery100000	     2	 850699127 ns/op
-BenchmarkCountAllQuery10	   100000	     29838 ns/op
-BenchmarkCountAllQuery1000	   100000	     29739 ns/op
-BenchmarkCountAllQuery100000	100000	     29798 ns/op
+BenchmarkConnection     2000000	       626 ns/op
+BenchmarkPing             50000	     25850 ns/op
+BenchmarkSet              50000	     33702 ns/op
+BenchmarkGet              50000	     26448 ns/op
+BenchmarkSave             20000	     61373 ns/op
+BenchmarkMSave100          2000	    926849 ns/op
+BenchmarkFindById         30000	     48712 ns/op
+BenchmarkMFindById100      2000	    675248 ns/op
+BenchmarkDeleteById       30000	     54485 ns/op
+BenchmarkMDeleteById100    2000	    674421 ns/op
+BenchmarkFindAllQuery10   10000	    194387 ns/op
+BenchmarkFindAllQuery1000        200	   7390949 ns/op
+BenchmarkFindAllQuery100000        2	 869368740 ns/op
+BenchmarkFilterIntQuery1From1  10000	    122423 ns/op
+BenchmarkFilterIntQuery1From10       10000	    121224 ns/op
+BenchmarkFilterIntQuery10From100     10000	    220717 ns/op
+BenchmarkFilterIntQuery100From1000    2000	   1007413 ns/op
+BenchmarkFilterStringQuery1From1       10000	    116361 ns/op
+BenchmarkFilterStringQuery1From10      10000	    119038 ns/op
+BenchmarkFilterStringQuery10From100     5000	    258254 ns/op
+BenchmarkFilterStringQuery100From1000   2000	   1080192 ns/op
+BenchmarkFilterBoolQuery1From1       10000	    114026 ns/op
+BenchmarkFilterBoolQuery1From10      10000	    114443 ns/op
+BenchmarkFilterBoolQuery10From100     5000	    225332 ns/op
+BenchmarkFilterBoolQuery100From1000   2000	   1029557 ns/op
+BenchmarkOrderInt1000       200	   7734115 ns/op
+BenchmarkOrderString1000    200	   8270430 ns/op
+BenchmarkOrderBool1000      200	   8263704 ns/op
+BenchmarkComplexQuery      1000	   1589910 ns/op
+BenchmarkCountAllQuery10      50000	     32565 ns/op
+BenchmarkCountAllQuery1000    50000	     33471 ns/op
+BenchmarkCountAllQuery100000  50000	     31497 ns/op
 ```
 
-Currently, there are not many benchmarks for queries; I'm working on adding more.
-
-The results of the benchmark can vary widely from system to system. You should run your
+The results of these benchmarks can vary widely from system to system. You should run your
 own benchmarks that are closer to your use case to get a real sense of how Zoom
 will perform for you. The speeds above are already pretty fast, but improving them is
 one of the top priorities for this project.
@@ -578,8 +633,8 @@ Example Usage
 -------------
 
 I have built an [example json/rest application](https://github.com/albrow/peeps-negroni)
-which uses the latest version of zoom. It is a simple example that doesn't use all of
-zoom's features, but should be good enough for understanding how zoom can work in a
+which uses the latest version of Zoom. It is a simple example that doesn't use all of
+Zoom's features, but should be good enough for understanding how zoom can work in a
 real application.
 
 
@@ -588,16 +643,16 @@ TODO
 
 Ordered generally by priority, here's what I'm working on:
 
-- Improve performance and get as close as possible to raw redis
-- Add more benchmarks
+- Improve performance of dependency linearization
 - Add godoc compatible examples in the test files
+- Improve transaction abstraction layer and make it exported
+- Major cleanup of all code. (There are some serious cobwebs in some places)
 - Support callbacks (BeforeSave, AfterSave, BeforeDelete, AfterDelete, etc.)
 - Implement high-level watching for record changes
-- Add option to make relationships reflexive (inverseOf struct tag?)
-- Add a dependent:delete struct tag
+- Remove support for relationships
+- Implement thread-safety across different application servers (probably optimistic locking)
+- Write a basic migration tool
 - Support AND and OR operators on Filters
-- Support combining queries into a single transaction
-- Support automatic sharding
 
 If you have an idea or suggestion for a feature, please [open an issue](https://github.com/albrow/zoom/issues/new)
 and describe it.

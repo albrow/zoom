@@ -12,7 +12,6 @@ import (
 	"github.com/garyburd/redigo/redis"
 	"math"
 	"reflect"
-	"strconv"
 	"strings"
 )
 
@@ -29,7 +28,6 @@ type Query struct {
 	limit     uint
 	offset    uint
 	filters   []filter
-	idData    []string
 	err       error
 }
 
@@ -345,7 +343,8 @@ func (q *Query) Run() (interface{}, error) {
 		return nil, q.err
 	}
 	q.trans = newTransaction()
-	if err := q.sendIdData(); err != nil {
+	getIdsPhases, allIds, err := q.getAllIds()
+	if err != nil {
 		return nil, err
 	}
 
@@ -354,7 +353,7 @@ func (q *Query) Run() (interface{}, error) {
 	resultsVal := reflect.New(reflect.SliceOf(q.modelSpec.modelType))
 	resultsVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(q.modelSpec.modelType), 0, 0))
 
-	if err := q.executeAndScan(resultsVal); err != nil {
+	if err := q.executeAndScan(resultsVal, getIdsPhases, allIds); err != nil {
 		return resultsVal.Elem().Interface(), err
 	} else {
 		return resultsVal.Elem().Interface(), nil
@@ -411,14 +410,15 @@ func (q *Query) Scan(in interface{}) error {
 		return fmt.Errorf("zoom: argument for Query.Scan did not match the type corresponding to the model name given in the NewQuery constructor.\nExpected %T but got %T", reflect.SliceOf(q.modelSpec.modelType), in)
 	}
 
-	if err := q.sendIdData(); err != nil {
+	getIdsPhase, allIds, err := q.getAllIds()
+	if err != nil {
 		return err
 	}
 
 	resultsVal := reflect.ValueOf(in)
 	resultsVal.Elem().Set(reflect.MakeSlice(reflect.SliceOf(q.modelSpec.modelType), 0, 0))
 
-	return q.executeAndScan(resultsVal)
+	return q.executeAndScan(resultsVal, getIdsPhase, allIds)
 }
 
 // ScanOne is exactly like Scan but scans only the first model that fits the
@@ -530,88 +530,100 @@ func (q *Query) IdsOnly() ([]string, error) {
 		return nil, q.err
 	}
 	q.trans = newTransaction()
-	if err := q.sendIdData(); err != nil {
+	_, allIds, err := q.getAllIds()
+	if err != nil {
 		return nil, err
 	}
-
-	// wait for all the id data dependencies to be resolved,
-	// then simply set results to be ids
-	results := make([]string, 0)
-	q.trans.doWhenDataReady(q.idData, func() error {
-		if ids, err := q.intersectAllIds(); err != nil {
-			return err
-		} else {
-			results = ids
-			return nil
-		}
-	})
-	if err := q.trans.exec(); err != nil {
-		return results, err
-	} else {
-		return results, nil
+	err = q.trans.exec()
+	if err != nil {
+		return nil, err
 	}
+	ids := allIds.ids
+	if len(q.filters) > 0 {
+		// If there were any filters, then we need to apply limit
+		// and offset at this stage because we couldn't apply it
+		// earlier
+		ids = applyLimitOffset(allIds.ids, q.limit, q.offset)
+	}
+	return ids, nil
 }
 
-// sendIdData adds commands to the query transaction which will gather all the
-// ids of the models which should be returned by the query and send them as
-// shared transaction data. The sets of ids will be given string identifiers,
-// which will be added to the idData slice of the query. When the query
-// transaction is eventually executed, each of the keys in idData should be
-// considered data dependencies.
-func (q *Query) sendIdData() error {
-	// clear out any previous id data
-	q.idData = []string{}
+// getAllIds adds commands to the query transaction which will gather all the
+// ids of the models which should be returned by the query and collects them into
+// a slice of strings by doing ordered intersects. Doing so may require multiple
+// phases in some instances. It returns the phases that were created and a pointer
+// to a slice of the ids that will be filled when the phase is eventually executed.
+func (q *Query) getAllIds() ([]*phase, *idSet, error) {
+	// Create a slice of phases for getting the ids and
+	// add the main phase
+	getIdsPhases := make([]*phase, 1)
+	getIdsPhases[0] = q.trans.addPhase("getIds", nil, nil)
+	allIds := newIdSet()
 	if len(q.filters) == 0 {
 		if cmd, args, err := q.getAllModelsArgs(true); err != nil {
-			return err
+			return getIdsPhases, allIds, err
 		} else {
-			idsDataKey := "modelIds"
-			q.idData = append(q.idData, idsDataKey)
 			if q.order.fieldName != "" && q.order.indexType == indexAlpha {
-				// special case for parsing ids from the redis response
-				q.trans.command(cmd, args, newSendAlphaIdsHandler(q.trans, idsDataKey, false))
+				getIdsPhases[0].addCommand(cmd, args, newScanAlphaIdsHandler(allIds, false))
 			} else {
-				// send the database response directly
-				q.trans.command(cmd, args, newSendDataHandler(q.trans, idsDataKey))
+				getIdsPhases[0].addCommand(cmd, args, newScanIdsHandler(allIds))
 			}
-			return nil
+			return getIdsPhases, allIds, nil
 		}
 	} else {
-		// with filters, we need to iterate through each filter and get the ids
-		primaryCovered := false
-		for i, f := range q.filters {
-			filterIdsKey := "filter" + strconv.Itoa(i)
+		// with filters, we need to iterate through each filter and get the ids.
+		// primaryPhase is the phase that gets the ids in the order specified by the query
+		// if no order was specified, primaryPhase will be nil.
+		var primaryPhase *phase
+		for _, f := range q.filters {
 			if f.fieldName == q.order.fieldName {
-				filterIdsKey = "primaryIds"
-				primaryCovered = true
+				// these are the primary ids
+				modelAndFieldName := fmt.Sprintf("%s:%s", q.modelSpec.modelName, q.order.fieldName)
+				primaryPhase = q.trans.addPhase(modelAndFieldName, nil, nil)
+				getIdsPhases[0].addDependency(primaryPhase)
+				getIdsPhases = append(getIdsPhases, primaryPhase)
+				subPhases, err := q.addCommandForFilter(primaryPhase, f, allIds)
+				if err != nil {
+					return nil, nil, err
+				}
+				getIdsPhases = append(getIdsPhases, subPhases...)
+			} else {
+				subPhases, err := q.addCommandForFilter(getIdsPhases[0], f, allIds)
+				if err != nil {
+					return nil, nil, err
+				}
+				getIdsPhases = append(getIdsPhases, subPhases...)
 			}
-			q.idData = append(q.idData, filterIdsKey)
-			q.sendIdDataForFilter(f, filterIdsKey)
 		}
-		if !primaryCovered {
+		if primaryPhase == nil && q.order.fieldName != "" {
 			// no filter had the same field name as the order, so we need to add a
 			// command to get the ordered ids and use them as a basis for ordering
 			// all the others.
 			if cmd, args, err := q.getAllModelsArgs(false); err != nil {
-				return err
+				return getIdsPhases, allIds, err
 			} else {
-				orderedIdsKey := "primaryIds"
-				q.idData = append(q.idData, orderedIdsKey)
+				// create the primaryPhase
+				modelAndFieldName := fmt.Sprintf("%s:%s", q.modelSpec.modelName, q.order.fieldName)
+				primaryPhase = q.trans.addPhase(modelAndFieldName, nil, nil)
+				getIdsPhases[0].addDependency(primaryPhase)
+				getIdsPhases = append(getIdsPhases, primaryPhase)
+
+				// add the appropriate command to the primaryPhase
 				if q.order.fieldName != "" && q.order.indexType == indexAlpha {
-					// special case for parsing ids from the redis response
-					q.trans.command(cmd, args, newSendAlphaIdsHandler(q.trans, orderedIdsKey, false))
+					primaryPhase.addCommand(cmd, args, newScanAlphaIdsHandler(allIds, false))
 				} else {
-					// send the database response directly
-					q.trans.command(cmd, args, newSendDataHandler(q.trans, orderedIdsKey))
+					primaryPhase.addCommand(cmd, args, newScanIdsHandler(allIds))
 				}
 			}
 		}
 	}
-	return nil
+	return getIdsPhases, allIds, nil
 }
 
-// returns a function which, when run, extracts ids from alpha index values and then sends the ids as transaction data
-func newSendAlphaIdsHandler(t *transaction, key string, reverse bool) func(interface{}) error {
+// newScanAlphaIdsHandler returns a function which, when run, extracts ids from alpha index
+// values and intersects the ids with the existing ids in allIds, maintaining the order of
+// the ids that are already there, if any.
+func newScanAlphaIdsHandler(allIds *idSet, reverse bool) func(interface{}) error {
 	return func(reply interface{}) error {
 		if ids, err := redis.Strings(reply, nil); err != nil {
 			return err
@@ -625,9 +637,23 @@ func newSendAlphaIdsHandler(t *transaction, key string, reverse bool) func(inter
 					ids[i], ids[j] = ids[j], ids[i]
 				}
 			}
-			t.sendData(key, ids)
+			allIds.intersect(ids)
 			return nil
 		}
+	}
+}
+
+// newScanIdsHandler returns a function which, when run, converts a redis response to a slice
+// of string ids and then  intersects the ids with the existing ids in allIds, maintaining
+// the order of the ids that are already there, if any.
+func newScanIdsHandler(allIds *idSet) func(interface{}) error {
+	return func(reply interface{}) error {
+		ids, err := redis.Strings(reply, nil)
+		if err != nil {
+			return err
+		}
+		allIds.intersect(ids)
+		return nil
 	}
 }
 
@@ -640,10 +666,11 @@ func extractModelIdFromAlphaIndexValue(valueAndId string) string {
 	return slices[len(slices)-1]
 }
 
-// NOTE: sliceVal should be the value of a pointer to a slice of pointer to models.
+// NOTE: models should be the value of a pointer to a slice of pointer to models.
 // It's type should be *[]*<T>, where <T> is some type which satisfies the Model
 // interface. The type *[]*Model is not equivalent and will not work.
-func (q *Query) executeAndScan(sliceVal reflect.Value) error {
+func (q *Query) executeAndScan(models reflect.Value, getIdsPhases []*phase, allIds *idSet) error {
+
 	// Check to make sure include contained all valid fields
 	if len(q.includes) > 0 {
 		fieldNames := q.modelSpec.fieldNames()
@@ -654,45 +681,14 @@ func (q *Query) executeAndScan(sliceVal reflect.Value) error {
 		}
 	}
 
-	// wait for all the id data dependencies and then scan them
-	// into models
-	q.trans.doWhenDataReady(q.idData, func() error {
-		if ids, err := q.intersectAllIds(); err != nil {
-			return err
-		} else {
-			return q.scanModelsByIds(ids, sliceVal)
-		}
-	})
-	return q.trans.exec()
-}
+	// the scanModelsPhase will execute after all the ids have been found and intersected.
+	// it adds commands to find each model by its id and append the model to models
+	scanModelsPhase := q.trans.addPhase("scanModels", q.newScanModelsByIdsPreHandler(allIds, models), nil)
+	for _, phase := range getIdsPhases {
+		scanModelsPhase.addDependency(phase)
+	}
 
-// NOTE: should be placed inside a doWhenDataReady function, otherwise
-// it won't work
-func (q *Query) intersectAllIds() ([]string, error) {
-	var allModelIds []string
-	for i, idDataKey := range q.idData {
-		theseIds, err := convertDataToStrings(q.trans.data[idDataKey])
-		if err != nil {
-			return nil, err
-		}
-		switch i {
-		case 0:
-			// on the first iteration just set allModelIds
-			allModelIds = theseIds
-		default:
-			// on subsequent iterations, do an ordered intersect with allModelIds
-			if idDataKey == "primaryIds" {
-				// indicates we should order with respect to these ids
-				allModelIds = orderedIntersectStrings(theseIds, allModelIds)
-			} else {
-				allModelIds = orderedIntersectStrings(allModelIds, theseIds)
-			}
-		}
-	}
-	if len(q.filters) > 0 {
-		allModelIds = applyLimitOffset(allModelIds, q.limit, q.offset)
-	}
-	return allModelIds, nil
+	return q.trans.exec()
 }
 
 func convertDataToStrings(data interface{}) ([]string, error) {
@@ -708,21 +704,28 @@ func convertDataToStrings(data interface{}) ([]string, error) {
 	}
 }
 
-// NOTE: sliceVal should have an underlying type of pointer to a slice of
-// pointers to model structs
-func (q *Query) scanModelsByIds(ids []string, sliceVal reflect.Value) error {
-	for _, id := range ids {
-		mr, err := newModelRefFromName(q.modelSpec.modelName)
-		if err != nil {
-			return err
+func (q *Query) newScanModelsByIdsPreHandler(allIds *idSet, models reflect.Value) func(*phase) error {
+	return func(p *phase) error {
+		ids := allIds.ids
+		if len(q.filters) > 0 {
+			// If there were any filters, then we need to apply limit
+			// and offset at this stage because we couldn't apply it
+			// earlier
+			ids = applyLimitOffset(allIds.ids, q.limit, q.offset)
 		}
-		mr.model.SetId(id)
-		if err := q.trans.findModel(mr, q.getIncludes()); err != nil {
-			return err
+		for _, id := range ids {
+			mr, err := newModelRefFromName(q.modelSpec.modelName)
+			if err != nil {
+				return err
+			}
+			mr.model.SetId(id)
+			if err := p.scanModel(mr, q.getIncludes()); err != nil {
+				return err
+			}
+			models.Elem().Set(reflect.Append(models.Elem(), mr.modelVal()))
 		}
-		sliceVal.Elem().Set(reflect.Append(sliceVal.Elem(), mr.modelVal()))
+		return nil
 	}
-	return nil
 }
 
 // NOTE: only use this method for queries without any filters.
@@ -770,11 +773,12 @@ func (q *Query) getStartStop() (int, int) {
 	return start, stop
 }
 
-func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
-	// special case for id filters
+func (q *Query) addCommandForFilter(p *phase, f filter, allIds *idSet) ([]*phase, error) {
+	subPhases := []*phase{}
 	if f.byId {
+		// special case for id filters
 		id := f.filterValue.String()
-		q.trans.sendData(dataKey, []string{id})
+		allIds.intersect([]string{id})
 	} else {
 		setKey := q.modelSpec.modelName + ":" + f.redisName
 		reverse := q.order.orderType == descending && q.order.fieldName == f.fieldName
@@ -793,45 +797,38 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 					command = "ZREVRANGEBYSCORE"
 					args = args.Add(max).Add(min)
 				}
-				q.trans.command(command, args, newSendDataHandler(q.trans, dataKey))
+				p.addCommand(command, args, newScanIdsHandler(allIds))
 			case notEqual:
-				// special case for not equals
-				// split into two different queries (less and greater) and
-				// use union to combine the results
+				// TODO: make this dryer! (Currently repeated for alpha indexes)
+				// special case for not equals:
+				// split into two different commands (less and greater) and
+				// use union to combine the results. We'll create a new phase
+				// for this and add the current phase as a dependency to it
+
+				// model name and field name will be used to indentify the phase
+				modelAndFieldName := fmt.Sprintf("%s:%s", q.modelSpec.modelName, f.fieldName)
+
+				// lessIds and greaterIds will hold the ids from their respective commands
+				lessIds := newIdSet()
+				greaterIds := newIdSet()
+
+				// add the new subPhase to the transaction
+				subPhase := q.trans.addPhase(modelAndFieldName, nil, newUnionIdsPostHandler(lessIds, greaterIds, allIds, reverse))
+
+				// subPhase should execute after p, in case p is not the primary phase.
+				// this way we know that the primary phase will always execute first and
+				// determine the ordering for all other intersections.
+				subPhase.addDependency(p)
+
+				// set up each command, one for less than and one for greater than, and add
+				// them to the subPhase
 				max := fmt.Sprintf("(%v", f.filterValue.Interface())
 				lessArgs := args.Add("-inf").Add(max)
-				lessIdsKey := dataKey + "lessIds"
-				q.trans.command("ZRANGEBYSCORE", lessArgs, newSendDataHandler(q.trans, lessIdsKey))
+				subPhase.addCommand("ZRANGEBYSCORE", lessArgs, newScanIdsHandler(lessIds))
 				min := fmt.Sprintf("(%v", f.filterValue.Interface())
-				greaterIdsKey := dataKey + "greaterIds"
 				greaterArgs := args.Add(min).Add("+inf")
-				q.trans.command("ZRANGEBYSCORE", greaterArgs, newSendDataHandler(q.trans, greaterIdsKey))
-
-				// when both lessIds and greaterIds are ready, combine them into a single set of ids
-				q.trans.doWhenDataReady([]string{lessIdsKey, greaterIdsKey}, func() error {
-					lessIds, err := convertDataToStrings(q.trans.data[lessIdsKey])
-					if err != nil {
-						return err
-					}
-					greaterIds, err := convertDataToStrings(q.trans.data[greaterIdsKey])
-					if err != nil {
-						return err
-					}
-					allFilterIds := make([]string, 0)
-					if !reverse {
-						allFilterIds = append(lessIds, greaterIds...)
-					} else {
-						for i, j := 0, len(lessIds)-1; i <= j; i, j = i+1, j-1 {
-							lessIds[i], lessIds[j] = lessIds[j], lessIds[i]
-						}
-						for i, j := 0, len(greaterIds)-1; i <= j; i, j = i+1, j-1 {
-							greaterIds[i], greaterIds[j] = greaterIds[j], greaterIds[i]
-						}
-						allFilterIds = append(greaterIds, lessIds...)
-					}
-					q.trans.sendData(dataKey, allFilterIds)
-					return nil
-				})
+				subPhase.addCommand("ZRANGEBYSCORE", greaterArgs, newScanIdsHandler(greaterIds))
+				subPhases = append(subPhases, subPhase)
 			}
 
 		case indexBoolean:
@@ -853,14 +850,18 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 					min, max = 0, 0
 				} else {
 					// can't be less than false (0)
-					q.trans.sendData(dataKey, []string{})
-					return nil
+					// no models can meet this criteria, so
+					// set ids to an empty slice
+					allIds.intersect([]string{})
+					return nil, nil
 				}
 			case greater:
 				if f.filterValue.Bool() == true {
 					// can't be greater than true (1)
-					q.trans.sendData(dataKey, []string{})
-					return nil
+					// no models can meet this criteria, so
+					// set ids to an empty slice
+					allIds.intersect([]string{})
+					return nil, nil
 				} else {
 					// true is greater than false
 					// 1 > 0
@@ -899,10 +900,9 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 					min, max = 1, 1
 				}
 			default:
-				return fmt.Errorf("zoom: Filter operator out of range. Got: %d", f.filterType)
+				return nil, fmt.Errorf("zoom: Filter operator out of range. Got: %d", f.filterType)
 			}
 			// execute command to get the ids
-			// TODO: try and do this inside of a transaction
 			var command string
 			if !reverse {
 				command = "ZRANGEBYSCORE"
@@ -911,7 +911,7 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 				command = "ZREVRANGEBYSCORE"
 				args = args.Add(max).Add(min)
 			}
-			q.trans.command(command, args, newSendDataHandler(q.trans, dataKey))
+			p.addCommand(command, args, newScanIdsHandler(allIds))
 
 		case indexAlpha:
 			args := redis.Args{}.Add(setKey)
@@ -937,53 +937,70 @@ func (q *Query) sendIdDataForFilter(f filter, dataKey string) error {
 					max = "+"
 				}
 				args = args.Add(min).Add(max)
-				q.trans.command("ZRANGEBYLEX", args, newSendAlphaIdsHandler(q.trans, dataKey, reverse))
+				p.addCommand("ZRANGEBYLEX", args, newScanAlphaIdsHandler(allIds, reverse))
 			case notEqual:
-				// special case for not equals
-				// split into two different queries (less and greater) and
-				// combine the results
+				// TODO: make this dryer! (Currently repeated for numeric indexes)
+				// special case for not equals:
+				// split into two different commands (less and greater) and
+				// use union to combine the results. We'll create a new phase
+				// for this and add the current phase as a dependency to it
+
+				// model name and field name will be used to indentify the phase
+				modelAndFieldName := fmt.Sprintf("%s:%s", q.modelSpec.modelName, f.fieldName)
+
+				// lessIds and greaterIds will hold the ids from their respective commands
+				lessIds := newIdSet()
+				greaterIds := newIdSet()
+
+				// add the new subPhase to the transaction
+				subPhase := q.trans.addPhase(modelAndFieldName, nil, newUnionIdsPostHandler(lessIds, greaterIds, allIds, reverse))
+
+				// subPhase should execute after p, in case p is not the primary phase.
+				// this way we know that the primary phase will always execute first and
+				// determine the ordering for all other intersections.
+				subPhase.addDependency(p)
+
+				// set up each command, one for less than and one for greater than, and add
+				// them to the subPhase
 				valString := f.filterValue.String()
 				max := "(" + valString
 				lessArgs := args.Add("-").Add(max)
-				lessIdsKey := dataKey + "lessIds"
-				q.trans.command("ZRANGEBYLEX", lessArgs, newSendAlphaIdsHandler(q.trans, lessIdsKey, false))
+				subPhase.addCommand("ZRANGEBYLEX", lessArgs, newScanAlphaIdsHandler(lessIds, false))
 				min := "(" + valString + delString
-				greaterIdsKey := dataKey + "greaterIds"
 				greaterArgs := args.Add(min).Add("+")
-				q.trans.command("ZRANGEBYLEX", greaterArgs, newSendAlphaIdsHandler(q.trans, greaterIdsKey, false))
-
-				// when both lessIds and greaterIds are ready, combine them into a single set of ids
-				q.trans.doWhenDataReady([]string{lessIdsKey, greaterIdsKey}, func() error {
-					lessIds, err := convertDataToStrings(q.trans.data[lessIdsKey])
-					if err != nil {
-						return err
-					}
-					greaterIds, err := convertDataToStrings(q.trans.data[greaterIdsKey])
-					if err != nil {
-						return err
-					}
-					allFilterIds := make([]string, 0)
-					if !reverse {
-						allFilterIds = append(lessIds, greaterIds...)
-					} else {
-						for i, j := 0, len(lessIds)-1; i <= j; i, j = i+1, j-1 {
-							lessIds[i], lessIds[j] = lessIds[j], lessIds[i]
-						}
-						for i, j := 0, len(greaterIds)-1; i <= j; i, j = i+1, j-1 {
-							greaterIds[i], greaterIds[j] = greaterIds[j], greaterIds[i]
-						}
-						allFilterIds = append(greaterIds, lessIds...)
-					}
-					q.trans.sendData(dataKey, allFilterIds)
-					return nil
-				})
+				subPhase.addCommand("ZRANGEBYLEX", greaterArgs, newScanAlphaIdsHandler(greaterIds, false))
+				subPhases = append(subPhases, subPhase)
 			}
 
 		default:
-			return fmt.Errorf("zoom: cannot use filters on unindexed field %s for model name %s.", f.fieldName, q.modelSpec.modelName)
+			return nil, fmt.Errorf("zoom: cannot use filters on unindexed field %s for model name %s.", f.fieldName, q.modelSpec.modelName)
 		}
 	}
-	return nil
+	return subPhases, nil
+}
+
+// newUnionIdsPostHandler returns a function which combines lessIds and
+// greaterIds into a slice of ids (bothIds), then does an ordered intersect
+// with the less than and greater than ids and all the ids for all other
+// filters (allIds).
+func newUnionIdsPostHandler(lessIds *idSet, greaterIds *idSet, allIds *idSet, reverse bool) func(*phase) error {
+	bothIds := []string{}
+	return func(p *phase) error {
+		if !reverse {
+			lessIds.union(greaterIds)
+			bothIds = lessIds.ids
+		} else {
+			// TODO: can we avoid reversing here and do it in the command instead?
+			// reverse each slice and then append them
+			lessIds.reverse()
+			greaterIds.reverse()
+			greaterIds.union(lessIds)
+			bothIds = greaterIds.ids
+		}
+		// add bothIds to ids using an ordered intersect
+		allIds.intersect(bothIds)
+		return nil
+	}
 }
 
 // do some math wrt limit and offset and return the results
