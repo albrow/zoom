@@ -133,8 +133,7 @@ func TestQueryFilterNumeric(t *testing.T) {
 	}
 
 	// create some test queries to filter the models using all possible numeric filters
-	// operators := []string{"=", "!=", ">", ">=", "<", "<="}
-	operators := []string{"!="}
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
 	for i, fieldName := range fieldNames {
 		val := filterValues[i]
 		for _, op := range operators {

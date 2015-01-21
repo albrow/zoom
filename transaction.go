@@ -59,10 +59,11 @@ func (t *transaction) linearize() ([]*phase, error) {
 	//   [c]
 	// ]
 	components := t.graph.StronglyConnectedComponents()
+
 	if len(components) != len(t.phases) {
-		// There was at least one cycle. Find a piece of components which has
-		// more than one node in it. The nodes in that piece are a cycle because
-		// they are strongly connected.
+		// There was possibly a cycle. To find out for sure, search a piece of
+		// components which has more than one node in it. The nodes in that piece
+		// are a cycle because they are strongly connected.
 		cycleIds := []string{}
 		for _, nodes := range components {
 			if len(nodes) > 1 {
@@ -77,8 +78,10 @@ func (t *transaction) linearize() ([]*phase, error) {
 				break
 			}
 		}
-		cycleExplanation := strings.Join(cycleIds, " -> ")
-		return nil, fmt.Errorf("Could not linearize transaction phases because there was a cycle: %s", cycleExplanation)
+		if len(cycleIds) != 0 {
+			cycleExplanation := strings.Join(cycleIds, " -> ")
+			return nil, fmt.Errorf("Could not linearize transaction phases because there was a cycle: %s", cycleExplanation)
+		}
 	}
 	orderedPhases := []*phase{}
 	for _, nodes := range components {
@@ -93,11 +96,10 @@ func (t *transaction) linearize() ([]*phase, error) {
 		}
 		orderedPhases = append(orderedPhases, phase)
 	}
-	// phaseIds := []string{}
-	// for _, phase := range orderedPhases {
-	// 	phaseIds = append(phaseIds, phase.id)
-	// }
-	// fmt.Printf("linearized results: %v\n", phaseIds)
+	phaseIds := []string{}
+	for _, phase := range orderedPhases {
+		phaseIds = append(phaseIds, phase.id)
+	}
 	return orderedPhases, nil
 }
 
