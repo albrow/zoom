@@ -11,6 +11,7 @@ import (
 	"math/rand"
 	"sort"
 	"strconv"
+	"sync"
 	"testing"
 )
 
@@ -202,11 +203,13 @@ var testingTypes []Model = []Model{
 	&modelWithSync{},
 }
 
+var registerOnce = sync.Once{}
+
 func testingSetUp() {
 	conn := testingConnect()
 	defer conn.Close()
 
-	registerTestingTypes()
+	registerOnce.Do(registerTestingTypes)
 
 	// make sure database is empty
 	n, err := redis.Int(conn.Do("DBSIZE"))
@@ -256,8 +259,6 @@ func registerTestingTypes() {
 }
 
 func testingTearDown() {
-	unregisterTestingTypes()
-
 	// flush and close the database
 	conn := GetConn()
 	_, err := conn.Do("flushdb")
@@ -266,12 +267,6 @@ func testingTearDown() {
 	}
 	conn.Close()
 	Close()
-}
-
-func unregisterTestingTypes() {
-	for _, m := range testingTypes {
-		Unregister(m)
-	}
 }
 
 func newBasicModels(num int) ([]*basicModel, error) {
