@@ -96,7 +96,6 @@ func FindById(modelName, id string) (Model, error) {
 // the transaction, the function will halt and return the models retrieved so
 // far (as well as the error).
 func MFindById(modelNames, ids []string) ([]Model, error) {
-
 	if len(modelNames) != len(ids) {
 		return nil, errors.New("Zoom: error in MFindById: modelNames and ids must be the same length")
 	}
@@ -174,9 +173,11 @@ func ScanById(id string, model Model) error {
 // the models slice are nil, MScanById will use reflection to allocate memory
 // for them.
 func MScanById(ids []string, models interface{}) error {
-
 	// since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
+	if reflect.TypeOf(models).Kind() != reflect.Ptr {
+		return errors.New("Zoom: error in MScanById: models should be a pointer to a slice or array of models")
+	}
 	modelsVal := reflect.ValueOf(models).Elem()
 	modelType := modelsVal.Type().Elem()
 
