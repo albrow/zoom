@@ -252,9 +252,6 @@ func TestQueryCombos(t *testing.T) {
 	}
 
 	// use one numeric, one bool, and one string field
-	// fieldNames := []string{"Int", "Bool", "String"}
-	// filterValues := []interface{}{5, true, "k"}
-	// TODO: re-add string values when alpha implementation is fixed
 	fieldNames := []string{"Int", "Bool", "String"}
 	filterValues := []interface{}{5, true, "k"}
 	limits := []uint{0, 1, 5, 9, 10}
