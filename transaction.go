@@ -342,30 +342,6 @@ func (p *phase) index(mr modelRef) {
 	p.addCommand("SADD", args, nil)
 }
 
-func (p *phase) saveModelLists(mr modelRef) {
-	for _, list := range mr.modelSpec.lists {
-		field := mr.value(list.fieldName)
-		if field.IsNil() {
-			continue // skip empty lists
-		}
-		listKey := mr.key() + ":" + list.redisName
-		args := redis.Args{}.Add(listKey).AddFlat(field.Interface())
-		p.addCommand("RPUSH", args, nil)
-	}
-}
-
-func (p *phase) saveModelSets(mr modelRef) {
-	for _, set := range mr.modelSpec.sets {
-		field := mr.value(set.fieldName)
-		if field.IsNil() {
-			continue // skip empty sets
-		}
-		setKey := mr.key() + ":" + set.redisName
-		args := redis.Args{}.Add(setKey).AddFlat(field.Interface())
-		p.addCommand("SADD", args, nil)
-	}
-}
-
 func (p *phase) saveModelRelationships(mr modelRef) error {
 	for _, r := range mr.modelSpec.relationships {
 		if r.relType == oneToOne {
@@ -626,40 +602,6 @@ func (p *phase) scanModel(mr modelRef, includes []string) error {
 	}
 
 	return nil
-}
-
-func (p *phase) findModelLists(mr modelRef, includes []string) {
-	for _, list := range mr.modelSpec.lists {
-		if includes != nil {
-			if !stringSliceContains(list.fieldName, includes) {
-				continue // skip field names that are not in includes
-			}
-		}
-
-		field := mr.value(list.fieldName)
-
-		// use LRANGE to get all the members of the list
-		listKey := mr.key() + ":" + list.redisName
-		args := redis.Args{listKey, 0, -1}
-		p.addCommand("LRANGE", args, newScanModelSliceHandler(mr, field))
-	}
-}
-
-func (p *phase) findModelSets(mr modelRef, includes []string) {
-	for _, set := range mr.modelSpec.sets {
-		if includes != nil {
-			if !stringSliceContains(set.fieldName, includes) {
-				continue // skip field names that are not in includes
-			}
-		}
-
-		field := mr.value(set.fieldName)
-
-		// use SMEMBERS to get all the members of the set
-		setKey := mr.key() + ":" + set.redisName
-		args := redis.Args{setKey}
-		p.addCommand("SMEMBERS", args, newScanModelSliceHandler(mr, field))
-	}
 }
 
 func (p *phase) findModelRelationships(mr modelRef, includes []string) error {
