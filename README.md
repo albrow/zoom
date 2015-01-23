@@ -3,7 +3,7 @@ Zoom
 
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
-Version: X.X.X
+Version: 0.8.1
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
