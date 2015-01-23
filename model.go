@@ -36,8 +36,6 @@ type modelSpec struct {
 	primatives       map[string]*fieldSpec // primative types: int, float, string, etc.
 	pointers         map[string]*fieldSpec // pointers to primative tyeps: *int, *float, *string, etc.
 	inconvertibles   map[string]*fieldSpec // types which cannot be directly converted. fallback to json/msgpack
-	sets             map[string]*fieldSpec // separate set entities
-	lists            map[string]*fieldSpec // separate list entities
 	relationships    map[string]*fieldSpec // pointers to structs of registered types
 	primativeIndexes map[string]*fieldSpec // indexes specified with the zoom:"index" tag on primative field types
 	pointerIndexes   map[string]*fieldSpec // indexes specified with the zoom:"index" tag on pointer to primative field types
@@ -124,8 +122,6 @@ func newModelSpec(name string, typ reflect.Type) modelSpec {
 		primatives:       make(map[string]*fieldSpec),
 		pointers:         make(map[string]*fieldSpec),
 		inconvertibles:   make(map[string]*fieldSpec),
-		sets:             make(map[string]*fieldSpec),
-		lists:            make(map[string]*fieldSpec),
 		relationships:    make(map[string]*fieldSpec),
 		primativeIndexes: make(map[string]*fieldSpec),
 		pointerIndexes:   make(map[string]*fieldSpec),
@@ -327,24 +323,9 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 					ms.inconvertibles[field.Name] = fs
 				}
 			} else {
-				redisType := tag.Get("redisType")
-				if redisType == "list" {
-					fs.classification = externalList
-					fs.elemType = field.Type.Elem()
-					ms.lists[field.Name] = fs
-				} else if redisType == "set" {
-					fs.classification = externalSet
-					fs.elemType = field.Type.Elem()
-					ms.sets[field.Name] = fs
-				} else if redisType == "" {
-					// if application did not specify it wanted an external list or external set, treat
-					// the array or slice as inconvertible. Later it will be encoded to a string format
-					// and written directly into the redis hash.
-					fs.classification = inconvertible
-					ms.inconvertibles[field.Name] = fs
-				} else {
-					return fmt.Errorf("zoom: redisType tag for type %s was invalid.\nShould be either 'list' or 'set'.\nGot: %s", typ.String(), redisType)
-				}
+				// all other slices or arrays are incovertable
+				fs.classification = inconvertible
+				ms.inconvertibles[field.Name] = fs
 			}
 		} else {
 			// if we've reached here, the field type is inconvertible
