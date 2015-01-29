@@ -557,7 +557,11 @@ func (q *Query) getAllIds() ([]*phase, *idSet, error) {
 	// Create a slice of phases for getting the ids and
 	// add the main phase
 	getIdsPhases := make([]*phase, 1)
-	getIdsPhases[0] = q.trans.addPhase("getIds", nil, nil)
+	var err error
+	getIdsPhases[0], err = q.trans.addPhase("getIds", nil, nil)
+	if err != nil {
+		return nil, nil, err
+	}
 	allIds := newIdSet()
 	if len(q.filters) == 0 {
 		if cmd, args, err := q.getAllModelsArgs(true); err != nil {
@@ -579,8 +583,13 @@ func (q *Query) getAllIds() ([]*phase, *idSet, error) {
 			if f.fieldName == q.order.fieldName {
 				// these are the primary ids
 				modelAndFieldName := fmt.Sprintf("%s:%s", q.modelSpec.modelName, q.order.fieldName)
-				primaryPhase = q.trans.addPhase(modelAndFieldName, nil, nil)
-				getIdsPhases[0].addDependency(primaryPhase)
+				primaryPhase, err = q.trans.addPhase(modelAndFieldName, nil, nil)
+				if err != nil {
+					return nil, nil, err
+				}
+				if err := getIdsPhases[0].addDependency(primaryPhase); err != nil {
+					return nil, nil, err
+				}
 				getIdsPhases = append(getIdsPhases, primaryPhase)
 				subPhases, err := q.addCommandForFilter(primaryPhase, f, allIds)
 				if err != nil {
@@ -604,8 +613,13 @@ func (q *Query) getAllIds() ([]*phase, *idSet, error) {
 			} else {
 				// create the primaryPhase
 				modelAndFieldName := fmt.Sprintf("%s:%s", q.modelSpec.modelName, q.order.fieldName)
-				primaryPhase = q.trans.addPhase(modelAndFieldName, nil, nil)
-				getIdsPhases[0].addDependency(primaryPhase)
+				primaryPhase, err = q.trans.addPhase(modelAndFieldName, nil, nil)
+				if err != nil {
+					return nil, nil, err
+				}
+				if err := getIdsPhases[0].addDependency(primaryPhase); err != nil {
+					return nil, nil, err
+				}
 				getIdsPhases = append(getIdsPhases, primaryPhase)
 
 				// add the appropriate command to the primaryPhase
@@ -683,9 +697,14 @@ func (q *Query) executeAndScan(models reflect.Value, getIdsPhases []*phase, allI
 
 	// the scanModelsPhase will execute after all the ids have been found and intersected.
 	// it adds commands to find each model by its id and append the model to models
-	scanModelsPhase := q.trans.addPhase("scanModels", q.newScanModelsByIdsPreHandler(allIds, models), nil)
+	scanModelsPhase, err := q.trans.addPhase("scanModels", q.newScanModelsByIdsPreHandler(allIds, models), nil)
+	if err != nil {
+		return err
+	}
 	for _, phase := range getIdsPhases {
-		scanModelsPhase.addDependency(phase)
+		if err := scanModelsPhase.addDependency(phase); err != nil {
+			return err
+		}
 	}
 
 	return q.trans.exec()
@@ -805,20 +824,34 @@ func (q *Query) addCommandForFilter(p *phase, f filter, allIds *idSet) ([]*phase
 				// use union to combine the results. We'll create a new phase
 				// for this and add the current phase as a dependency to it
 
-				// model name and field name will be used to indentify the phase
-				modelAndFieldName := fmt.Sprintf("%s:%s", q.modelSpec.modelName, f.fieldName)
+				// the id for this subphase will be identified by the modelName, fieldName, filter kind, and filter value
+				subPhaseId := fmt.Sprintf("%s:%s:%s:%s", q.modelSpec.modelName, f.fieldName, f.filterType, f.filterValue.String())
 
 				// lessIds and greaterIds will hold the ids from their respective commands
 				lessIds := newIdSet()
 				greaterIds := newIdSet()
 
 				// add the new subPhase to the transaction
-				subPhase := q.trans.addPhase(modelAndFieldName, nil, newUnionIdsPostHandler(lessIds, greaterIds, allIds, reverse))
+				var subPhase *phase
+				if existingPhase, found := q.trans.phaseById(subPhaseId); found {
+					subPhase = existingPhase
+				} else {
+					// If the phase doesn't already exist for this index, create a new one
+					newPhase, err := q.trans.addPhase(subPhaseId, nil, newUnionIdsPostHandler(lessIds, greaterIds, allIds, reverse))
+					if err != nil {
+						return nil, err
+					}
+					subPhase = newPhase
+				}
 
 				// subPhase should execute after p, in case p is not the primary phase.
 				// this way we know that the primary phase will always execute first and
 				// determine the ordering for all other intersections.
-				subPhase.addDependency(p)
+				if err := subPhase.addDependency(p); err != nil {
+					fmt.Println("Error here")
+					fmt.Println("phases: ", q.trans.phaseIds())
+					return nil, err
+				}
 
 				// set up each command, one for less than and one for greater than, and add
 				// them to the subPhase
@@ -945,20 +978,32 @@ func (q *Query) addCommandForFilter(p *phase, f filter, allIds *idSet) ([]*phase
 				// use union to combine the results. We'll create a new phase
 				// for this and add the current phase as a dependency to it
 
-				// model name and field name will be used to indentify the phase
-				modelAndFieldName := fmt.Sprintf("%s:%s", q.modelSpec.modelName, f.fieldName)
+				// the id for this subphase will be identified by the modelName, fieldName, filter kind, and filter value
+				subPhaseId := fmt.Sprintf("%s:%s:%s:%s", q.modelSpec.modelName, f.fieldName, f.filterType, f.filterValue.String())
 
 				// lessIds and greaterIds will hold the ids from their respective commands
 				lessIds := newIdSet()
 				greaterIds := newIdSet()
 
 				// add the new subPhase to the transaction
-				subPhase := q.trans.addPhase(modelAndFieldName, nil, newUnionIdsPostHandler(lessIds, greaterIds, allIds, reverse))
+				var subPhase *phase
+				if existingPhase, found := q.trans.phaseById(subPhaseId); found {
+					subPhase = existingPhase
+				} else {
+					// If the phase doesn't already exist for this index, create a new one
+					newPhase, err := q.trans.addPhase(subPhaseId, nil, newUnionIdsPostHandler(lessIds, greaterIds, allIds, reverse))
+					if err != nil {
+						return nil, err
+					}
+					subPhase = newPhase
+				}
 
 				// subPhase should execute after p, in case p is not the primary phase.
 				// this way we know that the primary phase will always execute first and
 				// determine the ordering for all other intersections.
-				subPhase.addDependency(p)
+				if err := subPhase.addDependency(p); err != nil {
+					return nil, err
+				}
 
 				// set up each command, one for less than and one for greater than, and add
 				// them to the subPhase
