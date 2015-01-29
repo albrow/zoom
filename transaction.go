@@ -161,8 +161,6 @@ func (p *phase) exec(conn redis.Conn) error {
 }
 
 func (p *phase) addDependency(dep *phase) error {
-	fmt.Printf("%s.addDependency(%s)\n", p.id, dep.id)
-
 	if p.id == dep.id {
 		return fmt.Errorf("zoom: in phase.addDependency: Cannot add a phase as dependent on itself!")
 	}
@@ -177,7 +175,6 @@ func (p *phase) addDependency(dep *phase) error {
 		switch currentPhase.id {
 		case p.id:
 			// We found p
-			fmt.Println("Found p")
 			if depEl != nil {
 				// If we already found dep, that means dep came before p
 				// in the list and the dependency is already satisfied. We
@@ -194,7 +191,6 @@ func (p *phase) addDependency(dep *phase) error {
 		case dep.id:
 			// We found dep
 			depEl = e
-			fmt.Println("Found dep")
 			if pEl != nil {
 				// We found p but it was not before dep in the list. That means we'll
 				// need to move some things around.
@@ -242,11 +238,9 @@ func (p *phase) addDependency(dep *phase) error {
 	}
 
 	if pEl == nil {
-		fmt.Println("Did not find p")
 		return fmt.Errorf("zoom: in phase.addDependency(): Could not find phase with id = %s", p.id)
 	}
 	if depEl == nil {
-		fmt.Println("Did not find dep")
 		return fmt.Errorf("zoom: in phase.addDependency(): Could not find phase with id = %s", dep.id)
 	}
 	return nil

@@ -848,8 +848,6 @@ func (q *Query) addCommandForFilter(p *phase, f filter, allIds *idSet) ([]*phase
 				// this way we know that the primary phase will always execute first and
 				// determine the ordering for all other intersections.
 				if err := subPhase.addDependency(p); err != nil {
-					fmt.Println("Error here")
-					fmt.Println("phases: ", q.trans.phaseIds())
 					return nil, err
 				}
 
