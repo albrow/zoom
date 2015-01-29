@@ -129,25 +129,39 @@ func (p *phase) exec(conn redis.Conn) error {
 	}
 
 	if len(p.commands) > 0 {
-		// send all the commands for this phase using MULTI
-		conn.Send("MULTI")
-		for _, c := range p.commands {
-			if err := conn.Send(c.name, c.args...); err != nil {
+		if len(p.commands) == 1 {
+			// no need to use MULTI/EXEC for just one command
+			c := p.commands[0]
+			reply, err := conn.Do(c.name, c.args...)
+			if err != nil {
 				return err
 			}
-		}
-		// use EXEC to execute all the commands at once
-		replies, err := redis.Values(conn.Do("EXEC"))
-		if err != nil {
-			p.t.discard()
-			return err
-		}
-		// iterate through the replies, calling the corresponding handler functions
-		for i, reply := range replies {
-			handler := p.commands[i].handler
-			if handler != nil {
-				if err := handler(reply); err != nil {
+			if c.handler != nil {
+				if err := c.handler(reply); err != nil {
 					return err
+				}
+			}
+		} else {
+			// send all the commands for this phase using MULTI
+			conn.Send("MULTI")
+			for _, c := range p.commands {
+				if err := conn.Send(c.name, c.args...); err != nil {
+					return err
+				}
+			}
+			// use EXEC to execute all the commands at once
+			replies, err := redis.Values(conn.Do("EXEC"))
+			if err != nil {
+				p.t.discard()
+				return err
+			}
+			// iterate through the replies, calling the corresponding handler functions
+			for i, reply := range replies {
+				handler := p.commands[i].handler
+				if handler != nil {
+					if err := handler(reply); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -166,7 +180,7 @@ func (p *phase) addDependency(dep *phase) error {
 	}
 
 	var pEl, depEl *list.Element
-	inBetweens := []*phase{} // inBetweens will store the phases between p and dep
+	canMoveBefore, canMoveAfter := true, true
 	for e := p.t.phases.Front(); e != nil; e = e.Next() {
 		currentPhase, ok := e.Value.(*phase)
 		if !ok {
@@ -203,27 +217,12 @@ func (p *phase) addDependency(dep *phase) error {
 					}
 				}
 
-				// First, we'll attmpt to move p immediately after dep
-				// We need to check any elements between p and dep
-				// to see if they depend on p
-				if anyDependsOn(inBetweens, p) {
-					// We cannot move p immediately after dep. Keep going
-					// and we'll try moving dep immediately before p.
-				} else {
+				if canMoveAfter {
 					// If we reached here, we found a placement that works!
 					// We can move p directly after dep
 					p.t.phases.MoveAfter(pEl, depEl)
 					return nil
-				}
-
-				// Next, we'll attempt to move dep immediately before p
-				// We need to make sure dep doesn't depend on any of the phases
-				// between p and dep
-				if dependsOnAny(dep, inBetweens) {
-					// If we've reached here, we cannot move p direcly after dep
-					// or dep directly before p, so we must have a cycle.
-					return NewDependencyCycleError(p, dep)
-				} else {
+				} else if canMoveBefore {
 					// If we reached here, we found a placement that works!
 					// We can move dep directly before p
 					p.t.phases.MoveBefore(depEl, pEl)
@@ -232,7 +231,39 @@ func (p *phase) addDependency(dep *phase) error {
 			}
 		default:
 			if pEl != nil {
-				inBetweens = append(inBetweens, currentPhase)
+				// If pEl is not nil, then it must mean that we found p and
+				// are now moving through the list until we find dep. These
+				// elements are the elements in between p and dep.
+
+				if canMoveAfter {
+					// Check if moving p after dep is still a possibility
+					for _, dep := range currentPhase.deps {
+						if dep.id == p.id {
+							// If any of the phases in between p and dep depend on
+							// p, we cannot move p after dep, because it would break
+							// those dependencies
+							canMoveAfter = false
+						}
+					}
+				}
+
+				if canMoveBefore {
+					// Check if moving dep before p is still a possiblity
+					for _, depdep := range dep.deps {
+						if depdep.id == currentPhase.id {
+							// If dep depends on any of the phases in between p and dep,
+							// then we cannot move dep before p, because that would break
+							// the dependencies.
+							canMoveBefore = false
+						}
+					}
+				}
+
+				if !canMoveBefore && !canMoveAfter {
+					// If we've reached here, we cannot move p direcly after dep
+					// or dep directly before p, so we must have a cycle.
+					return NewDependencyCycleError(p, dep)
+				}
 			}
 		}
 	}
