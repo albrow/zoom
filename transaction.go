@@ -9,11 +9,9 @@
 package zoom
 
 import (
-	"errors"
+	"container/list"
 	"fmt"
 	"github.com/garyburd/redigo/redis"
-	"github.com/twmb/algoimpl/go/graph"
-
 	"reflect"
 	"strings"
 )
@@ -27,103 +25,24 @@ type replyHandler func(interface{}) error
 // transaction.
 type transaction struct {
 	conn       redis.Conn
-	phases     map[string]*phase
-	graph      *graph.Graph
+	phases     *list.List
 	modelCache map[string]interface{}
 }
 
 func newTransaction() *transaction {
 	return &transaction{
-		phases:     map[string]*phase{},
-		graph:      graph.New(graph.Directed),
+		phases:     list.New(),
 		conn:       GetConn(),
 		modelCache: map[string]interface{}{},
 	}
 }
 
-func (t *transaction) linearize() ([]*phase, error) {
-	// If the nodes could be linearized, components is a [][]graph.Node where
-	// each inner slice contains a single node. We need to iterate through and
-	// 1) get the id of the node, 2) get the phase corresponding to that id,
-	// and 3) add each phase to a list of ordered phases, which we'll return
-	// Example of correct output:
-	// [
-	//   [a]
-	//   [b]
-	//   [c]
-	// ]
-	// Where a, b, and c represent nodes
-	// Example of what the output will look like if there is a cycle:
-	// [
-	//   [a, b]
-	//   [c]
-	// ]
-	components := t.graph.StronglyConnectedComponents()
-
-	if len(components) != len(t.phases) {
-		// There was possibly a cycle. To find out for sure, search a piece of
-		// components which has more than one node in it. The nodes in that piece
-		// are a cycle because they are strongly connected.
-		cycleIds := []string{}
-		for _, nodes := range components {
-			if len(nodes) > 1 {
-				// Get the phase ids of the nodes in the cycle
-				for _, node := range nodes {
-					if id, err := getIdForNode(node); err != nil {
-						return nil, err
-					} else {
-						cycleIds = append(cycleIds, id)
-					}
-				}
-				break
-			}
-		}
-		if len(cycleIds) != 0 {
-			cycleExplanation := strings.Join(cycleIds, " -> ")
-			return nil, fmt.Errorf("Could not linearize transaction phases because there was a cycle: %s", cycleExplanation)
-		}
-	}
-	orderedPhases := []*phase{}
-	for _, nodes := range components {
-		node := nodes[0]
-		phaseId, err := getIdForNode(node)
-		if err != nil {
-			return nil, err
-		}
-		phase, found := t.phases[phaseId]
-		if !found {
-			return nil, fmt.Errorf("Could not find phase with id: %s", phaseId)
-		}
-		orderedPhases = append(orderedPhases, phase)
-	}
-	phaseIds := []string{}
-	for _, phase := range orderedPhases {
-		phaseIds = append(phaseIds, phase.id)
-	}
-	return orderedPhases, nil
-}
-
-func getIdForNode(node graph.Node) (string, error) {
-	if id, ok := (*node.Value).(string); !ok {
-		msg := fmt.Sprintf("Could not convert node value: %v to string!", node.Value)
-		if node.Value != nil {
-			typ := reflect.TypeOf(*node.Value)
-			msg += fmt.Sprintf(" Had type: %s", typ.String())
-		} else {
-			msg += " Node was nil"
-		}
-		return "", errors.New(msg)
-	} else {
-		return id, nil
-	}
-}
-
 func (t *transaction) exec() error {
-	orderedPhases, err := t.linearize()
-	if err != nil {
-		return err
-	}
-	for _, phase := range orderedPhases {
+	for e := t.phases.Front(); e != nil; e = e.Next() {
+		phase, ok := e.Value.(*phase)
+		if !ok {
+			return fmt.Errorf("zoom: in transaction.exec(): Could not convert %v of type %T to *zoom.phase", e.Value, e.Value)
+		}
 		if err := phase.exec(t.conn); err != nil {
 			return err
 		}
@@ -137,25 +56,60 @@ type phase struct {
 	t        *transaction
 	id       string
 	commands []*command
-	node     graph.Node
+	deps     []*phase
 	pre      func(*phase) error
 	post     func(*phase) error
 }
 
-func (t *transaction) addPhase(id string, pre func(*phase) error, post func(*phase) error) *phase {
+func (t *transaction) addPhase(id string, pre func(*phase) error, post func(*phase) error) (*phase, error) {
 	if id == "" {
 		id = generateRandomId()
+	}
+	for e := t.phases.Front(); e != nil; e = e.Next() {
+		existingPhase, ok := e.Value.(*phase)
+		if !ok {
+			return nil, fmt.Errorf("zoom: in addPhase(): Could not convert %v of type %T to *zoom.phase", e.Value, e.Value)
+		}
+		if id == existingPhase.id {
+			panic("phase id already exists")
+			return nil, fmt.Errorf("zoom: in addPhase(): Phase with id = %s already exists.", id)
+		}
 	}
 	p := &phase{
 		t:    t,
 		id:   id,
-		node: t.graph.MakeNode(),
 		pre:  pre,
 		post: post,
 	}
-	*p.node.Value = id
-	t.phases[p.id] = p
-	return p
+	t.phases.PushBack(p)
+	return p, nil
+}
+
+func (t *transaction) phaseById(id string) (*phase, bool) {
+	for e := t.phases.Front(); e != nil; e = e.Next() {
+		p, ok := e.Value.(*phase)
+		if !ok {
+			msg := fmt.Sprintf("zoom: in addPhase(): Could not convert %v of type %T to *zoom.phase", e.Value, e.Value)
+			panic(msg)
+		}
+		if id == p.id {
+			return p, true
+		}
+	}
+	return nil, false
+}
+
+func (t *transaction) phaseIds() []string {
+	ids := []string{}
+	for e := t.phases.Front(); e != nil; e = e.Next() {
+		p, ok := e.Value.(*phase)
+		if !ok {
+			msg := fmt.Sprintf("zoom: in transaction.phaseIds(): Could not convert %v of type %T to *zoom.phase", e.Value, e.Value)
+			panic(msg)
+		}
+		ids = append(ids, p.id)
+	}
+	return ids
 }
 
 func (p *phase) String() string {
@@ -175,25 +129,39 @@ func (p *phase) exec(conn redis.Conn) error {
 	}
 
 	if len(p.commands) > 0 {
-		// send all the commands for this phase using MULTI
-		conn.Send("MULTI")
-		for _, c := range p.commands {
-			if err := conn.Send(c.name, c.args...); err != nil {
+		if len(p.commands) == 1 {
+			// no need to use MULTI/EXEC for just one command
+			c := p.commands[0]
+			reply, err := conn.Do(c.name, c.args...)
+			if err != nil {
 				return err
 			}
-		}
-		// use EXEC to execute all the commands at once
-		replies, err := redis.Values(conn.Do("EXEC"))
-		if err != nil {
-			p.t.discard()
-			return err
-		}
-		// iterate through the replies, calling the corresponding handler functions
-		for i, reply := range replies {
-			handler := p.commands[i].handler
-			if handler != nil {
-				if err := handler(reply); err != nil {
+			if c.handler != nil {
+				if err := c.handler(reply); err != nil {
 					return err
+				}
+			}
+		} else {
+			// send all the commands for this phase using MULTI
+			conn.Send("MULTI")
+			for _, c := range p.commands {
+				if err := conn.Send(c.name, c.args...); err != nil {
+					return err
+				}
+			}
+			// use EXEC to execute all the commands at once
+			replies, err := redis.Values(conn.Do("EXEC"))
+			if err != nil {
+				p.t.discard()
+				return err
+			}
+			// iterate through the replies, calling the corresponding handler functions
+			for i, reply := range replies {
+				handler := p.commands[i].handler
+				if handler != nil {
+					if err := handler(reply); err != nil {
+						return err
+					}
 				}
 			}
 		}
@@ -206,8 +174,139 @@ func (p *phase) exec(conn redis.Conn) error {
 	return nil
 }
 
-func (p *phase) addDependency(dep *phase) {
-	p.t.graph.MakeEdge(dep.node, p.node)
+func (p *phase) addDependency(dep *phase) error {
+	if p.id == dep.id {
+		return fmt.Errorf("zoom: in phase.addDependency: Cannot add a phase as dependent on itself!")
+	}
+
+	var pEl, depEl *list.Element
+	canMoveBefore, canMoveAfter := true, true
+	for e := p.t.phases.Front(); e != nil; e = e.Next() {
+		currentPhase, ok := e.Value.(*phase)
+		if !ok {
+			return fmt.Errorf("zoom: in phase.addDependency(): Could not convert %v of type %T to *zoom.phase", e.Value, e.Value)
+		}
+		switch currentPhase.id {
+		case p.id:
+			// We found p
+			if depEl != nil {
+				// If we already found dep, that means dep came before p
+				// in the list and the dependency is already satisfied. We
+				// don't need to change the order.
+				p.deps = append(p.deps, dep)
+				return nil
+			}
+			// If we're here it means we haven't found dep yet. The dependency
+			// may be satisfiable but we'll have to move things around. We set
+			// p and pEl here, so when we find dep we can figure out what to move
+			// and where to move it. If we never find dep, we'll reach the end of
+			// the function and return an error.
+			pEl = e
+		case dep.id:
+			// We found dep
+			depEl = e
+			if pEl != nil {
+				// We found p but it was not before dep in the list. That means we'll
+				// need to move some things around.
+				p.deps = append(p.deps, dep)
+
+				// If p depends on dep and dep depends on p, we have a pretty clear cycle
+				for _, depdep := range dep.deps {
+					if depdep.id == p.id {
+						return NewDependencyCycleError(p, dep)
+					}
+				}
+
+				if canMoveAfter {
+					// If we reached here, we found a placement that works!
+					// We can move p directly after dep
+					p.t.phases.MoveAfter(pEl, depEl)
+					return nil
+				} else if canMoveBefore {
+					// If we reached here, we found a placement that works!
+					// We can move dep directly before p
+					p.t.phases.MoveBefore(depEl, pEl)
+					return nil
+				}
+			}
+		default:
+			if pEl != nil {
+				// If pEl is not nil, then it must mean that we found p and
+				// are now moving through the list until we find dep. These
+				// elements are the elements in between p and dep.
+
+				if canMoveAfter {
+					// Check if moving p after dep is still a possibility
+					for _, dep := range currentPhase.deps {
+						if dep.id == p.id {
+							// If any of the phases in between p and dep depend on
+							// p, we cannot move p after dep, because it would break
+							// those dependencies
+							canMoveAfter = false
+						}
+					}
+				}
+
+				if canMoveBefore {
+					// Check if moving dep before p is still a possiblity
+					for _, depdep := range dep.deps {
+						if depdep.id == currentPhase.id {
+							// If dep depends on any of the phases in between p and dep,
+							// then we cannot move dep before p, because that would break
+							// the dependencies.
+							canMoveBefore = false
+						}
+					}
+				}
+
+				if !canMoveBefore && !canMoveAfter {
+					// If we've reached here, we cannot move p direcly after dep
+					// or dep directly before p, so we must have a cycle.
+					return NewDependencyCycleError(p, dep)
+				}
+			}
+		}
+	}
+
+	if pEl == nil {
+		return fmt.Errorf("zoom: in phase.addDependency(): Could not find phase with id = %s", p.id)
+	}
+	if depEl == nil {
+		return fmt.Errorf("zoom: in phase.addDependency(): Could not find phase with id = %s", dep.id)
+	}
+	return nil
+}
+
+func (p *phase) depIds() []string {
+	ids := []string{}
+	for _, dep := range p.deps {
+		ids = append(ids, dep.id)
+	}
+	return ids
+}
+
+// anyDependsOn returns true iff any phase in phases depends on p
+func anyDependsOn(phases []*phase, p *phase) bool {
+	for _, phase := range phases {
+		for _, dep := range phase.deps {
+			if dep.id == p.id {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// dependsOnAny returns true iff phase depends on any phases
+func dependsOnAny(p *phase, phases []*phase) bool {
+	for _, phase := range phases {
+		for _, dep := range p.deps {
+			if dep.id == phase.id {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 type command struct {
