@@ -96,3 +96,23 @@ func (e *ModelNotFoundError) Error() string {
 func NewModelNotFoundError() *ModelNotFoundError {
 	return &ModelNotFoundError{}
 }
+
+// DependencyCycleError is returned from addDependency when the dependency would create a cycle
+type DependencyCycleError struct {
+	phase *phase
+	dep   *phase
+}
+
+func (e *DependencyCycleError) Error() string {
+	msg := fmt.Sprintf("zoom: could not add dependency (%s depends on %s) because it creates a cycle.", e.phase.id, e.dep.id)
+	msg += fmt.Sprintf("\n\t%s depends on: %v", e.phase.id, e.phase.depIds())
+	msg += fmt.Sprintf("\n\t%s depends on: %v", e.dep.id, e.dep.depIds())
+	return msg
+}
+
+func NewDependencyCycleError(phase, dep *phase) *DependencyCycleError {
+	return &DependencyCycleError{
+		phase: phase,
+		dep:   dep,
+	}
+}

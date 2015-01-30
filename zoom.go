@@ -25,7 +25,10 @@ import (
 // interface, you can embed zoom.DefaultData.
 func Save(model Model) error {
 	t := newTransaction()
-	p := t.addPhase("Save", nil, nil)
+	p, err := t.addPhase("Save", nil, nil)
+	if err != nil {
+		return err
+	}
 
 	// add a save operation to the transaction
 	if err := p.saveModel(model); err != nil {
@@ -46,7 +49,10 @@ func Save(model Model) error {
 // because saving a model a second time will have no adverse effects.
 func MSave(models []Model) error {
 	t := newTransaction()
-	p := t.addPhase("MSave", nil, nil)
+	p, err := t.addPhase("MSave", nil, nil)
+	if err != nil {
+		return err
+	}
 
 	// add a save operation for each model to the transaction
 	for _, m := range models {
@@ -101,7 +107,10 @@ func MFindById(modelNames, ids []string) ([]Model, error) {
 	}
 
 	t := newTransaction()
-	p := t.addPhase("MFindById", nil, nil)
+	p, err := t.addPhase("MFindById", nil, nil)
+	if err != nil {
+		return nil, err
+	}
 	results := make([]Model, 0)
 
 	for i := 0; i < len(modelNames); i++ {
@@ -153,7 +162,10 @@ func ScanById(id string, model Model) error {
 
 	// start a transaction
 	t := newTransaction()
-	p := t.addPhase("ScanById", nil, nil)
+	p, err := t.addPhase("ScanById", nil, nil)
+	if err != nil {
+		return err
+	}
 	p.scanModel(mr, nil)
 
 	// execute the transaction and return the result
@@ -192,7 +204,10 @@ func MScanById(ids []string, models interface{}) error {
 	}
 
 	t := newTransaction()
-	p := t.addPhase("MScanById", nil, nil)
+	p, err := t.addPhase("MScanById", nil, nil)
+	if err != nil {
+		return err
+	}
 	for i := 0; i < len(ids); i++ {
 		id, mVal := ids[i], modelsVal.Index(i)
 
@@ -225,7 +240,10 @@ func MScanById(ids []string, models interface{}) error {
 // not return an error; it will simply have no effect.
 func Delete(model Model) error {
 	t := newTransaction()
-	p := t.addPhase("Delete", nil, nil)
+	p, err := t.addPhase("Delete", nil, nil)
+	if err != nil {
+		return err
+	}
 
 	if model.GetId() == "" {
 		return errors.New("zoom: cannot delete because model Id field is empty")
@@ -253,7 +271,10 @@ func Delete(model Model) error {
 // effects.
 func MDelete(models []Model) error {
 	t := newTransaction()
-	p := t.addPhase("MDelete", nil, nil)
+	p, err := t.addPhase("MDelete", nil, nil)
+	if err != nil {
+		return err
+	}
 
 	for _, m := range models {
 		if m.GetId() == "" {
@@ -282,7 +303,10 @@ func MDelete(models []Model) error {
 // no effect.
 func DeleteById(modelName string, id string) error {
 	t := newTransaction()
-	p := t.addPhase("DeleteById", nil, nil)
+	p, err := t.addPhase("DeleteById", nil, nil)
+	if err != nil {
+		return err
+	}
 
 	if err := p.deleteModelById(modelName, id); err != nil {
 		return err
@@ -309,7 +333,10 @@ func MDeleteById(modelNames []string, ids []string) error {
 	}
 
 	t := newTransaction()
-	p := t.addPhase("MDeleteById", nil, nil)
+	p, err := t.addPhase("MDeleteById", nil, nil)
+	if err != nil {
+		return err
+	}
 
 	for i := 0; i < len(modelNames); i++ {
 		name, id := modelNames[i], ids[i]

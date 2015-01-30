@@ -3,7 +3,7 @@ Zoom
 
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
-Version: 0.8.1
+Version: 0.8.2
 
 A blazing-fast, lightweight ORM for Go built on Redis.
 
@@ -116,9 +116,9 @@ defaults:
 
 ``` go
 type Configuration struct {
-	Address       string // Address to connect to. Default: "localhost:6379"
-	Network       string // Network to use. Default: "tcp"
-	Database      int    // Database id to use (using SELECT). Default: 0
+   Address       string // Address to connect to. Default: "localhost:6379"
+   Network       string // Network to use. Default: "tcp"
+   Database      int    // Database id to use (using SELECT). Default: 0
 }
 ```
 
@@ -133,8 +133,8 @@ To use unix sockets with Zoom, simply pass in "unix" as the Network and "/tmp/un
 
 ``` go
 config := &zoom.Configuration {
-	Address: "/tmp/redis.sock",
-	Network: "unix",
+   Address: "/tmp/redis.sock",
+   Network: "unix",
 }
 zoom.Init(config)
 ```
@@ -231,7 +231,7 @@ To delete a model you can just use the Delete function:
 
 ``` go
 if err := zoom.Delete(person); err != nil {
-	// handle err
+   // handle err
 }
 ```
 
@@ -239,7 +239,7 @@ Or if you know the model's id, use the DeleteById function:
 
 ``` go
 if err := zoom.DeleteById("Person", "some_person_id"); err != nil {
-	// handle err
+   // handle err
 }
 ```
 
@@ -268,10 +268,10 @@ Here's what a model with an embedded Syncer should look like:
 
 ``` go
 type Person struct {
-	Age int
-	Name string
-	zoom.DefaultData
-	zoom.Sync
+   Age int
+   Name string
+   zoom.DefaultData
+   zoom.Sync
 }
 ```
 
@@ -279,20 +279,20 @@ And here's what a thread-safe update would look like:
 
 ``` go
 func UpdatePerson() {
-	p := &Person{}
-	// You must unlock the mutex associated with the id when you are
-	// done making changes. Using defer is sometimes a good way to do this.
-	defer p.Unlock()
-	// ScanById implicitly calls Lock(), so it will not return until any other
-	// references to the same model id are unlocked.
-	if err := zoom.ScanById("some valid id", p); err != nil {
-		// handle err
-	}
-	p.Name = "Bill"
-	p.Age = 27
-	if err := zoom.Save(p); err != nil {
-		// handle err
-	}	
+   p := &Person{}
+   // You must unlock the mutex associated with the id when you are
+   // done making changes. Using defer is sometimes a good way to do this.
+   defer p.Unlock()
+   // ScanById implicitly calls Lock(), so it will not return until any other
+   // references to the same model id are unlocked.
+   if err := zoom.ScanById("some valid id", p); err != nil {
+      // handle err
+   }
+   p.Name = "Bill"
+   p.Age = 27
+   if err := zoom.Save(p); err != nil {
+      // handle err
+   }  
 }
 ```
 
@@ -341,7 +341,7 @@ a slice of pointers to some model type.
 ``` go
 persons := make([]*Person, 0)
 if _, err := zoom.NewQuery("Person").Scan(persons); err != nil {
-	// handle err
+   // handle err
 }
 ```
 
@@ -376,7 +376,7 @@ Here's an example of a more complicated query using several modifiers:
 persons := []*Person{}
 q := zoom.NewQuery("Person").Order("-Name").Filter("Age >=", 25).Limit(10)
 if err := q.scan(&persons); err != nil {
-	// handle error
+   // handle error
 }
 ```
 
@@ -401,15 +401,15 @@ For these examples we're going to introduce two new struct types:
 ``` go
 // The PetOwner struct
 type PetOwner struct {
-	Name  string
-	Pet   *Pet    // *Pet should also be a registered type
-	zoom.DefaultData
+   Name  string
+   Pet   *Pet    // *Pet should also be a registered type
+   zoom.DefaultData
 }
 
 // The Pet struct
 type Pet struct {
-	Name   string
-	zoom.DefaultData
+   Name   string
+   zoom.DefaultData
 }
 
 ```
@@ -424,7 +424,7 @@ pet := &Pet{Name: "Spot"}
 
 // save the pet
 if err := zoom.Save(pet); err != nil {
-	// handle err
+   // handle err
 }
 
 // set the owner's pet
@@ -432,7 +432,7 @@ owner.Pet = pet
 
 // save the owner
 if err := zoom.Save(owner); err != nil {
-	// handle err
+   // handle err
 }
 ```
 
@@ -445,14 +445,14 @@ you would have to manually set up both relationships.
 ``` go
 ownerCopy := &PetOwner{}
 if err := zoom.ScanById("the_id_of_above_pet_owner", ownerCopy); err != nil {
-	// handle err
+   // handle err
 }
 
 // the Pet attribute is still set
 fmt.Println(ownerCopy.Pet.Name)
 
 // Output:
-//	Spot
+// Spot
 ```
 
 ### One-to-Many Relationships
@@ -462,15 +462,15 @@ One-to-many relationships work similarly. This time we're going to use two new s
 ``` go
 // The Parent struct
 type Parent struct {
-	Name     string
-	Children []*Child  // *Child should also be a registered type
-	zoom.DefaultData
+   Name     string
+   Children []*Child  // *Child should also be a registered type
+   zoom.DefaultData
 }
 
 // The Child struct
 type Child struct {
-	Name   string
-	zoom.DefaultData
+   Name   string
+   zoom.DefaultData
 }
 ```
 
@@ -485,7 +485,7 @@ child2 := &Child{Name: "Elise"}
 
 // save the children
 if err := zoom.Save(child1, child2); err != nil {
-	// handle err
+   // handle err
 }
 
 // assign the children to the parent
@@ -493,7 +493,7 @@ parent.Children = append(parent.Children, child1, child2)
 
 // save the parent
 if err := zoom.Save(parent); err != nil {
-	// handle err
+   // handle err
 }
 ```
 
@@ -506,17 +506,17 @@ the children again is straight forward.
 ``` go
 parentCopy := &Parent{}
 if err := zoom.ScanById("the_id_of_above_parent", parentCopy); err != nil {
-	// handle error
+   // handle error
 }
 
 // now you can access the children normally
 for _, child := range parentCopy.Children {
-	fmt.Println(child.Name)
+   fmt.Println(child.Name)
 }
 
 // Output:
-//	Derick
-//	Elise
+// Derick
+// Elise
 
 ```
 
@@ -528,14 +528,14 @@ use the children.
 parents := make([]*Parent, 0)
 q := zoom.NewQuery("Parent").Filter("Id =", "the_id_of_above_parent").Exclude("Children")
 if err := q.Scan(parents); err != nil {
-	// handle error
+   // handle error
 }
 
 // Since it was excluded, Children is empty.
 fmt.Println(parents[0].Children)
 
 // Output:
-//	[]
+// []
 ```
 
 ### Many-to-Many Relationships
@@ -557,7 +557,7 @@ go test .
 
 If everything passes, you should see something like:
 
-    ok  	github.com/albrow/zoom	4.151s
+    ok   github.com/albrow/zoom  4.151s
     
 If any of the tests fail, please [open an issue](https://github.com/albrow/zoom/issues/new) and
 describe what happened.
@@ -589,38 +589,38 @@ Here are the results from my laptop (2.3GHz quad-core i7, 8GB RAM) using a socke
 to append-only mode:
 
 ```
-BenchmarkConnection     2000000	       626 ns/op
-BenchmarkPing             50000	     25850 ns/op
-BenchmarkSet              50000	     33702 ns/op
-BenchmarkGet              50000	     26448 ns/op
-BenchmarkSave             20000	     61373 ns/op
-BenchmarkMSave100          2000	    926849 ns/op
-BenchmarkFindById         30000	     48712 ns/op
-BenchmarkMFindById100      2000	    675248 ns/op
-BenchmarkDeleteById       30000	     54485 ns/op
-BenchmarkMDeleteById100    2000	    674421 ns/op
-BenchmarkFindAllQuery10   10000	    194387 ns/op
-BenchmarkFindAllQuery1000        200	   7390949 ns/op
-BenchmarkFindAllQuery100000        2	 869368740 ns/op
-BenchmarkFilterIntQuery1From1  10000	    122423 ns/op
-BenchmarkFilterIntQuery1From10       10000	    121224 ns/op
-BenchmarkFilterIntQuery10From100     10000	    220717 ns/op
-BenchmarkFilterIntQuery100From1000    2000	   1007413 ns/op
-BenchmarkFilterStringQuery1From1       10000	    116361 ns/op
-BenchmarkFilterStringQuery1From10      10000	    119038 ns/op
-BenchmarkFilterStringQuery10From100     5000	    258254 ns/op
-BenchmarkFilterStringQuery100From1000   2000	   1080192 ns/op
-BenchmarkFilterBoolQuery1From1       10000	    114026 ns/op
-BenchmarkFilterBoolQuery1From10      10000	    114443 ns/op
-BenchmarkFilterBoolQuery10From100     5000	    225332 ns/op
-BenchmarkFilterBoolQuery100From1000   2000	   1029557 ns/op
-BenchmarkOrderInt1000       200	   7734115 ns/op
-BenchmarkOrderString1000    200	   8270430 ns/op
-BenchmarkOrderBool1000      200	   8263704 ns/op
-BenchmarkComplexQuery      1000	   1589910 ns/op
-BenchmarkCountAllQuery10      50000	     32565 ns/op
-BenchmarkCountAllQuery1000    50000	     33471 ns/op
-BenchmarkCountAllQuery100000  50000	     31497 ns/op
+BenchmarkConnection   2000000        638 ns/op
+BenchmarkPing           50000      26082 ns/op
+BenchmarkSet            50000      32515 ns/op
+BenchmarkGet            50000      26888 ns/op
+BenchmarkSave           20000      60229 ns/op
+BenchmarkMSave100        2000     922890 ns/op
+BenchmarkFindById       30000      42146 ns/op
+BenchmarkMFindById100       2000     672563 ns/op
+BenchmarkDeleteById        30000      50429 ns/op
+BenchmarkMDeleteById100     2000     640227 ns/op
+BenchmarkFindAllQuery10          10000     174934 ns/op
+BenchmarkFindAllQuery1000          200    7221345 ns/op
+BenchmarkFindAllQuery100000          2  861006409 ns/op
+BenchmarkFilterIntQuery1From1          10000     101974 ns/op
+BenchmarkFilterIntQuery1From10         10000     101800 ns/op
+BenchmarkFilterIntQuery10From100       10000     217393 ns/op
+BenchmarkFilterIntQuery100From1000      2000    1023974 ns/op
+BenchmarkFilterStringQuery1From1       10000     106031 ns/op
+BenchmarkFilterStringQuery1From10      10000     108170 ns/op
+BenchmarkFilterStringQuery10From100     5000     262771 ns/op
+BenchmarkFilterStringQuery100From1000   2000    1018744 ns/op
+BenchmarkFilterBoolQuery1From1         10000     102578 ns/op
+BenchmarkFilterBoolQuery1From10        10000     102697 ns/op
+BenchmarkFilterBoolQuery10From100      10000     221900 ns/op
+BenchmarkFilterBoolQuery100From1000     2000    1039159 ns/op
+BenchmarkOrderInt1000           200    7993121 ns/op
+BenchmarkOrderString1000        200    8531154 ns/op
+BenchmarkOrderBool1000          200    8318783 ns/op
+BenchmarkComplexQuery          1000    1672648 ns/op
+BenchmarkCountAllQuery10      50000      32124 ns/op
+BenchmarkCountAllQuery1000    50000      32092 ns/op
+BenchmarkCountAllQuery100000  50000      32227 ns/op
 ```
 
 The results of these benchmarks can vary widely from system to system. You should run your
