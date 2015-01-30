@@ -79,10 +79,10 @@ func BenchmarkMSave100(b *testing.B) {
 	if err != nil {
 		b.Error(err)
 	}
+	models := Models(ms)
 	b.ResetTimer()
 
 	// save them all in one go
-	models := Models(ms)
 	for i := 0; i < b.N; i++ {
 		MSave(models)
 	}
