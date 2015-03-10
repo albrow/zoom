@@ -7,9 +7,9 @@
 // public-facing methods are here.
 
 // Package zoom is a fast and lightweight ORM powered by Redis.
-// It supports models of any arbitrary struct type, supports relationships
-// between models, and provides basic querying functionality. It also
-// supports running Redis commands directly.
+// It supports models of any arbitrary struct type and provides
+// basic querying functionality. It also supports running Redis
+// commands directly if needed.
 package zoom
 
 import (

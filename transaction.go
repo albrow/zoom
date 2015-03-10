@@ -351,9 +351,8 @@ func newScanModelHandler(mr modelRef, includes []string) func(interface{}) error
 			return err
 		}
 		if len(bulk) == 0 {
-			// if there is nothing in the hash, we should check if the model exists
-			// it might still exist if there are relationships, but no other data
-			return checkModelExists(mr)
+			// This would mean the model was not found
+			return NewKeyNotFoundError(mr.key(), mr.modelSpec.modelType)
 		}
 		if err := scanModel(bulk, mr, includes); err != nil {
 			return err
@@ -374,10 +373,8 @@ func newScanModelSliceHandler(mr modelRef, scanVal reflect.Value) func(interface
 			return err
 		}
 		if len(bulk) == 0 {
-			// there was a miss
-			// if there is nothing in the hash, we should check if the model exists
-			// it might still exist if there are relationships, but no other data
-			return checkModelExists(mr)
+			// This would mean the model was not found
+			return NewKeyNotFoundError(mr.key(), mr.modelSpec.modelType)
 		}
 		scanType := scanVal.Type()
 		scanElem := scanType.Elem()
@@ -393,7 +390,7 @@ func newScanModelSliceHandler(mr modelRef, scanVal reflect.Value) func(interface
 // Shortcuts for adding common commands to a phase
 
 // saveModel adds all the necessary commands to save a given model to the redis database.
-// this includes indexes and relationships
+// This includes indexes.
 func (p *phase) saveModel(m Model) error {
 	mr, err := newModelRefFromModel(m)
 	if err != nil {
@@ -420,8 +417,6 @@ func (p *phase) saveModel(m Model) error {
 	// set of all model ids for this type
 	p.index(mr)
 
-	// add operations to save model relationships
-	p.saveModelRelationships(mr)
 	return nil
 }
 
@@ -439,77 +434,6 @@ func (p *phase) saveModelStruct(mr modelRef) error {
 func (p *phase) index(mr modelRef) {
 	args := redis.Args{}.Add(mr.indexKey()).Add(mr.model.GetId())
 	p.addCommand("SADD", args, nil)
-}
-
-func (p *phase) saveModelRelationships(mr modelRef) error {
-	for _, r := range mr.modelSpec.relationships {
-		if r.relType == oneToOne {
-			if err := p.saveModelOneToOneRelationship(mr, r); err != nil {
-				return err
-			}
-		} else if r.relType == oneToMany {
-			if err := p.saveModelOneToManyRelationship(mr, r); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (p *phase) saveModelOneToOneRelationship(mr modelRef, relationship *fieldSpec) error {
-	field := mr.value(relationship.fieldName)
-	if field.IsNil() {
-		return nil
-	}
-	rModel, ok := field.Interface().(Model)
-	if !ok {
-		return fmt.Errorf("zoom: cannot convert type %s to Model\n", field.Type().String())
-	}
-	if rModel.GetId() == "" {
-		return fmt.Errorf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
-	}
-
-	// add a command to the transaction to set the relation key
-	relationKey := mr.key() + ":" + relationship.redisName
-	args := redis.Args{relationKey, rModel.GetId()}
-	p.addCommand("SET", args, nil)
-	return nil
-}
-
-func (p *phase) saveModelOneToManyRelationship(mr modelRef, relationship *fieldSpec) error {
-	field := mr.value(relationship.fieldName)
-	if field.IsNil() {
-		return nil
-	}
-
-	// get a slice of ids from the elements of the field
-	ids := make([]string, 0)
-	for i := 0; i < field.Len(); i++ {
-		rElem := field.Index(i)
-
-		// convert the individual element to a model
-		rModel, ok := rElem.Interface().(Model)
-		if !ok {
-			return fmt.Errorf("zoom: cannot convert type %s to Model\n", field.Type().String())
-		}
-
-		// make sure the id is not nil
-		if rModel.GetId() == "" {
-			return fmt.Errorf("zoom: cannot save a relation for a model with no Id: %+v\n. Must save the related model first.", rModel)
-		}
-
-		// add its id to the slice
-		ids = append(ids, rModel.GetId())
-	}
-
-	if len(ids) > 0 {
-
-		// add a command to the transaction to save the ids
-		relationKey := mr.key() + ":" + relationship.redisName
-		args := redis.Args{}.Add(relationKey).AddFlat(ids)
-		p.addCommand("SADD", args, nil)
-	}
-	return nil
 }
 
 func (p *phase) saveModelIndexes(mr modelRef) error {
@@ -691,144 +615,6 @@ func (p *phase) scanModel(mr modelRef, includes []string) error {
 			args := redis.Args{}.Add(mr.key()).AddFlat(includes)
 			p.addCommand("HMGET", args, newScanModelHandler(mr, includes))
 		}
-	}
-
-	// find the relationships for the model
-	if len(mr.modelSpec.relationships) != 0 {
-		if err := p.findModelRelationships(mr, includes); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (p *phase) findModelRelationships(mr modelRef, includes []string) error {
-	for _, r := range mr.modelSpec.relationships {
-		if includes != nil {
-			if !stringSliceContains(r.fieldName, includes) {
-				continue // skip field names that are not in includes
-			}
-		}
-		if r.relType == oneToOne {
-			if err := p.findModelOneToOneRelation(mr, r); err != nil {
-				return err
-			}
-		} else if r.relType == oneToMany {
-			if err := p.findModelOneToManyRelation(mr, r); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func (p *phase) findModelOneToOneRelation(mr modelRef, relationship *fieldSpec) error {
-	// TODO: use scripting to retain integrity of the transaction (we want
-	// to perform only one round trip per transaction).
-	conn := GetConn()
-	defer conn.Close()
-
-	// invoke redis driver to get the id
-	relationKey := mr.key() + ":" + relationship.redisName
-	response, err := conn.Do("GET", relationKey)
-	if err != nil {
-		return err
-	} else if response == nil {
-		return nil
-	}
-	id, err := redis.String(response, nil)
-	if err != nil {
-		return err
-	}
-
-	// instantiate the field using reflection
-	field := mr.value(relationship.fieldName)
-
-	// check if a model with key is already cached in this transaction
-	rModelName, _ := getRegisteredNameFromType(field.Type())
-	rModelKey := rModelName + ":" + id
-	if prior, found := p.t.modelCache[rModelKey]; found {
-		// use the same pointer (it's the same object)
-		field.Set(reflect.ValueOf(prior))
-		return nil
-	} else {
-		// create a new pointer
-		field.Set(reflect.New(field.Type().Elem()))
-	}
-
-	// convert field to a model
-	rModel, ok := field.Interface().(Model)
-	if !ok {
-		return fmt.Errorf("zoom: cannot convert type %s to Model\n", field.Type().String())
-	}
-
-	// set id and create modelRef
-	rModel.SetId(id)
-	rModelRef, err := newModelRefFromModel(rModel)
-	if err != nil {
-		return err
-	}
-
-	// add a find operation to the transaction
-	if err := p.scanModel(rModelRef, nil); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (p *phase) findModelOneToManyRelation(mr modelRef, relationship *fieldSpec) error {
-
-	// TODO: use scripting to retain integrity of the transaction (we want
-	// to perform only one round trip per transaction).
-	conn := GetConn()
-	defer conn.Close()
-
-	// invoke redis driver to get a set of keys
-	relationKey := mr.key() + ":" + relationship.redisName
-	ids, err := redis.Strings(conn.Do("SMEMBERS", relationKey))
-	if err != nil {
-		return err
-	}
-
-	field := mr.value(relationship.fieldName)
-	rType := field.Type().Elem()
-
-	// iterate through the ids and find each model
-	for _, id := range ids {
-
-		// check if a model with key is already cached in this transaction
-		rModelName, _ := getRegisteredNameFromType(rType)
-		rModelKey := rModelName + ":" + id
-		if prior, found := p.t.modelCache[rModelKey]; found {
-			// use the same pointer (it's the same object)
-			sliceVal := reflect.Append(field, reflect.ValueOf(prior))
-			field.Set(sliceVal)
-			continue
-		}
-
-		rVal := reflect.New(rType.Elem())
-		rModel, ok := rVal.Interface().(Model)
-		if !ok {
-			return fmt.Errorf("zoom: cannot convert type %s to Model\n", rType.String())
-		}
-
-		// set id and create modelRef
-		rModel.SetId(id)
-		rModelRef, err := newModelRefFromModel(rModel)
-		if err != nil {
-			return err
-		}
-
-		// add a find operation to the transaction
-		if err := p.scanModel(rModelRef, nil); err != nil {
-			return err
-		}
-
-		// append to the field slice
-		sliceVal := reflect.Append(field, rVal)
-		field.Set(sliceVal)
 	}
 
 	return nil
