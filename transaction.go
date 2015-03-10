@@ -518,8 +518,8 @@ func (p *phase) saveModelIndexes(mr modelRef) error {
 			if err := p.saveModelPrimativeIndexNumeric(mr, pi); err != nil {
 				return err
 			}
-		} else if pi.indexType == indexAlpha {
-			p.saveModelPrimativeIndexAlpha(mr, pi)
+		} else if pi.indexType == indexString {
+			p.saveModelPrimativeIndexString(mr, pi)
 		} else if pi.indexType == indexBoolean {
 			p.saveModelPrimativeIndexBoolean(mr, pi)
 		}
@@ -530,8 +530,8 @@ func (p *phase) saveModelIndexes(mr modelRef) error {
 			if err := p.saveModelPointerIndexNumeric(mr, pi); err != nil {
 				return err
 			}
-		} else if pi.indexType == indexAlpha {
-			p.saveModelPointerIndexAlpha(mr, pi)
+		} else if pi.indexType == indexString {
+			p.saveModelPointerIndexString(mr, pi)
 		} else if pi.indexType == indexBoolean {
 			p.saveModelPointerIndexBoolean(mr, pi)
 		}
@@ -570,16 +570,16 @@ func (p *phase) indexNumeric(indexKey string, score float64, id string) {
 	p.addCommand("ZADD", args, nil)
 }
 
-func (p *phase) saveModelPrimativeIndexAlpha(mr modelRef, primative *fieldSpec) {
-	p.removeOldAlphaIndex(mr, primative.fieldName, primative.redisName)
+func (p *phase) saveModelPrimativeIndexString(mr modelRef, primative *fieldSpec) {
+	p.removeOldStringIndex(mr, primative.fieldName, primative.redisName)
 	indexKey := mr.modelSpec.modelName + ":" + primative.redisName
 	value := mr.value(primative.fieldName).String()
 	id := mr.model.GetId()
-	p.indexAlpha(indexKey, value, id)
+	p.indexString(indexKey, value, id)
 }
 
-func (p *phase) saveModelPointerIndexAlpha(mr modelRef, pointer *fieldSpec) {
-	p.removeOldAlphaIndex(mr, pointer.fieldName, pointer.redisName)
+func (p *phase) saveModelPointerIndexString(mr modelRef, pointer *fieldSpec) {
+	p.removeOldStringIndex(mr, pointer.fieldName, pointer.redisName)
 	if mr.value(pointer.fieldName).IsNil() {
 		// TODO: special case for indexing nil pointers?
 		return // skip nil pointers for now
@@ -587,19 +587,19 @@ func (p *phase) saveModelPointerIndexAlpha(mr modelRef, pointer *fieldSpec) {
 	indexKey := mr.modelSpec.modelName + ":" + pointer.redisName
 	value := mr.value(pointer.fieldName).Elem().String()
 	id := mr.model.GetId()
-	p.indexAlpha(indexKey, value, id)
+	p.indexString(indexKey, value, id)
 }
 
-func (p *phase) indexAlpha(indexKey, value, id string) {
+func (p *phase) indexString(indexKey, value, id string) {
 	member := value + " " + id
 	args := redis.Args{}.Add(indexKey).Add(0).Add(member)
 	p.addCommand("ZADD", args, nil)
 }
 
-// Remove the alpha index that may have existed before an update or resave of the model
+// Remove the string index that may have existed before an update or resave of the model
 // this requires a read before write, which is a performance penalty but unfortunatlely
-// is unavoidable because of the hacky way we're indexing alpha fields.
-func (p *phase) removeOldAlphaIndex(mr modelRef, fieldName string, redisName string) {
+// is unavoidable because of the hacky way we're indexing string fields.
+func (p *phase) removeOldStringIndex(mr modelRef, fieldName string, redisName string) {
 	key := mr.key()
 	args := redis.Args{}.Add(key).Add(redisName)
 	p.addCommand("HGET", args, func(reply interface{}) error {
@@ -619,9 +619,9 @@ func (p *phase) removeOldAlphaIndex(mr modelRef, fieldName string, redisName str
 			// if there are more than one old indexes to be removed?
 			conn := GetConn()
 			defer conn.Close()
-			alphaIndexKey := mr.modelSpec.modelName + ":" + fieldName
+			stringIndexKey := mr.modelSpec.modelName + ":" + fieldName
 			member := oldFieldValue + " " + mr.model.GetId()
-			if _, err := conn.Do("ZREM", alphaIndexKey, member); err != nil {
+			if _, err := conn.Do("ZREM", stringIndexKey, member); err != nil {
 				return err
 			}
 		}
@@ -903,8 +903,8 @@ func (p *phase) removeModelIndexes(mr modelRef) {
 	for _, pi := range mr.modelSpec.primativeIndexes {
 		if pi.indexType == indexNumeric {
 			p.removeModelPrimativeIndexNumeric(mr, pi)
-		} else if pi.indexType == indexAlpha {
-			p.removeModelPrimativeIndexAlpha(mr, pi)
+		} else if pi.indexType == indexString {
+			p.removeModelPrimativeIndexString(mr, pi)
 		} else if pi.indexType == indexBoolean {
 			p.removeModelPrimativeIndexBoolean(mr, pi)
 		}
@@ -913,8 +913,8 @@ func (p *phase) removeModelIndexes(mr modelRef) {
 	for _, pi := range mr.modelSpec.pointerIndexes {
 		if pi.indexType == indexNumeric {
 			p.removeModelPointerIndexNumeric(mr, pi)
-		} else if pi.indexType == indexAlpha {
-			p.removeModelPointerIndexAlpha(mr, pi)
+		} else if pi.indexType == indexString {
+			p.removeModelPointerIndexString(mr, pi)
 		} else if pi.indexType == indexBoolean {
 			p.removeModelPointerIndexBoolean(mr, pi)
 		}
@@ -942,14 +942,14 @@ func (p *phase) unindexNumeric(indexKey string, id string) {
 	p.addCommand("ZREM", args, nil)
 }
 
-func (p *phase) removeModelPrimativeIndexAlpha(mr modelRef, primative *fieldSpec) {
+func (p *phase) removeModelPrimativeIndexString(mr modelRef, primative *fieldSpec) {
 	indexKey := mr.modelSpec.modelName + ":" + primative.redisName
 	value := mr.value(primative.fieldName).String()
 	id := mr.model.GetId()
-	p.unindexAlpha(indexKey, value, id)
+	p.unindexString(indexKey, value, id)
 }
 
-func (p *phase) removeModelPointerIndexAlpha(mr modelRef, pointer *fieldSpec) {
+func (p *phase) removeModelPointerIndexString(mr modelRef, pointer *fieldSpec) {
 	if mr.value(pointer.fieldName).IsNil() {
 		// TODO: special case for indexing nil pointers?
 		return // skip nil pointers for now
@@ -957,10 +957,10 @@ func (p *phase) removeModelPointerIndexAlpha(mr modelRef, pointer *fieldSpec) {
 	indexKey := mr.modelSpec.modelName + ":" + pointer.redisName
 	value := mr.value(pointer.fieldName).Elem().String()
 	id := mr.model.GetId()
-	p.unindexAlpha(indexKey, value, id)
+	p.unindexString(indexKey, value, id)
 }
 
-func (p *phase) unindexAlpha(indexKey, value, id string) {
+func (p *phase) unindexString(indexKey, value, id string) {
 	member := value + " " + id
 	args := redis.Args{}.Add(indexKey).Add(member)
 	p.addCommand("ZREM", args, nil)

@@ -97,7 +97,7 @@ type indexType int
 
 const (
 	indexNumeric = iota
-	indexAlpha
+	indexString
 	indexBoolean
 )
 
@@ -271,7 +271,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 				if typeIsNumeric(field.Type) {
 					fs.indexType = indexNumeric
 				} else if typeIsString(field.Type) {
-					fs.indexType = indexAlpha
+					fs.indexType = indexString
 				} else if typeIsBool(field.Type) {
 					fs.indexType = indexBoolean
 				} else {
@@ -289,7 +289,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 					if typeIsNumeric(field.Type.Elem()) {
 						fs.indexType = indexNumeric
 					} else if typeIsString(field.Type.Elem()) {
-						fs.indexType = indexAlpha
+						fs.indexType = indexString
 					} else if typeIsBool(field.Type.Elem()) {
 						fs.indexType = indexBoolean
 					} else {

@@ -84,7 +84,7 @@ func TestQueryOrderBoolean(t *testing.T) {
 	}
 }
 
-func TestQueryOrderAlpha(t *testing.T) {
+func TestQueryOrderString(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -165,12 +165,12 @@ func TestQueryFilterBoolean(t *testing.T) {
 	}
 }
 
-func TestQueryFilterAlpha(t *testing.T) {
+func TestQueryFilterString(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
 	// create models which we will try to filter
-	// we create two with each letter of the alphabet so
+	// we create two with each letter of the stringbet so
 	// we can test what happens when there are multiple models
 	// with the same letter (the same String value)
 	models, err := createFullModels(26 * 2)
@@ -377,10 +377,10 @@ func TestQueryScanOne(t *testing.T) {
 //		- string field set to the value at index i%26 from a slice of all lowercase letters a-z
 //			(i.e. i=0 corresponds to a, i=26 corresponds to z, and i=27 corresponds to a)
 func createFullModels(num int) ([]*indexedPrimativesModel, error) {
-	// alphabet holds every letter from a to z
-	alphabet := []string{}
+	// stringbet holds every letter from a to z
+	stringbet := []string{}
 	for c := 'a'; c < 'z'+1; c++ {
-		alphabet = append(alphabet, string(c))
+		stringbet = append(stringbet, string(c))
 	}
 	bools := []bool{true, false}
 
@@ -401,7 +401,7 @@ func createFullModels(num int) ([]*indexedPrimativesModel, error) {
 			Float64: float64(i),
 			Byte:    byte(i),
 			Rune:    rune(i),
-			String:  alphabet[i%len(alphabet)],
+			String:  stringbet[i%len(stringbet)],
 			Bool:    bools[i%len(bools)],
 		}
 		ms = append(ms, m)
@@ -674,7 +674,7 @@ func filterModels(models []*indexedPrimativesModel, fieldName string, fType filt
 
 	// NOTE: this implementation only considers the first letter of the
 	// string! Makes it a lot easier to implement alphabetical sorting.
-	case indexAlpha:
+	case indexString:
 		switch fType {
 		case equal:
 			s = func(m *indexedPrimativesModel) (bool, error) {
@@ -980,8 +980,8 @@ func TestInternalFilterModelsBoolean(t *testing.T) {
 	}
 }
 
-// Test our internal model filter with alpha (string) type indexes
-func TestInternalFilterModelsAlpha(t *testing.T) {
+// Test our internal model filter with string type indexes
+func TestInternalFilterModelsString(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -1086,7 +1086,7 @@ func TestInternalFilterModelsAlpha(t *testing.T) {
 	}
 
 	for i, tc := range testCases {
-		if got, err := filterModels(models, "String", tc.fType, tc.fVal, indexAlpha); err != nil {
+		if got, err := filterModels(models, "String", tc.fType, tc.fVal, indexString); err != nil {
 			t.Error(err)
 		} else {
 			if eql, msg := looseEquals(tc.expected, got); !eql {
@@ -1345,7 +1345,7 @@ func TestInternalSortModelsNumeric(t *testing.T) {
 	}
 }
 
-func TestInternalSortModelsAlpha(t *testing.T) {
+func TestInternalSortModelsString(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 	presorted, _ := createFullModels(10)

@@ -131,8 +131,8 @@ func TestIndexedPrimativesModelSpec(t *testing.T) {
 					t.Errorf("Expected indexType to be numeric (%d) but got: %d", indexNumeric, index.indexType)
 				}
 			case typeIsString(field.Type):
-				if index.indexType != indexAlpha {
-					t.Errorf("Expected indexType to be boolean (%d) but got: %d", indexAlpha, index.indexType)
+				if index.indexType != indexString {
+					t.Errorf("Expected indexType to be boolean (%d) but got: %d", indexString, index.indexType)
 				}
 			case typeIsBool(field.Type):
 				if index.indexType != indexBoolean {
@@ -167,8 +167,8 @@ func TestIndexedPointersModelSpec(t *testing.T) {
 					t.Errorf("Expected indexType to be numeric (%d) but got: %d", indexNumeric, index.indexType)
 				}
 			case typeIsString(field.Type):
-				if index.indexType != indexAlpha {
-					t.Errorf("Expected indexType to be alpha (%d) but got: %d", indexAlpha, index.indexType)
+				if index.indexType != indexString {
+					t.Errorf("Expected indexType to be string (%d) but got: %d", indexString, index.indexType)
 				}
 			case typeIsBool(field.Type):
 				if index.indexType != indexBoolean {
@@ -214,7 +214,7 @@ func TestSaveIndexedPrimativesModel(t *testing.T) {
 		case typeIsNumeric(field.Type):
 			validateNumericIndexExists(t, "indexedPrimativesModel", m.Id, field.Name, val, conn)
 		case typeIsString(field.Type):
-			validateAlphaIndexExists(t, "indexedPrimativesModel", m.Id, field.Name, val.String(), conn)
+			validateStringIndexExists(t, "indexedPrimativesModel", m.Id, field.Name, val.String(), conn)
 		case typeIsBool(field.Type):
 			validateBooleanIndexExists(t, "indexedPrimativesModel", m.Id, field.Name, val.Bool(), conn)
 		default:
@@ -259,7 +259,7 @@ func TestSaveIndexedPointersModel(t *testing.T) {
 		case typeIsNumeric(field.Type.Elem()):
 			validateNumericIndexExists(t, "indexedPointersModel", m.Id, field.Name, val, conn)
 		case typeIsString(field.Type.Elem()):
-			validateAlphaIndexExists(t, "indexedPointersModel", m.Id, field.Name, val.String(), conn)
+			validateStringIndexExists(t, "indexedPointersModel", m.Id, field.Name, val.String(), conn)
 		case typeIsBool(field.Type.Elem()):
 			validateBooleanIndexExists(t, "indexedPointersModel", m.Id, field.Name, val.Bool(), conn)
 		default:
@@ -306,7 +306,7 @@ func TestDeleteIndexedPrimativesModel(t *testing.T) {
 		case typeIsNumeric(field.Type):
 			validateNumericIndexNotExists(t, "indexedPrimativesModel", m.Id, field.Name, val, conn)
 		case typeIsString(field.Type):
-			validateAlphaIndexNotExists(t, "indexedPrimativesModel", m.Id, field.Name, val.String(), conn)
+			validateStringIndexNotExists(t, "indexedPrimativesModel", m.Id, field.Name, val.String(), conn)
 		case typeIsBool(field.Type):
 			validateBooleanIndexNotExists(t, "indexedPrimativesModel", m.Id, field.Name, val.Bool(), conn)
 		default:
@@ -354,7 +354,7 @@ func TestDeleteIndexedPointersModel(t *testing.T) {
 		case typeIsNumeric(field.Type.Elem()):
 			validateNumericIndexNotExists(t, "indexedPointersModel", m.Id, field.Name, val, conn)
 		case typeIsString(field.Type.Elem()):
-			validateAlphaIndexNotExists(t, "indexedPointersModel", m.Id, field.Name, val.String(), conn)
+			validateStringIndexNotExists(t, "indexedPointersModel", m.Id, field.Name, val.String(), conn)
 		case typeIsBool(field.Type.Elem()):
 			validateBooleanIndexNotExists(t, "indexedPointersModel", m.Id, field.Name, val.Bool(), conn)
 		default:
@@ -388,7 +388,7 @@ func TestUpdateIndexedNumericModel(t *testing.T) {
 	validateNumericIndexNotExists(t, "indexedPrimativesModel", m.Id, "Int", reflect.ValueOf(123), conn)
 }
 
-func TestUpdateIndexedAlphaModel(t *testing.T) {
+func TestUpdateIndexedStringModel(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -400,7 +400,7 @@ func TestUpdateIndexedAlphaModel(t *testing.T) {
 	if err := Save(m); err != nil {
 		t.Error(err)
 	}
-	validateAlphaIndexExists(t, "indexedPrimativesModel", m.Id, "String", "aaa", conn)
+	validateStringIndexExists(t, "indexedPrimativesModel", m.Id, "String", "aaa", conn)
 
 	// now change the String field and make sure the index was updated
 	m.String = "bbb"
@@ -408,9 +408,9 @@ func TestUpdateIndexedAlphaModel(t *testing.T) {
 		t.Error(err)
 	}
 	// index should exist on field value "bbb" (the new value)
-	validateAlphaIndexExists(t, "indexedPrimativesModel", m.Id, "String", "bbb", conn)
+	validateStringIndexExists(t, "indexedPrimativesModel", m.Id, "String", "bbb", conn)
 	// index should not exist on field value "aaa" (the old value)
-	validateAlphaIndexNotExists(t, "indexedPrimativesModel", m.Id, "String", "aaa", conn)
+	validateStringIndexNotExists(t, "indexedPrimativesModel", m.Id, "String", "aaa", conn)
 }
 
 func TestUpdateIndexedBooleanModel(t *testing.T) {
@@ -453,7 +453,7 @@ func numericIndexExists(modelName string, modelId string, fieldName string, fiel
 	return len(results) != 0, nil
 }
 
-// make sure an alpha index exists
+// make sure an string index exists
 // uses t.Error or t.Errorf to report an error if the index does not exist
 func validateNumericIndexExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue reflect.Value, conn redis.Conn) {
 	if found, err := numericIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
@@ -473,9 +473,9 @@ func validateNumericIndexNotExists(t *testing.T, modelName string, modelId strin
 	}
 }
 
-// returns true if the alpha index exists
+// returns true if the string index exists
 // if err is not nil there was an unexpected error
-func alphaIndexExists(modelName string, modelId string, fieldName string, fieldValue string, conn redis.Conn) (bool, error) {
+func stringIndexExists(modelName string, modelId string, fieldName string, fieldValue string, conn redis.Conn) (bool, error) {
 	indexKey := modelName + ":" + fieldName
 	memberKey := fieldValue + " " + modelId
 	_, err := redis.Int(conn.Do("ZRANK", indexKey, memberKey))
@@ -490,23 +490,23 @@ func alphaIndexExists(modelName string, modelId string, fieldName string, fieldV
 	}
 }
 
-// make sure an alpha index exists
+// make sure an string index exists
 // uses t.Error or t.Errorf to report an error if the index does not exist
-func validateAlphaIndexExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue string, conn redis.Conn) {
-	if found, err := alphaIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
+func validateStringIndexExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue string, conn redis.Conn) {
+	if found, err := stringIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
 		t.Errorf("unexpected error:\n%s", err)
 	} else if !found {
-		t.Errorf("alpha index was not set\nExpected to find member %s %s\n%s", fieldValue, modelId, err)
+		t.Errorf("string index was not set\nExpected to find member %s %s\n%s", fieldValue, modelId, err)
 	}
 }
 
-// make sure an alpha index DOES NOT exist
+// make sure an string index DOES NOT exist
 // uses t.Error or t.Errorf to report an error if the index DOES exist
-func validateAlphaIndexNotExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue string, conn redis.Conn) {
-	if found, err := alphaIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
+func validateStringIndexNotExists(t *testing.T, modelName string, modelId string, fieldName string, fieldValue string, conn redis.Conn) {
+	if found, err := stringIndexExists(modelName, modelId, fieldName, fieldValue, conn); err != nil {
 		t.Errorf("unexpected error:\n%s", err)
 	} else if found {
-		t.Errorf("alpha index was set.\nExpected member %s %s to be gone.\n", fieldValue, modelId)
+		t.Errorf("string index was set.\nExpected member %s %s to be gone.\n", fieldValue, modelId)
 	}
 }
 

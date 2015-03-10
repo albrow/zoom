@@ -75,7 +75,7 @@ var filterSymbols = map[string]filterType{
 	"<=": lessOrEqual,
 }
 
-// used as a prefix for alpha index tricks this is a string which equals ASCII
+// used as a prefix for string index tricks this is a string which equals ASCII
 // DEL
 var delString string = string([]byte{byte(127)})
 
@@ -567,8 +567,8 @@ func (q *Query) getAllIds() ([]*phase, *idSet, error) {
 		if cmd, args, err := q.getAllModelsArgs(true); err != nil {
 			return getIdsPhases, allIds, err
 		} else {
-			if q.order.fieldName != "" && q.order.indexType == indexAlpha {
-				getIdsPhases[0].addCommand(cmd, args, newScanAlphaIdsHandler(allIds, false))
+			if q.order.fieldName != "" && q.order.indexType == indexString {
+				getIdsPhases[0].addCommand(cmd, args, newScanStringIdsHandler(allIds, false))
 			} else {
 				getIdsPhases[0].addCommand(cmd, args, newScanIdsHandler(allIds))
 			}
@@ -623,8 +623,8 @@ func (q *Query) getAllIds() ([]*phase, *idSet, error) {
 				getIdsPhases = append(getIdsPhases, primaryPhase)
 
 				// add the appropriate command to the primaryPhase
-				if q.order.fieldName != "" && q.order.indexType == indexAlpha {
-					primaryPhase.addCommand(cmd, args, newScanAlphaIdsHandler(allIds, false))
+				if q.order.fieldName != "" && q.order.indexType == indexString {
+					primaryPhase.addCommand(cmd, args, newScanStringIdsHandler(allIds, false))
 				} else {
 					primaryPhase.addCommand(cmd, args, newScanIdsHandler(allIds))
 				}
@@ -634,16 +634,16 @@ func (q *Query) getAllIds() ([]*phase, *idSet, error) {
 	return getIdsPhases, allIds, nil
 }
 
-// newScanAlphaIdsHandler returns a function which, when run, extracts ids from alpha index
+// newScanStringIdsHandler returns a function which, when run, extracts ids from string index
 // values and intersects the ids with the existing ids in allIds, maintaining the order of
 // the ids that are already there, if any.
-func newScanAlphaIdsHandler(allIds *idSet, reverse bool) func(interface{}) error {
+func newScanStringIdsHandler(allIds *idSet, reverse bool) func(interface{}) error {
 	return func(reply interface{}) error {
 		if ids, err := redis.Strings(reply, nil); err != nil {
 			return err
 		} else {
 			for i, valueAndId := range ids {
-				ids[i] = extractModelIdFromAlphaIndexValue(valueAndId)
+				ids[i] = extractModelIdFromStringIndexValue(valueAndId)
 			}
 			if reverse {
 				// TODO: if redis adds a ZREVRANGEBYLEX, remove this manual reverse and use that instead
@@ -671,11 +671,11 @@ func newScanIdsHandler(allIds *idSet) func(interface{}) error {
 	}
 }
 
-// Alpha indexes are stored as "<fieldValue> <modelId>", so we need to
+// String indexes are stored as "<fieldValue> <modelId>", so we need to
 // extract the modelId. While fieldValue may have a space, modelId CANNOT
 // have a space in it, so we can simply take the part of the stored value
 // after the last space.
-func extractModelIdFromAlphaIndexValue(valueAndId string) string {
+func extractModelIdFromStringIndexValue(valueAndId string) string {
 	slices := strings.Split(valueAndId, " ")
 	return slices[len(slices)-1]
 }
@@ -818,7 +818,7 @@ func (q *Query) addCommandForFilter(p *phase, f filter, allIds *idSet) ([]*phase
 				}
 				p.addCommand(command, args, newScanIdsHandler(allIds))
 			case notEqual:
-				// TODO: make this dryer! (Currently repeated for alpha indexes)
+				// TODO: make this dryer! (Currently repeated for string indexes)
 				// special case for not equals:
 				// split into two different commands (less and greater) and
 				// use union to combine the results. We'll create a new phase
@@ -944,7 +944,7 @@ func (q *Query) addCommandForFilter(p *phase, f filter, allIds *idSet) ([]*phase
 			}
 			p.addCommand(command, args, newScanIdsHandler(allIds))
 
-		case indexAlpha:
+		case indexString:
 			args := redis.Args{}.Add(setKey)
 			switch f.filterType {
 			case equal, less, greater, lessOrEqual, greaterOrEqual:
@@ -968,7 +968,7 @@ func (q *Query) addCommandForFilter(p *phase, f filter, allIds *idSet) ([]*phase
 					max = "+"
 				}
 				args = args.Add(min).Add(max)
-				p.addCommand("ZRANGEBYLEX", args, newScanAlphaIdsHandler(allIds, reverse))
+				p.addCommand("ZRANGEBYLEX", args, newScanStringIdsHandler(allIds, reverse))
 			case notEqual:
 				// TODO: make this dryer! (Currently repeated for numeric indexes)
 				// special case for not equals:
@@ -1008,10 +1008,10 @@ func (q *Query) addCommandForFilter(p *phase, f filter, allIds *idSet) ([]*phase
 				valString := f.filterValue.String()
 				max := "(" + valString
 				lessArgs := args.Add("-").Add(max)
-				subPhase.addCommand("ZRANGEBYLEX", lessArgs, newScanAlphaIdsHandler(lessIds, false))
+				subPhase.addCommand("ZRANGEBYLEX", lessArgs, newScanStringIdsHandler(lessIds, false))
 				min := "(" + valString + delString
 				greaterArgs := args.Add(min).Add("+")
-				subPhase.addCommand("ZRANGEBYLEX", greaterArgs, newScanAlphaIdsHandler(greaterIds, false))
+				subPhase.addCommand("ZRANGEBYLEX", greaterArgs, newScanStringIdsHandler(greaterIds, false))
 				subPhases = append(subPhases, subPhase)
 			}
 
