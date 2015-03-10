@@ -35,12 +35,10 @@ type modelSpec struct {
 	fieldSpecs       []*fieldSpec
 	primatives       map[string]*fieldSpec // primative types: int, float, string, etc.
 	pointers         map[string]*fieldSpec // pointers to primative tyeps: *int, *float, *string, etc.
-	inconvertibles   map[string]*fieldSpec // types which cannot be directly converted. fallback to json/msgpack
-	relationships    map[string]*fieldSpec // pointers to structs of registered types
+	inconvertibles   map[string]*fieldSpec // types which cannot be directly converted. fallback to gob encoding
 	primativeIndexes map[string]*fieldSpec // indexes specified with the zoom:"index" tag on primative field types
 	pointerIndexes   map[string]*fieldSpec // indexes specified with the zoom:"index" tag on pointer to primative field types
 	numKeys          int                   // number of keys which might be used to store the model (useful for determining whether the model was found)
-	// TODO add external hashes
 }
 
 func (ms modelSpec) fieldNames() []string {
@@ -71,7 +69,6 @@ type fieldSpec struct {
 	fieldType      reflect.Type
 	elemType       reflect.Type
 	indexType      indexType
-	relType        relationshipType
 	index          int
 }
 
@@ -83,14 +80,6 @@ const (
 	inconvertible
 	externalSet
 	externalList
-	relationship
-)
-
-type relationshipType int
-
-const (
-	oneToOne = iota
-	oneToMany
 )
 
 type indexType int
@@ -122,7 +111,6 @@ func newModelSpec(name string, typ reflect.Type) modelSpec {
 		primatives:       make(map[string]*fieldSpec),
 		pointers:         make(map[string]*fieldSpec),
 		inconvertibles:   make(map[string]*fieldSpec),
-		relationships:    make(map[string]*fieldSpec),
 		primativeIndexes: make(map[string]*fieldSpec),
 		pointerIndexes:   make(map[string]*fieldSpec),
 	}
@@ -228,16 +216,16 @@ func compileModelSpecs() error {
 	return nil
 }
 
-// TODO: take into account embedded structs
 func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
-
 	// iterate through fields
 	elem := typ.Elem()
 	numFields := elem.NumField()
 	for i := 0; i < numFields; i++ {
 		field := elem.Field(i)
 		if field.Name == "DefaultData" || field.Name == "Sync" {
-			continue // skip default data and sync
+			// skip default data and sync
+			// TODO: change this! Could cause bugs if users are using this field name
+			continue
 		}
 		// get the redisName
 		tag := field.Tag
@@ -264,7 +252,6 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 			}
 		}
 		if typeIsPrimative(field.Type) {
-			// primative
 			fs.classification = primative
 			ms.primatives[field.Name] = fs
 			if index {
@@ -297,33 +284,8 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 					}
 					ms.pointerIndexes[field.Name] = fs
 				}
-			} else if typeIsPointerToStruct(field.Type) {
-				if modelTypeIsRegistered(field.Type) {
-					// one-to-one relationship
-					fs.classification = relationship
-					fs.relType = oneToOne
-					ms.relationships[field.Name] = fs
-				} else {
-					// a pointer to a struct of unregistered type is incovertable
-					fs.classification = inconvertible
-					ms.inconvertibles[field.Name] = fs
-				}
-			}
-		} else if typeIsSliceOrArray(field.Type) {
-			if typeIsPointerToStruct(field.Type.Elem()) {
-				if modelTypeIsRegistered(field.Type.Elem()) {
-					// one-to-many relationship
-					fs.classification = relationship
-					fs.relType = oneToMany
-					fs.elemType = field.Type.Elem().Elem()
-					ms.relationships[field.Name] = fs
-				} else {
-					// a slice or array of pointers to structs of unregistered type is incovertable
-					fs.classification = inconvertible
-					ms.inconvertibles[field.Name] = fs
-				}
 			} else {
-				// all other slices or arrays are incovertable
+				// All other pointer types should be considered inconvertible
 				fs.classification = inconvertible
 				ms.inconvertibles[field.Name] = fs
 			}
@@ -338,7 +300,7 @@ func compileModelSpec(typ reflect.Type, ms *modelSpec) error {
 }
 
 // Unregister removes a model type from the list of registered types.
-// You only need to call UnregisterName or UnregisterType, not both.
+// You only need to call UnregisterName or Unregister, not both.
 func Unregister(model Model) error {
 	modelType := reflect.TypeOf(model)
 	name, ok := modelTypeToName[modelType]
@@ -351,7 +313,7 @@ func Unregister(model Model) error {
 }
 
 // UnregisterName removes a model type (identified by modelName) from the list of
-// registered model types. You only need to call UnregisterName or UnregisterType,
+// registered model types. You only need to call UnregisterName or Unregister,
 // not both.
 func UnregisterName(name string) error {
 	typ, ok := modelNameToType[name]
