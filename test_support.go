@@ -20,52 +20,6 @@ type basicModel struct {
 	DefaultData
 }
 
-type modelWithList struct {
-	List []string `redisType:"list"`
-	DefaultData
-}
-
-type modelWithSet struct {
-	Set []string `redisType:"set"`
-	DefaultData
-}
-
-type oneToOneModelDifferentType struct {
-	Attr string
-	One  *basicModel
-	DefaultData
-}
-
-type oneToOneModelSameType struct {
-	Attr string
-	One  *oneToOneModelSameType
-	DefaultData
-}
-
-type oneToManyModelDifferentType struct {
-	Attr string
-	Many []*basicModel
-	DefaultData
-}
-
-type manyToManyModelDifferentTypeOne struct {
-	Attr string
-	Many []*manyToManyModelDifferentTypeTwo
-	DefaultData
-}
-
-type manyToManyModelDifferentTypeTwo struct {
-	Attr string
-	Many []*manyToManyModelDifferentTypeOne
-	DefaultData
-}
-
-type manyToManyModelSameType struct {
-	Attr string
-	Many []*manyToManyModelSameType
-	DefaultData
-}
-
 type primativeTypesModel struct {
 	Uint    uint
 	Uint8   uint8
