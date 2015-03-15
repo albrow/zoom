@@ -10,6 +10,7 @@ package zoom
 
 import (
 	"fmt"
+	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"strings"
 )
@@ -87,13 +88,55 @@ func RegisterName(name string, model Model) (*ModelType, error) {
 	return &ModelType{spec}, nil
 }
 
+// KeyForModel returns the key that identifies a hash in the database
+// which contains all the fields of the given model. It returns an error
+// iff the model does not have an id.
+func (mt *ModelType) KeyForModel(model Model) (string, error) {
+	if model.GetId() == "" {
+		return "", fmt.Errorf("zoom: Error in KeyForModel: model does not have an id and therefore cannot have a valid key")
+	}
+	return mt.Name() + ":" + model.GetId(), nil
+}
+
+// KeyForAll returns the key that identifies a set in the database that
+// stores all the ids for models of the given type.
+func (mt *ModelType) KeyForAll() string {
+	return mt.Name() + ":all"
+}
+
 // Save writes a model (a struct which satisfies the Model interface) to the redis
 // database. Save throws an error if the type of model does not match the registered
 // ModelType. If the Id field of the struct is empty, Save will mutate the struct by
 // setting the Id. To make a struct satisfy the Model interface, you can embed
 // zoom.DefaultData.
 func (mt *ModelType) Save(model Model) error {
-	return fmt.Errorf("Save not yet implemented!")
+	// Generate id if needed
+	if model.GetId() == "" {
+		model.SetId(generateRandomId())
+	}
+
+	// Create a modelRef and start a transaction
+	mr := &modelRef{
+		spec:  mt.spec,
+		model: model,
+	}
+	t := newTransaction()
+
+	// Save the model fields in a hash in the database
+	hashArgs, err := mr.mainHashArgs()
+	if err != nil {
+		return err
+	}
+	t.command("HMSET", hashArgs, nil)
+
+	// Add the model id to the set of all models of this type
+	t.command("SADD", redis.Args{mt.KeyForAll(), model.GetId()}, nil)
+
+	// Execute the transaction
+	if err := t.exec(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // MSave is like Save but accepts a slice of models and saves them all in
@@ -104,58 +147,67 @@ func (mt *ModelType) MSave(models []Model) error {
 	return fmt.Errorf("MSave not yet implemented!")
 }
 
-// Find gets a model from the database. It returns an error
-// if a model with that id does not exist or if there was a problem
-// connecting to the database.
-func (mt *ModelType) Find(id string) (Model, error) {
-	return nil, fmt.Errorf("Find not yet implemented!")
+// Find retrieves a model with the given id from redis and scans its values
+// into model. model should be a pointer to a struct of a registered type
+// corresponding to the ModelType. Find will mutate the struct, filling in its
+// fields and overwriting any previous values. It returns an error if a model
+// with the given id does not exist, if the given model was the wrong type, or
+// if there was a problem connecting to the database.
+func (mt *ModelType) Find(id string, model Model) error {
+	return fmt.Errorf("Find not yet implemented!")
 }
 
-// Scan retrieves a model from redis and scans its values into model.
-// model should be a pointer to a struct of a registered type. Scan
-// will mutate the struct, filling in its fields. It returns an error
-// if a model with the given id does not exist or if there was a problem
-// connecting to the database.
-func (mt *ModelType) Scan(id string, model Model) error {
-	return fmt.Errorf("Scan not yet implemented!")
-}
-
-// MFind is like Find but accepts a slice of ids and returns a slice of models.
-// It executes the commands needed to retrieve the models in a single transaction.
-// See http://redis.io/topics/transactions.If there is an error in the middle of
-// the transaction, the function will halt and return the models retrieved so
-// far (as well as the error).
-func (mt *ModelType) MFind(ids []string) ([]Model, error) {
-	return nil, fmt.Errorf("MFind not yet implemented!")
-}
-
-// MScan is like Scan but accepts a slice of ids and a pointer to
+// MFind is like Find but accepts a slice of ids and a pointer to
 // a slice of models. It executes the commands needed to retrieve the models
-// in a single transaction. See http://redis.io/topics/transactions.
-// The slice of ids and models should be properly aligned so that, e.g.,
-// ids[0] corresponds to models[0]. If there is an error in the middle of the
-// transaction, the function will halt and return the error. Any models that
-// were scanned before the error will still be valid. If any of the models in
-// the models slice are nil, MScan will use reflection to allocate memory
-// for them.
-func (mt *ModelType) MScan(ids []string, models interface{}) error {
-	return fmt.Errorf("MScan not yet implemented!")
+// in a single transaction. See http://redis.io/topics/transactions. models must
+// be a pointer to a slice of models with a type corresponding to the ModelType.
+// MFind will grow the models slice as needed and if any of the models in the
+// models slice are nil, MFind will use reflection to allocate memory for them.
+// MFind returns an error if the model corresponding to any of the given ids did
+// not exist, if models is the wrong type, or if there was a problem connecting
+// to the database.
+func (mt *ModelType) MFind(ids []string, models interface{}) error {
+	return fmt.Errorf("MFind not yet implemented!")
 }
 
-// Delete removes the model with the given id from the database. It
-// will throw an error if the id is empty or if there is a problem
-// connecting to the database. If the model does not exist in the
-// database, Delete will not return an error; it will simply have no
-// effect.
-func (mt *ModelType) Delete(id string) error {
-	return fmt.Errorf("Delete not yet implemented!")
+// FindAll finds all the models of the given type. It executes the commands needed
+// to retrieve the models in a single transaction. See http://redis.io/topics/transactions.
+// models must be a pointer to a slice of models with a type corresponding to the ModelType.
+// FindAll will grow the models slice as needed and if any of the models in the
+// models slice are nil, FindAll will use reflection to allocate memory for them.
+// FindAll returns an error if models is the wrong type or if there was a problem connecting
+// to the database.
+func (mt *ModelType) FindAll(models interface{}) error {
+	return fmt.Errorf("FindAll not yet implemented!")
+}
+
+// Count returns the number of models of the given type that exist in the database.
+// It returns an error if there was a problem connecting to the database.
+func (mt *ModelType) Count() (int, error) {
+	return 0, fmt.Errorf("Count not yet implemented!")
+}
+
+// Delete removes the model with the given type and id from the database. It will
+// not return an error if the model corresponding to the given id was not
+// found in the database. Instead, it will return a boolean representing whether
+// or not the model was found and deleted, and will only return an error
+// if there was a problem connecting to the database.
+func (mt *ModelType) Delete(id string) (bool, error) {
+	return false, fmt.Errorf("Delete not yet implemented!")
 }
 
 // MDelete is like Delete but accepts a slice of ids and deletes all the
 // corresponding models in a single transaction. See http://redis.io/topics/transactions.
-// If there is an error in the middle of the transaction, the function will halt
-// and return the error. In that case, any models which were deleted before the error
-// was encountered will still be deleted.
-func (mt *ModelType) MDelete(ids []string) error {
-	return fmt.Errorf("MDelete not yet implemented!")
+// MDelete will not return an error if it can't find a model corresponding
+// to a given id. It return the number of models deleted and an error if there
+// was a problem connecting to the database.
+func (mt *ModelType) MDelete(ids []string) (int, error) {
+	return 0, fmt.Errorf("MDelete not yet implemented!")
+}
+
+// DeleteAll all the models of the given type in a single transaction. See
+// http://redis.io/topics/transactions. It returns the number of models deleted
+// and an error if there was a problem connecting to the database.
+func (mt *ModelType) DeleteAll() (int, error) {
+	return 0, fmt.Errorf("DeleteAll not yet implemented!")
 }

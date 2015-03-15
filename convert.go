@@ -17,11 +17,11 @@ import (
 func scanModel(replies []interface{}, mr *modelRef, includes []string) error {
 	fieldNames := []string{}
 	if len(includes) == 0 {
-		fieldNames = mr.modelSpec.fieldNames()
+		fieldNames = mr.spec.fieldNames()
 	} else {
 		fieldNames = includes
 	}
-	ms := mr.modelSpec
+	ms := mr.spec
 	includedFields := []*fieldSpec{}
 	for _, name := range fieldNames {
 		includedFields = append(includedFields, ms.fields[name])
@@ -54,6 +54,8 @@ func scanModel(replies []interface{}, mr *modelRef, includes []string) error {
 	return nil
 }
 
+// scanPrimativeVal converts a slice of bytes response from redis into the type of dest
+// and then sets dest to that value
 func scanPrimativeVal(src []byte, dest reflect.Value) error {
 	if len(src) == 0 {
 		return nil // skip blanks

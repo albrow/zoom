@@ -171,8 +171,8 @@ func (ms modelSpec) fieldNames() []string {
 }
 
 type modelRef struct {
-	model     Model
-	modelSpec *modelSpec
+	model Model
+	spec  *modelSpec
 }
 
 func newModelRef(m Model) (*modelRef, error) {
@@ -184,7 +184,7 @@ func newModelRef(m Model) (*modelRef, error) {
 	if !found {
 		return nil, NewModelTypeNotRegisteredError(typ)
 	}
-	mr.modelSpec = spec
+	mr.spec = spec
 	return mr, nil
 }
 
@@ -213,14 +213,14 @@ func (mr *modelRef) fieldValue(name string) reflect.Value {
 
 // key returns a key which is used in redis to store the model
 func (mr *modelRef) key() string {
-	return mr.modelSpec.name + ":" + mr.model.GetId()
+	return mr.spec.name + ":" + mr.model.GetId()
 }
 
 // mainHashArgs returns the args for the main hash for this model. Typically
 // these args should part of an HMSET command.
 func (mr *modelRef) mainHashArgs() (redis.Args, error) {
 	args := redis.Args{mr.key()}
-	ms := mr.modelSpec
+	ms := mr.spec
 	for _, fs := range ms.fields {
 		fieldVal := mr.fieldValue(fs.name)
 		switch fs.kind {

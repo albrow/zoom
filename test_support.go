@@ -6,7 +6,11 @@ package zoom
 
 import (
 	"flag"
+	"fmt"
+	"github.com/garyburd/redigo/redis"
+	"reflect"
 	"sync"
+	"testing"
 )
 
 var (
@@ -19,12 +23,12 @@ var setUpOnce = sync.Once{}
 
 func testingSetUp() {
 	setUpOnce.Do(func() {
-		// Init(&Configuration{
-		// 	Address:  *address,
-		// 	Network:  *network,
-		// 	Database: *database,
-		// })
-		// checkDatabaseEmpty()
+		Init(&Configuration{
+			Address:  *address,
+			Network:  *network,
+			Database: *database,
+		})
+		checkDatabaseEmpty()
 		registerTestingTypes()
 	})
 }
@@ -49,47 +53,105 @@ var (
 )
 
 func registerTestingTypes() {
-	testModels := []struct {
-		modelType *ModelType
+	testModelTypes := []struct {
+		modelType **ModelType
 		model     Model
 	}{
 		{
-			modelType: testModels,
+			modelType: &testModels,
 			model:     &testModel{},
 		},
 		{
-			modelType: indexedTestModels,
+			modelType: &indexedTestModels,
 			model:     &indexedTestModel{},
 		},
 	}
-	for _, m := range testModels {
-		mType, err := Register(m.model)
+	for _, m := range testModelTypes {
+		modelType, err := Register(m.model)
 		if err != nil {
 			panic(err)
 		}
-		m.modelType = mType
+		*m.modelType = modelType
 	}
 }
 
 func checkDatabaseEmpty() {
-	// conn := GetConn()
-	// defer conn.Close()
-	// n, err := redis.Int(conn.Do("DBSIZE"))
-	// if err != nil {
-	// 	panic(err.Error())
-	// }
-	// if n != 0 {
-	// 	err := fmt.Errorf("Database #%d is not empty! Testing can not continue.", *database)
-	// 	panic(err)
-	// }
+	conn := GetConn()
+	defer conn.Close()
+	n, err := redis.Int(conn.Do("DBSIZE"))
+	if err != nil {
+		panic(err.Error())
+	}
+	if n != 0 {
+		err := fmt.Errorf("Database #%d is not empty! Testing can not continue.", *database)
+		panic(err)
+	}
 }
 
 func testingTearDown() {
-	// // flush and close the database
-	// conn := GetConn()
-	// _, err := conn.Do("flushdb")
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// conn.Close()
+	// flush and close the database
+	conn := GetConn()
+	_, err := conn.Do("flushdb")
+	if err != nil {
+		panic(err)
+	}
+	conn.Close()
+}
+
+// expectSetContains sets an error via t.Errorf if member is not in the set
+func expectSetContains(t *testing.T, setName string, member interface{}) {
+	conn := GetConn()
+	defer conn.Close()
+	contains, err := redis.Bool(conn.Do("SISMEMBER", setName, member))
+	if err != nil {
+		t.Errorf("Unexpected error: %s", err.Error())
+	}
+	if !contains {
+		t.Errorf("Expected set %s to contain %s but it did not.", setName, member)
+	}
+}
+
+// expectSetDoesNotContain sets an error via t.Errorf if member is in the set
+func expectSetDoesNotContain(t *testing.T, setName string, member interface{}) {
+	conn := GetConn()
+	defer conn.Close()
+	contains, err := redis.Bool(conn.Do("SISMEMBER", setName, member))
+	if err != nil {
+		t.Errorf("Unexpected error: %s", err.Error())
+	}
+	if contains {
+		t.Errorf("Expected set %s to not contain %s but it did.", setName, member)
+	}
+}
+
+// expectFieldEquals sets an error via t.Errorf if the the field identified by fieldName does
+// not equal expected according to the database.
+func expectFieldEquals(t *testing.T, key string, fieldName string, expected interface{}) {
+	conn := GetConn()
+	defer conn.Close()
+	reply, err := conn.Do("HGET", key, fieldName)
+	if err != nil {
+		t.Errorf("Unexpected error in HGET: %s", err.Error())
+	}
+	srcBytes, ok := reply.([]byte)
+	if !ok {
+		t.Fatalf("Unexpected error: could not convert %v of type %T to []byte.\n", reply, reply)
+	}
+	typ := reflect.TypeOf(expected)
+	dest := reflect.New(typ).Elem()
+	switch {
+	case typeIsPrimative(typ):
+		err = scanPrimativeVal(srcBytes, dest)
+	case typ.Kind() == reflect.Ptr:
+		err = scanPointerVal(srcBytes, dest)
+	default:
+		err = scanInconvertibleVal(srcBytes, dest)
+	}
+	if err != nil {
+		t.Errorf("Unexpected error scanning value for field %s: %s", fieldName, err)
+	}
+	got := dest.Interface()
+	if !reflect.DeepEqual(expected, got) {
+		t.Errorf("Field %s for %s was not saved correctly.\n\tExpected: %v\n\tBut got:  %v", fieldName, key, expected, got)
+	}
 }

@@ -105,3 +105,68 @@ func testRegisteredModelType(t *testing.T, modelType *ModelType, expectedName st
 		}
 	}
 }
+
+func TestSave(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Create and save a test model
+	model := &testModel{
+		Int:    1,
+		String: "foo",
+		Bool:   true,
+	}
+	if err := testModels.Save(model); err != nil {
+		t.Errorf("Unexpected error in testModels.Save: %s", err.Error())
+	}
+
+	// Make sure the model was saved correctly
+	if model.Id == "" {
+		t.Fatalf("model.Id is empty. Cannot continue.")
+	}
+	key, _ := testModels.KeyForModel(model)
+	expectFieldEquals(t, key, "Int", model.Int)
+	expectFieldEquals(t, key, "String", model.String)
+	expectFieldEquals(t, key, "Bool", model.Bool)
+	expectSetContains(t, testModels.KeyForAll(), model.Id)
+}
+
+func TestMSave(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+}
+
+func TestFind(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+}
+
+func TestMFind(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+}
+
+func TestFindAll(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+}
+
+func TestCount(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+}
+
+func TestDelete(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+}
+
+func TestMDelete(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+}
+
+func TestDeleteAll(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+}
