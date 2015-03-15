@@ -111,11 +111,7 @@ func TestSave(t *testing.T) {
 	defer testingTearDown()
 
 	// Create and save a test model
-	model := &testModel{
-		Int:    1,
-		String: "foo",
-		Bool:   true,
-	}
+	model := createTestModels(1)[0]
 	if err := testModels.Save(model); err != nil {
 		t.Errorf("Unexpected error in testModels.Save: %s", err.Error())
 	}
@@ -134,6 +130,24 @@ func TestSave(t *testing.T) {
 func TestMSave(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
+
+	// Create and some test models
+	models := createTestModels(5)
+	if err := testModels.MSave(Models(models)); err != nil {
+		t.Errorf("Unexpected error in testModels.MSave: %s", err.Error())
+	}
+
+	// Make sure each model was saved correctly
+	for i, model := range models {
+		if model.Id == "" {
+			t.Fatalf("models[%d].Id is empty. Cannot continue.", i)
+		}
+		key, _ := testModels.KeyForModel(model)
+		expectFieldEquals(t, key, "Int", model.Int)
+		expectFieldEquals(t, key, "String", model.String)
+		expectFieldEquals(t, key, "Bool", model.Bool)
+		expectSetContains(t, testModels.KeyForAll(), model.Id)
+	}
 }
 
 func TestFind(t *testing.T) {

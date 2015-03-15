@@ -110,29 +110,8 @@ func (mt *ModelType) KeyForAll() string {
 // setting the Id. To make a struct satisfy the Model interface, you can embed
 // zoom.DefaultData.
 func (mt *ModelType) Save(model Model) error {
-	// Generate id if needed
-	if model.GetId() == "" {
-		model.SetId(generateRandomId())
-	}
-
-	// Create a modelRef and start a transaction
-	mr := &modelRef{
-		spec:  mt.spec,
-		model: model,
-	}
 	t := newTransaction()
-
-	// Save the model fields in a hash in the database
-	hashArgs, err := mr.mainHashArgs()
-	if err != nil {
-		return err
-	}
-	t.command("HMSET", hashArgs, nil)
-
-	// Add the model id to the set of all models of this type
-	t.command("SADD", redis.Args{mt.KeyForAll(), model.GetId()}, nil)
-
-	// Execute the transaction
+	t.save(mt, model)
 	if err := t.exec(); err != nil {
 		return err
 	}
@@ -144,7 +123,45 @@ func (mt *ModelType) Save(model Model) error {
 // is an error in the middle of the transaction, any models that were saved
 // before the error was encountered will still be saved.
 func (mt *ModelType) MSave(models []Model) error {
-	return fmt.Errorf("MSave not yet implemented!")
+	t := newTransaction()
+	for _, model := range models {
+		t.save(mt, model)
+	}
+	if err := t.exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// save writes a model (a struct which satisfies the Model interface) to the redis
+// database inside an existing transaction. save will set the err property of the
+// transaction if the type of model does not matched the registered ModelType, which
+// will cause exec to fail immediately and return the error. If the Id field of the
+// struct is empty, save will mutate the struct by setting the Id. To make a struct
+// satisfy the Model interface, you can embed zoom.DefaultData.
+func (t *transaction) save(mt *ModelType, model Model) {
+	// Generate id if needed
+	if model.GetId() == "" {
+		model.SetId(generateRandomId())
+	}
+
+	// Create a modelRef and start a transaction
+	mr := &modelRef{
+		spec:  mt.spec,
+		model: model,
+	}
+
+	// Save the model fields in a hash in the database
+	hashArgs, err := mr.mainHashArgs()
+	if err != nil {
+		t.setError(err)
+	}
+	t.command("HMSET", hashArgs, nil)
+
+	// Add the model id to the set of all models of this type
+	t.command("SADD", redis.Args{mt.KeyForAll(), model.GetId()}, nil)
+
+	// TODO: save indexes
 }
 
 // Find retrieves a model with the given id from redis and scans its values

@@ -188,15 +188,6 @@ func typeIsPrimative(typ reflect.Type) bool {
 	return typeIsString(typ) || typeIsNumeric(typ) || typeIsBool(typ)
 }
 
-// generate a random int from min to max (inclusively).
-// I.e. to get either 1 or 0, use randInt(0,1)
-func randInt(min int, max int) int {
-	if !(max-min >= 1) {
-		panic("invalid args. max must be at least one more than min")
-	}
-	return min + rand.Intn(max-min+1)
-}
-
 // looseEquals returns true if the two things are equal.
 // equality is based on underlying value, so if the pointer addresses
 // are different it doesn't matter. We use gob encoding for simplicity,
@@ -259,4 +250,16 @@ func generateRandomId() string {
 	timeString := strconv.FormatInt(timeInt, 36)
 	randomString := uniuri.NewLen(16)
 	return randomString + timeString
+}
+
+func randomInt() int {
+	return rand.Int()
+}
+
+func randomString() string {
+	return uniuri.NewLen(16)
+}
+
+func randomBool() bool {
+	return rand.Int()%2 == 0
 }

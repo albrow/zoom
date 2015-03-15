@@ -40,6 +40,18 @@ type testModel struct {
 	DefaultData
 }
 
+func createTestModels(n int) []*testModel {
+	models := make([]*testModel, n)
+	for i := 0; i < n; i++ {
+		models[i] = &testModel{
+			Int:    randomInt(),
+			String: randomString(),
+			Bool:   randomBool(),
+		}
+	}
+	return models
+}
+
 type indexedTestModel struct {
 	Int    int    `zoom:"index"`
 	String string `zoom:"index"`

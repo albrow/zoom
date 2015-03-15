@@ -17,6 +17,7 @@ import (
 type transaction struct {
 	conn    redis.Conn
 	actions []*action
+	err     error
 }
 
 // action is a single step in a transaction and must be either a command
@@ -47,6 +48,14 @@ func newTransaction() *transaction {
 		conn: GetConn(),
 	}
 	return t
+}
+
+// setError sets the err property of the transaction iff it was not already
+// set. This will cause exec to fail immediately.
+func (t *transaction) setError(err error) {
+	if t.err == nil {
+		t.err = err
+	}
 }
 
 // command adds a command action to the transaction with the given args.
@@ -101,6 +110,12 @@ func (t *transaction) doAction(a *action) (interface{}, error) {
 func (t *transaction) exec() error {
 	// Return the connection to the pool when we are done
 	defer t.conn.Close()
+
+	// If the transaction had an error from a previous command, return it
+	// and don't continue
+	if t.err != nil {
+		return t.err
+	}
 
 	if len(t.actions) == 1 {
 		// If there is only one command, no need to use MULTI/EXEC
