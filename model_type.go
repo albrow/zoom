@@ -14,6 +14,13 @@ import (
 	"strings"
 )
 
+var (
+	// modelTypeToSpec maps a registered model type to a modelSpec
+	modelTypeToSpec map[reflect.Type]*modelSpec = map[reflect.Type]*modelSpec{}
+	// modelNameToSpec maps a registered model name to a modelSpec
+	modelNameToSpec map[string]*modelSpec = map[string]*modelSpec{}
+)
+
 type ModelType struct {
 	spec *modelSpec
 }
@@ -72,6 +79,7 @@ func RegisterName(name string, model Model) (*ModelType, error) {
 	if err != nil {
 		return nil, err
 	}
+	spec.name = name
 	modelTypeToSpec[typ] = spec
 	modelNameToSpec[name] = spec
 

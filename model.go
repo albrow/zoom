@@ -37,13 +37,6 @@ func (d *DefaultData) SetId(id string) {
 	d.Id = id
 }
 
-var (
-	// modelTypeToSpec maps a registered model type to a modelSpec
-	modelTypeToSpec map[reflect.Type]*modelSpec = make(map[reflect.Type]*modelSpec)
-	// modelNameToSpec maps a registered model name to a modelSpec
-	modelNameToSpec map[string]*modelSpec = make(map[string]*modelSpec)
-)
-
 type modelSpec struct {
 	typ    reflect.Type
 	name   string
@@ -76,13 +69,18 @@ const (
 )
 
 func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
-	ms := &modelSpec{}
+	ms := &modelSpec{fields: map[string]*fieldSpec{}, typ: typ}
 
 	// Iterate through fields
 	elem := typ.Elem()
 	numFields := elem.NumField()
 	for i := 0; i < numFields; i++ {
 		field := elem.Field(i)
+		// Skip the DefaultData field
+		if field.Type == reflect.TypeOf(DefaultData{}) {
+			continue
+		}
+
 		fs := &fieldSpec{name: field.Name, fieldType: field.Type}
 		ms.fields[fs.name] = fs
 
