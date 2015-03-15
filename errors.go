@@ -12,8 +12,6 @@ import (
 	"reflect"
 )
 
-// TODO: add more custom error types based on common use cases throughout the package
-
 // NameAlreadyRegisteredError is returned if you try to register a
 // name which has already been registered.
 type NameAlreadyRegisteredError struct {
@@ -70,49 +68,14 @@ func NewModelNameNotRegisteredError(name string) *ModelNameNotRegisteredError {
 	return &ModelNameNotRegisteredError{name}
 }
 
-// KeyNotFoundError is returned from Find, Scan, and Query functions if the
-// model you are trying to find does not exist in the database.
-type KeyNotFoundError struct {
-	key       string
-	modelType reflect.Type
-}
+// // ModelNotFoundError is returned from Find, Scan, and Query methods if a model
+// // that fits the given criteria is not found.
+// type ModelNotFoundError struct{}
 
-func (e *KeyNotFoundError) Error() string {
-	return fmt.Sprintf("zoom: could not find model of type %s with key %s", e.modelType.String(), e.key)
-}
+// func (e *ModelNotFoundError) Error() string {
+// 	return "zoom: could not find a model which matches the query criteria"
+// }
 
-func NewKeyNotFoundError(key string, modelType reflect.Type) *KeyNotFoundError {
-	return &KeyNotFoundError{key, modelType}
-}
-
-// ModelNotFoundError is returned from ScanOne and RunOne if a model that matches
-// the query criteria was not found.
-type ModelNotFoundError struct{}
-
-func (e *ModelNotFoundError) Error() string {
-	return "zoom: could not find a model which matches the query criteria"
-}
-
-func NewModelNotFoundError() *ModelNotFoundError {
-	return &ModelNotFoundError{}
-}
-
-// DependencyCycleError is returned from addDependency when the dependency would create a cycle
-type DependencyCycleError struct {
-	phase *phase
-	dep   *phase
-}
-
-func (e *DependencyCycleError) Error() string {
-	msg := fmt.Sprintf("zoom: could not add dependency (%s depends on %s) because it creates a cycle.", e.phase.id, e.dep.id)
-	msg += fmt.Sprintf("\n\t%s depends on: %v", e.phase.id, e.phase.depIds())
-	msg += fmt.Sprintf("\n\t%s depends on: %v", e.dep.id, e.dep.depIds())
-	return msg
-}
-
-func NewDependencyCycleError(phase, dep *phase) *DependencyCycleError {
-	return &DependencyCycleError{
-		phase: phase,
-		dep:   dep,
-	}
-}
+// func NewModelNotFoundError() *ModelNotFoundError {
+// 	return &ModelNotFoundError{}
+// }

@@ -14,6 +14,40 @@ import (
 	"reflect"
 )
 
+// Models converts an interface to a slice of Model. It is typically
+// used to convert a return value of a Query. Will panic if the type
+// is invalid.
+func Models(in interface{}) []Model {
+	typ := reflect.TypeOf(in)
+	if !typeIsSliceOrArray(typ) {
+		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nArgument must be slice or array.", in)
+		panic(msg)
+	}
+	elemTyp := typ.Elem()
+	if !typeIsPointerToStruct(elemTyp) {
+		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nSlice or array must have elements of type pointer to struct.", in)
+		panic(msg)
+	}
+	_, found := modelTypeToSpec[elemTyp]
+	if !found {
+		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nType %s is not registered.", in, elemTyp)
+		panic(msg)
+	}
+	val := reflect.ValueOf(in)
+	length := val.Len()
+	results := make([]Model, length)
+	for i := 0; i < length; i++ {
+		elemVal := val.Index(i)
+		model, ok := elemVal.Interface().(Model)
+		if !ok {
+			msg := fmt.Sprintf("zoom: panic in Models() - cannot convert type %T to Model", elemVal.Interface())
+			panic(msg)
+		}
+		results[i] = model
+	}
+	return results
+}
+
 func reverseString(s string) string {
 	runes := []rune(s)
 	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
@@ -179,19 +213,19 @@ func looseEquals(one, two interface{}) (bool, error) {
 	return (string(oneBytes) == string(twoBytes)), nil
 }
 
-func convertNumericToFloat64(val reflect.Value) (float64, error) {
+func convertNumericToFloat64(val reflect.Value) float64 {
 	switch val.Type().Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		integer := val.Int()
-		return float64(integer), nil
+		return float64(integer)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		uinteger := val.Uint()
-		return float64(uinteger), nil
+		return float64(uinteger)
 	case reflect.Float32, reflect.Float64:
-		return val.Float(), nil
+		return val.Float()
 	default:
-		err := fmt.Errorf("zoom: attempt to call convertNumericToFloat64 on non-numeric type %s", val.Type().String())
-		return 0.0, err
+		msg := fmt.Sprintf("zoom: attempt to call convertNumericToFloat64 on non-numeric type %s", val.Type().String())
+		panic(msg)
 	}
 }
 
@@ -212,22 +246,4 @@ func boolToInt(b bool) int {
 	} else {
 		return 0
 	}
-}
-
-// intersects two model slices. The order will be preserved
-// with respect to the first slice. (The first slice is used
-// in the outer loop). The return value is a copy, so neither
-// the first or second slice will be mutated.
-func orderedIntersectModels(first []*indexedPrimativesModel, second []*indexedPrimativesModel) []*indexedPrimativesModel {
-	results := make([]*indexedPrimativesModel, 0)
-	memo := make(map[*indexedPrimativesModel]struct{})
-	for _, m := range second {
-		memo[m] = struct{}{}
-	}
-	for _, m := range first {
-		if _, found := memo[m]; found {
-			results = append(results, m)
-		}
-	}
-	return results
 }
