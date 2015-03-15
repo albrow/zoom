@@ -51,6 +51,19 @@ func Models(in interface{}) []Model {
 	return results
 }
 
+// Interfaces converts in to []interface{}. It will panic if the type
+// of in is not a slice or array.
+func Interfaces(in interface{}) []interface{} {
+	val := reflect.ValueOf(in)
+	length := val.Len()
+	results := make([]interface{}, length)
+	for i := 0; i < length; i++ {
+		elemVal := val.Index(i)
+		results[i] = elemVal.Interface()
+	}
+	return results
+}
+
 func reverseString(s string) string {
 	runes := []rune(s)
 	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {

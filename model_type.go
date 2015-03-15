@@ -171,7 +171,12 @@ func (t *transaction) save(mt *ModelType, model Model) {
 // with the given id does not exist, if the given model was the wrong type, or
 // if there was a problem connecting to the database.
 func (mt *ModelType) Find(id string, model Model) error {
-	return fmt.Errorf("Find not yet implemented!")
+	t := newTransaction()
+	t.find(mt, id, model)
+	if err := t.exec(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // MFind is like Find but accepts a slice of ids and a pointer to
@@ -185,6 +190,28 @@ func (mt *ModelType) Find(id string, model Model) error {
 // to the database.
 func (mt *ModelType) MFind(ids []string, models interface{}) error {
 	return fmt.Errorf("MFind not yet implemented!")
+}
+
+// find retrieves a model with the given id from redis and scans its values
+// into model in an existing transaction. model should be a pointer to a struct
+// of a registered type corresponding to the ModelType. find will mutate the struct,
+// filling in its fields and overwriting any previous values. If a model
+// with the given id does not exist, the given model was the wrong type, or
+// there was a problem connecting to the database, find will set the error field
+// of the transaction, which will call exec to fail immediately and return the error.
+func (t *transaction) find(mt *ModelType, id string, model Model) {
+	model.SetId(id)
+
+	// Create a modelRef and start a transaction
+	mr := &modelRef{
+		spec:  mt.spec,
+		model: model,
+	}
+
+	// Get the fields from the main hash for this model
+	hmgetArgs := redis.Args{mr.key()}
+	hmgetArgs = hmgetArgs.Add(Interfaces(mt.spec.fieldNames())...)
+	t.command("HMGET", hmgetArgs, newScanModelHandler(mr))
 }
 
 // FindAll finds all the models of the given type. It executes the commands needed

@@ -24,7 +24,7 @@ func scanModel(replies []interface{}, mr *modelRef, includes []string) error {
 	ms := mr.spec
 	includedFields := []*fieldSpec{}
 	for _, name := range fieldNames {
-		includedFields = append(includedFields, ms.fields[name])
+		includedFields = append(includedFields, ms.fieldsByName[name])
 	}
 	for i, reply := range replies {
 		replyBytes, err := redis.Bytes(reply, nil)

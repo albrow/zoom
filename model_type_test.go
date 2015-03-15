@@ -96,7 +96,7 @@ func testRegisteredModelType(t *testing.T, modelType *ModelType, expectedName st
 		},
 	}
 	for _, expectedField := range expectedFields {
-		gotField, found := spec.fields[expectedField.name]
+		gotField, found := spec.fieldsByName[expectedField.name]
 		if !found {
 			t.Errorf("Expected field with name %s but it was not in spec", expectedField.name)
 		}
@@ -153,6 +153,22 @@ func TestMSave(t *testing.T) {
 func TestFind(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
+
+	// Create and save a test model
+	models, err := createAndSaveTestModels(1)
+	if err != nil {
+		t.Errorf("Unexpected error saving test models: %s", err.Error())
+	}
+	model := models[0]
+
+	// Find the model in the database and store it in modelCopy
+	modelCopy := &testModel{}
+	if err := testModels.Find(model.Id, modelCopy); err != nil {
+		t.Errorf("Unexpected error in testModels.Find: %s", err.Error())
+	}
+	if !reflect.DeepEqual(model, modelCopy) {
+		t.Errorf("Found model was incorrect.\n\tExpected: %+v\n\tBut got:  %+v", model, modelCopy)
+	}
 }
 
 func TestMFind(t *testing.T) {

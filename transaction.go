@@ -156,3 +156,16 @@ func (t *transaction) exec() error {
 	}
 	return nil
 }
+
+func newScanModelHandler(mr *modelRef) replyHandler {
+	return func(reply interface{}) error {
+		replies, err := redis.Values(reply, nil)
+		if err != nil {
+			return err
+		}
+		if err := scanModel(replies, mr, nil); err != nil {
+			return err
+		}
+		return nil
+	}
+}

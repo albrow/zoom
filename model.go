@@ -38,9 +38,10 @@ func (d *DefaultData) SetId(id string) {
 }
 
 type modelSpec struct {
-	typ    reflect.Type
-	name   string
-	fields map[string]*fieldSpec
+	typ          reflect.Type
+	name         string
+	fieldsByName map[string]*fieldSpec
+	fields       []*fieldSpec
 }
 
 type fieldSpec struct {
@@ -69,7 +70,7 @@ const (
 )
 
 func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
-	ms := &modelSpec{fields: map[string]*fieldSpec{}, typ: typ}
+	ms := &modelSpec{fieldsByName: map[string]*fieldSpec{}, typ: typ}
 
 	// Iterate through fields
 	elem := typ.Elem()
@@ -82,7 +83,8 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 		}
 
 		fs := &fieldSpec{name: field.Name, fieldType: field.Type}
-		ms.fields[fs.name] = fs
+		ms.fieldsByName[fs.name] = fs
+		ms.fields = append(ms.fields, fs)
 
 		// Parse the "redis" tag
 		tag := field.Tag
