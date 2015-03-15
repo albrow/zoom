@@ -10,8 +10,11 @@ package zoom
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/dchest/uniuri"
 	"math/rand"
 	"reflect"
+	"strconv"
+	"time"
 )
 
 // Models converts an interface to a slice of Model. It is typically
@@ -246,4 +249,14 @@ func boolToInt(b bool) int {
 	} else {
 		return 0
 	}
+}
+
+// generateRandomId generates a random string that is more or less
+// garunteed to be unique. Used as Ids for records where an Id is
+// not otherwise provided.
+func generateRandomId() string {
+	timeInt := time.Now().Unix()
+	timeString := strconv.FormatInt(timeInt, 36)
+	randomString := uniuri.NewLen(16)
+	return randomString + timeString
 }
