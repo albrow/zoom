@@ -9,6 +9,7 @@ package zoom
 
 import (
 	"github.com/garyburd/redigo/redis"
+	"reflect"
 )
 
 // transaction is an abstraction layer around a redis transaction.
@@ -165,6 +166,44 @@ func newScanModelHandler(mr *modelRef) replyHandler {
 		}
 		if err := scanModel(replies, mr); err != nil {
 			return err
+		}
+		return nil
+	}
+}
+
+func newScanModelsHandler(spec *modelSpec, models interface{}) replyHandler {
+	return func(reply interface{}) error {
+		modelsFields, err := redis.Values(reply, nil)
+		if err != nil {
+			return err
+		}
+		modelsVal := reflect.ValueOf(models).Elem()
+		for i, reply := range modelsFields {
+			fields, err := redis.Values(reply, nil)
+			if err != nil {
+				return err
+			}
+			var modelVal reflect.Value
+			if modelsVal.Len() > i {
+				// Use the pre-existing value at index i
+				modelVal = modelsVal.Index(i)
+				if modelVal.IsNil() {
+					// If the value is nil, allocate space for it
+					modelsVal.Index(i).Set(reflect.New(spec.typ.Elem()))
+				}
+			} else {
+				// Index i is out of range of the existing slice. Create a
+				// new modelVal and append it to modelsVal
+				modelVal = reflect.New(spec.typ.Elem())
+				modelsVal.Set(reflect.Append(modelsVal, modelVal))
+			}
+			mr := &modelRef{
+				spec:  spec,
+				model: modelVal.Interface().(Model),
+			}
+			if err := scanModel(fields, mr); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
