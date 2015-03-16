@@ -163,7 +163,7 @@ func newScanModelHandler(mr *modelRef) replyHandler {
 		if err != nil {
 			return err
 		}
-		if err := scanModel(replies, mr, nil); err != nil {
+		if err := scanModel(replies, mr); err != nil {
 			return err
 		}
 		return nil

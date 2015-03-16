@@ -219,6 +219,48 @@ func TestMFind(t *testing.T) {
 func TestFindAll(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
+
+	t.Skip("Skipping until lua script is implemented and tested")
+
+	// Create and some test models
+	models := createTestModels(5)
+	if err := testModels.MSave(Models(models)); err != nil {
+		t.Errorf("Unexpected error in testModels.MSave: %s", err.Error())
+	}
+
+	// Use MFind to find four of the models in the database and store them in
+	// modelsCopy
+	modelsCopy := []*testModel{}
+	ids := []string{}
+	for _, model := range models[1:] {
+		ids = append(ids, model.Id)
+	}
+	if err := testModels.FindAll(&modelsCopy); err != nil {
+		t.Errorf("Unexpected error in testModels.FindAll: %s", err.Error())
+	}
+
+	// Check the models in modelsCopy
+	if len(modelsCopy) != len(models) {
+		t.Errorf("modelsCopy was the wrong length. Expected %d but got %d", len(models), len(modelsCopy))
+	}
+	modelsById := map[string]*testModel{}
+	for _, model := range models {
+		modelsById[model.Id] = model
+	}
+	for i, modelCopy := range modelsCopy {
+		if modelCopy.Id == "" {
+			t.Errorf("modelsCopy[%d].Id is empty.")
+			continue
+		}
+		model, found := modelsById[modelCopy.Id]
+		if !found {
+			t.Errorf("modelsCopy[%d].Id was invalid. Got %s but expected one of %v", i, modelCopy.Id, ids)
+			continue
+		}
+		if !reflect.DeepEqual(model, modelCopy) {
+			t.Errorf("Found model was incorrect.\n\tExpected: %+v\n\tBut got:  %+v", model, modelCopy)
+		}
+	}
 }
 
 func TestCount(t *testing.T) {

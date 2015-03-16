@@ -14,28 +14,28 @@ import (
 	"strconv"
 )
 
-func scanModel(replies []interface{}, mr *modelRef, includes []string) error {
-	fieldNames := []string{}
-	if len(includes) == 0 {
-		fieldNames = mr.spec.fieldNames()
-	} else {
-		fieldNames = includes
+// scanModel iterates through replies, converts each field value, and scans the
+// value into the fields of mr.model. It expects replies to be the output from an
+// HGETALL command from redis.
+func scanModel(replies []interface{}, mr *modelRef) error {
+	if len(replies)%2 != 0 {
+		return fmt.Errorf("zoom: Error in scanModel: Expected len(replies) to be even, but got %d", len(replies))
 	}
 	ms := mr.spec
-	includedFields := []*fieldSpec{}
-	for _, name := range fieldNames {
-		includedFields = append(includedFields, ms.fieldsByName[name])
-	}
-	for i, reply := range replies {
-		replyBytes, err := redis.Bytes(reply, nil)
+	for i := 0; i < len(replies); i += 2 {
+		fieldName, err := redis.String(replies[i], nil)
 		if err != nil {
 			return err
-		} else if string(replyBytes) == "NULL" {
-			// skip null fields
-			continue
 		}
-		fs := includedFields[i]
-		fieldVal := mr.fieldValue(fs.name)
+		fs, found := ms.fieldsByName[fieldName]
+		if !found {
+			return fmt.Errorf("zoom: Error in scanModel: Could not find field %s in %T", fieldName, mr.model)
+		}
+		replyBytes, err := redis.Bytes(replies[i+1], nil)
+		if err != nil {
+			return err
+		}
+		fieldVal := mr.fieldValue(fieldName)
 		switch fs.kind {
 		case primativeField:
 			if err := scanPrimativeVal(replyBytes, fieldVal); err != nil {

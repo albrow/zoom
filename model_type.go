@@ -234,6 +234,19 @@ func (mt *ModelType) MFind(ids []string, models interface{}) error {
 	return nil
 }
 
+// FindAll finds all the models of the given type. It executes the commands needed
+// to retrieve the models in a single transaction. See http://redis.io/topics/transactions.
+// models must be a pointer to a slice of models with a type corresponding to the ModelType.
+// FindAll will grow the models slice as needed and if any of the models in the
+// models slice are nil, FindAll will use reflection to allocate memory for them.
+// FindAll returns an error if models is the wrong type or if there was a problem connecting
+// to the database.
+func (mt *ModelType) FindAll(models interface{}) error {
+	// TODO: Use a lua script to get the fields for all models corresponding to
+	// the ids in the set of all ids.
+	return fmt.Errorf("FindAll not yet implemented!")
+}
+
 // find retrieves a model with the given id from redis and scans its values
 // into model in an existing transaction. model should be a pointer to a struct
 // of a registered type corresponding to the ModelType. find will mutate the struct,
@@ -251,20 +264,7 @@ func (t *transaction) find(mt *ModelType, id string, model Model) {
 	}
 
 	// Get the fields from the main hash for this model
-	hmgetArgs := redis.Args{mr.key()}
-	hmgetArgs = hmgetArgs.Add(Interfaces(mt.spec.fieldNames())...)
-	t.command("HMGET", hmgetArgs, newScanModelHandler(mr))
-}
-
-// FindAll finds all the models of the given type. It executes the commands needed
-// to retrieve the models in a single transaction. See http://redis.io/topics/transactions.
-// models must be a pointer to a slice of models with a type corresponding to the ModelType.
-// FindAll will grow the models slice as needed and if any of the models in the
-// models slice are nil, FindAll will use reflection to allocate memory for them.
-// FindAll returns an error if models is the wrong type or if there was a problem connecting
-// to the database.
-func (mt *ModelType) FindAll(models interface{}) error {
-	return fmt.Errorf("FindAll not yet implemented!")
+	t.command("HGETALL", redis.Args{mr.key()}, newScanModelHandler(mr))
 }
 
 // Count returns the number of models of the given type that exist in the database.
