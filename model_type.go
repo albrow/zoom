@@ -189,7 +189,49 @@ func (mt *ModelType) Find(id string, model Model) error {
 // not exist, if models is the wrong type, or if there was a problem connecting
 // to the database.
 func (mt *ModelType) MFind(ids []string, models interface{}) error {
-	return fmt.Errorf("MFind not yet implemented!")
+	// Since this is somewhat type-unsafe, we need to verify that
+	// models is the correct type
+	if reflect.TypeOf(models).Kind() != reflect.Ptr {
+		return fmt.Errorf("Zoom: error in MScanById: models should be a pointer to a slice or array of models")
+	}
+	modelsVal := reflect.ValueOf(models).Elem()
+	modelType := modelsVal.Type().Elem()
+	if !typeIsSliceOrArray(modelsVal.Type()) {
+		return fmt.Errorf("Zoom: error in MScanById: models should be a pointer to a slice or array of models")
+	} else if !typeIsPointerToStruct(modelType) {
+		return fmt.Errorf("Zoom: error in MScanById: the elements in models should be pointers to structs")
+	} else if _, found := modelTypeToSpec[modelType]; !found {
+		return fmt.Errorf("Zoom: error in MScanById: the elements in models should be of a registered type\nType %s has not been registered.", modelType.String())
+	}
+
+	// Start a new transaction and add an action to find the model for each id
+	t := newTransaction()
+	for i, id := range ids {
+		var modelVal reflect.Value
+		if modelsVal.Len() > i {
+			// Use the pre-existing value at index i
+			modelVal = modelsVal.Index(i)
+			if modelVal.IsNil() {
+				// If the value is nil, allocate space for it
+				modelsVal.Index(i).Set(reflect.New(mt.spec.typ.Elem()))
+			}
+		} else {
+			// Index i is out of range of the existing slice. Create a
+			// new modelVal and append it to modelsVal
+			modelVal = reflect.New(mt.spec.typ.Elem())
+			modelsVal.Set(reflect.Append(modelsVal, modelVal))
+		}
+		t.find(mt, id, modelVal.Interface().(Model))
+	}
+	// Trim the length in case the original slice had a length greater
+	// than the number of models
+	modelsVal.SetLen(len(ids))
+
+	// Execute the transaction
+	if err := t.exec(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // find retrieves a model with the given id from redis and scans its values
