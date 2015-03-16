@@ -158,6 +158,39 @@ func (t *transaction) exec() error {
 	return nil
 }
 
+func newScanIntHandler(i *int) replyHandler {
+	return func(reply interface{}) error {
+		var err error
+		(*i), err = redis.Int(reply, nil)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func newScanBoolHandler(b *bool) replyHandler {
+	return func(reply interface{}) error {
+		var err error
+		(*b), err = redis.Bool(reply, nil)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
+func newScanStringHandler(s *string) replyHandler {
+	return func(reply interface{}) error {
+		var err error
+		(*s), err = redis.String(reply, nil)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+}
+
 func newScanModelHandler(mr *modelRef) replyHandler {
 	return func(reply interface{}) error {
 		replies, err := redis.Values(reply, nil)

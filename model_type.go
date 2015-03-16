@@ -234,6 +234,26 @@ func (mt *ModelType) MFind(ids []string, models interface{}) error {
 	return nil
 }
 
+// find retrieves a model with the given id from redis and scans its values
+// into model in an existing transaction. model should be a pointer to a struct
+// of a registered type corresponding to the ModelType. find will mutate the struct,
+// filling in its fields and overwriting any previous values. If a model
+// with the given id does not exist, the given model was the wrong type, or
+// there was a problem connecting to the database, find will set the error field
+// of the transaction, which will call exec to fail immediately and return the error.
+func (t *transaction) find(mt *ModelType, id string, model Model) {
+	model.SetId(id)
+
+	// Create a modelRef and start a transaction
+	mr := &modelRef{
+		spec:  mt.spec,
+		model: model,
+	}
+
+	// Get the fields from the main hash for this model
+	t.command("HGETALL", redis.Args{mr.key()}, newScanModelHandler(mr))
+}
+
 // FindAll finds all the models of the given type. It executes the commands needed
 // to retrieve the models in a single transaction. See http://redis.io/topics/transactions.
 // models must be a pointer to a slice of models with a type corresponding to the ModelType.
@@ -265,26 +285,6 @@ func (mt *ModelType) FindAll(models interface{}) error {
 	return nil
 }
 
-// find retrieves a model with the given id from redis and scans its values
-// into model in an existing transaction. model should be a pointer to a struct
-// of a registered type corresponding to the ModelType. find will mutate the struct,
-// filling in its fields and overwriting any previous values. If a model
-// with the given id does not exist, the given model was the wrong type, or
-// there was a problem connecting to the database, find will set the error field
-// of the transaction, which will call exec to fail immediately and return the error.
-func (t *transaction) find(mt *ModelType, id string, model Model) {
-	model.SetId(id)
-
-	// Create a modelRef and start a transaction
-	mr := &modelRef{
-		spec:  mt.spec,
-		model: model,
-	}
-
-	// Get the fields from the main hash for this model
-	t.command("HGETALL", redis.Args{mr.key()}, newScanModelHandler(mr))
-}
-
 // Count returns the number of models of the given type that exist in the database.
 // It returns an error if there was a problem connecting to the database.
 func (mt *ModelType) Count() (int, error) {
@@ -299,9 +299,13 @@ func (mt *ModelType) Count() (int, error) {
 // or not the model was found and deleted, and will only return an error
 // if there was a problem connecting to the database.
 func (mt *ModelType) Delete(id string) (bool, error) {
-	conn := GetConn()
-	defer conn.Close()
-	return redis.Bool(conn.Do("DEL", mt.Name()+":"+id))
+	t := newTransaction()
+	count := 0
+	t.delete(mt, []string{id}, &count)
+	if err := t.exec(); err != nil {
+		return count == 1, err
+	}
+	return count == 1, nil
 }
 
 // MDelete is like Delete but accepts a slice of ids and deletes all the
@@ -310,7 +314,24 @@ func (mt *ModelType) Delete(id string) (bool, error) {
 // to a given id. It return the number of models deleted and an error if there
 // was a problem connecting to the database.
 func (mt *ModelType) MDelete(ids []string) (int, error) {
-	return 0, fmt.Errorf("MDelete not yet implemented!")
+	t := newTransaction()
+	count := 0
+	t.delete(mt, ids, &count)
+	if err := t.exec(); err != nil {
+		return count, err
+	}
+	return count, nil
+}
+
+func (t *transaction) delete(mt *ModelType, ids []string, count *int) {
+	delArgs := redis.Args{}
+	for _, id := range ids {
+		delArgs = delArgs.Add(mt.Name() + ":" + id)
+	}
+	t.command("DEL", delArgs, newScanIntHandler(count))
+	sremArgs := redis.Args{mt.KeyForAll()}
+	sremArgs = sremArgs.Add(Interfaces(ids)...)
+	t.command("SREM", sremArgs, nil)
 }
 
 // DeleteAll all the models of the given type in a single transaction. See

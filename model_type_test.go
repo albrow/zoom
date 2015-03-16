@@ -312,6 +312,14 @@ func TestDelete(t *testing.T) {
 		t.Errorf("Expected deleted to be true but got false")
 	}
 
+	// Make sure the model was deleted
+	modelKey, err := testModels.KeyForModel(model)
+	if err != nil {
+		t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
+	}
+	expectKeyDoesNotExist(t, modelKey)
+	expectSetDoesNotContain(t, testModels.KeyForAll(), model.Id)
+
 	// A second call to Delete should return false
 	deleted, err = testModels.Delete(model.Id)
 	if err != nil {
@@ -325,6 +333,45 @@ func TestDelete(t *testing.T) {
 func TestMDelete(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
+
+	// Create and save a test model
+	models, err := createAndSaveTestModels(5)
+	if err != nil {
+		t.Errorf("Unexpected error saving test models: %s", err.Error())
+	}
+
+	// Call MDelete with 3 valid ids and 2 invalid ones
+	ids := []string{}
+	for _, model := range models[:3] {
+		ids = append(ids, model.Id)
+	}
+	ids = append(ids, "foo", "bar")
+	count, err := testModels.MDelete(ids)
+	if err != nil {
+		t.Errorf("Unexpected error in testModels.Delete: %s", err.Error())
+	}
+	if count != 3 {
+		t.Errorf("Expected count to be 3 but got %d", count)
+	}
+
+	// Make sure the first three models were deleted
+	for _, model := range models[:3] {
+		modelKey, err := testModels.KeyForModel(model)
+		if err != nil {
+			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
+		}
+		expectKeyDoesNotExist(t, modelKey)
+		expectSetDoesNotContain(t, testModels.KeyForAll(), model.Id)
+	}
+	// Make sure the last two models were not deleted
+	for _, model := range models[3:] {
+		modelKey, err := testModels.KeyForModel(model)
+		if err != nil {
+			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
+		}
+		expectKeyExists(t, modelKey)
+		expectSetContains(t, testModels.KeyForAll(), model.Id)
+	}
 }
 
 func TestDeleteAll(t *testing.T) {

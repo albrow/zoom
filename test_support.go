@@ -179,3 +179,25 @@ func expectFieldEquals(t *testing.T, key string, fieldName string, expected inte
 		t.Errorf("Field %s for %s was not saved correctly.\n\tExpected: %v\n\tBut got:  %v", fieldName, key, expected, got)
 	}
 }
+
+// expectKeyExists sets an error via t.Errorf if key does not exist in the database.
+func expectKeyExists(t *testing.T, key string) {
+	conn := GetConn()
+	defer conn.Close()
+	if exists, err := redis.Bool(conn.Do("EXISTS", key)); err != nil {
+		t.Errorf("Unexpected error in EXISTS: %s", err.Error())
+	} else if !exists {
+		t.Errorf("Expected key %s to exist, but it did not.", key)
+	}
+}
+
+// expectKeyDoesNotExist sets an error via t.Errorf if key does exist in the database.
+func expectKeyDoesNotExist(t *testing.T, key string) {
+	conn := GetConn()
+	defer conn.Close()
+	if exists, err := redis.Bool(conn.Do("EXISTS", key)); err != nil {
+		t.Errorf("Unexpected error in EXISTS: %s", err.Error())
+	} else if exists {
+		t.Errorf("Expected key %s to not exist, but it did exist.", key)
+	}
+}
