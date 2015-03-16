@@ -299,7 +299,9 @@ func (mt *ModelType) Count() (int, error) {
 // or not the model was found and deleted, and will only return an error
 // if there was a problem connecting to the database.
 func (mt *ModelType) Delete(id string) (bool, error) {
-	return false, fmt.Errorf("Delete not yet implemented!")
+	conn := GetConn()
+	defer conn.Close()
+	return redis.Bool(conn.Do("DEL", mt.Name()+":"+id))
 }
 
 // MDelete is like Delete but accepts a slice of ids and deletes all the

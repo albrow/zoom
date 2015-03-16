@@ -295,6 +295,31 @@ func TestCount(t *testing.T) {
 func TestDelete(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
+
+	// Create and save a test model
+	models, err := createAndSaveTestModels(1)
+	if err != nil {
+		t.Errorf("Unexpected error saving test models: %s", err.Error())
+	}
+	model := models[0]
+
+	// Delete the model we just saved
+	deleted, err := testModels.Delete(model.Id)
+	if err != nil {
+		t.Errorf("Unexpected error in testModels.Delete: %s", err.Error())
+	}
+	if !deleted {
+		t.Errorf("Expected deleted to be true but got false")
+	}
+
+	// A second call to Delete should return false
+	deleted, err = testModels.Delete(model.Id)
+	if err != nil {
+		t.Errorf("Unexpected error in testModels.Delete: %s", err.Error())
+	}
+	if deleted {
+		t.Errorf("Expected deleted to be false but got true")
+	}
 }
 
 func TestMDelete(t *testing.T) {
