@@ -242,9 +242,27 @@ func (mt *ModelType) MFind(ids []string, models interface{}) error {
 // FindAll returns an error if models is the wrong type or if there was a problem connecting
 // to the database.
 func (mt *ModelType) FindAll(models interface{}) error {
-	// TODO: Use a lua script to get the fields for all models corresponding to
-	// the ids in the set of all ids.
-	return fmt.Errorf("FindAll not yet implemented!")
+	// Since this is somewhat type-unsafe, we need to verify that
+	// models is the correct type
+	if reflect.TypeOf(models).Kind() != reflect.Ptr {
+		return fmt.Errorf("Zoom: error in FindAll: models should be a pointer to a slice or array of models")
+	}
+	modelsVal := reflect.ValueOf(models).Elem()
+	modelType := modelsVal.Type().Elem()
+	if !typeIsSliceOrArray(modelsVal.Type()) {
+		return fmt.Errorf("Zoom: error in FindAll: models should be a pointer to a slice or array of models")
+	} else if !typeIsPointerToStruct(modelType) {
+		return fmt.Errorf("Zoom: error in FindAll: the elements in models should be pointers to structs")
+	} else if _, found := modelTypeToSpec[modelType]; !found {
+		return fmt.Errorf("Zoom: error in FindAll: the elements in models should be of a registered type\nType %s has not been registered.", modelType.String())
+	}
+
+	t := newTransaction()
+	t.findModelsBySetIds(mt.KeyForAll(), mt.Name(), newScanModelsHandler(mt.spec, models))
+	if err := t.exec(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // find retrieves a model with the given id from redis and scans its values

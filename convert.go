@@ -27,14 +27,20 @@ func scanModel(replies []interface{}, mr *modelRef) error {
 		if err != nil {
 			return err
 		}
-		fs, found := ms.fieldsByName[fieldName]
-		if !found {
-			return fmt.Errorf("zoom: Error in scanModel: Could not find field %s in %T", fieldName, mr.model)
-		}
 		replyBytes, err := redis.Bytes(replies[i+1], nil)
 		if err != nil {
 			return err
 		}
+		if fieldName == "Id" {
+			// Special case for the Id field
+			mr.model.SetId(string(replyBytes))
+			continue
+		}
+		fs, found := ms.fieldsByName[fieldName]
+		if !found {
+			return fmt.Errorf("zoom: Error in scanModel: Could not find field %s in %T", fieldName, mr.model)
+		}
+
 		fieldVal := mr.fieldValue(fieldName)
 		switch fs.kind {
 		case primativeField:

@@ -220,8 +220,6 @@ func TestFindAll(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	t.Skip("Skipping until lua script is implemented and tested")
-
 	// Create and some test models
 	models := createTestModels(5)
 	if err := testModels.MSave(Models(models)); err != nil {
@@ -249,7 +247,7 @@ func TestFindAll(t *testing.T) {
 	}
 	for i, modelCopy := range modelsCopy {
 		if modelCopy.Id == "" {
-			t.Errorf("modelsCopy[%d].Id is empty.")
+			t.Errorf("modelsCopy[%d].Id is empty.", i)
 			continue
 		}
 		model, found := modelsById[modelCopy.Id]
