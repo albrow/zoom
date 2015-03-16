@@ -288,7 +288,9 @@ func (t *transaction) find(mt *ModelType, id string, model Model) {
 // Count returns the number of models of the given type that exist in the database.
 // It returns an error if there was a problem connecting to the database.
 func (mt *ModelType) Count() (int, error) {
-	return 0, fmt.Errorf("Count not yet implemented!")
+	conn := GetConn()
+	defer conn.Close()
+	return redis.Int(conn.Do("SCARD", mt.KeyForAll()))
 }
 
 // Delete removes the model with the given type and id from the database. It will

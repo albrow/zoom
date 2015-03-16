@@ -175,10 +175,10 @@ func TestMFind(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	// Create and some test models
-	models := createTestModels(5)
-	if err := testModels.MSave(Models(models)); err != nil {
-		t.Errorf("Unexpected error in testModels.MSave: %s", err.Error())
+	// Create and save some test models
+	models, err := createAndSaveTestModels(5)
+	if err != nil {
+		t.Errorf("Unexpected error saving test models: %s", err.Error())
 	}
 
 	// Use MFind to find four of the models in the database and store them in
@@ -220,10 +220,10 @@ func TestFindAll(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	// Create and some test models
-	models := createTestModels(5)
-	if err := testModels.MSave(Models(models)); err != nil {
-		t.Errorf("Unexpected error in testModels.MSave: %s", err.Error())
+	// Create and save some test models
+	models, err := createAndSaveTestModels(5)
+	if err != nil {
+		t.Errorf("Unexpected error saving test models: %s", err.Error())
 	}
 
 	// Use MFind to find four of the models in the database and store them in
@@ -264,6 +264,32 @@ func TestFindAll(t *testing.T) {
 func TestCount(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
+
+	// Expect count to be zero if we haven't saved any models
+	got, err := testModels.Count()
+	if err != nil {
+		t.Errorf("Unexpected error in testModels.Count: %s", err.Error())
+	}
+	if got != 0 {
+		t.Errorf("Expected Count to be 0 when no models existed but got %d", got)
+	}
+
+	// Create and save some test models
+	expected := 5
+	_, err = createAndSaveTestModels(expected)
+	if err != nil {
+		t.Errorf("Unexpected error saving test models: %s", err.Error())
+	}
+
+	// Expect count to be 5
+	got, err = testModels.Count()
+	if err != nil {
+		t.Errorf("Unexpected error in testModels.Count: %s", err.Error())
+	}
+	if got != expected {
+		t.Errorf("Expected Count to be %d but got %d", expected, got)
+	}
+
 }
 
 func TestDelete(t *testing.T) {
