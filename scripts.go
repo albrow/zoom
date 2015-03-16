@@ -16,7 +16,8 @@ import (
 )
 
 var (
-	findModelsBySetIdsScript *redis.Script
+	findModelsBySetIdsScript   *redis.Script
+	deleteModelsBySetIdsScript *redis.Script
 )
 
 var (
@@ -33,6 +34,11 @@ func init() {
 		{
 			script:   &findModelsBySetIdsScript,
 			filename: "find_models_by_set_ids.lua",
+			keyCount: 1,
+		},
+		{
+			script:   &deleteModelsBySetIdsScript,
+			filename: "delete_models_by_set_ids.lua",
 			keyCount: 1,
 		},
 	}
@@ -54,4 +60,12 @@ func init() {
 // You can use the handler to scan the models into a slice of models.
 func (t *transaction) findModelsBySetIds(setKey string, modelName string, handler replyHandler) {
 	t.script(findModelsBySetIdsScript, redis.Args{setKey, modelName}, handler)
+}
+
+// deleteModelsBySetIds is a small function wrapper around deleteModelsBySetIdsScript.
+// It offers some type safety and helps make sure the arguments you pass through to the are correct.
+// The script will delete the models corresponding to the ids in the given set and return the number
+// of models that were deleted. You can use the handler to capture the return value.
+func (t *transaction) deleteModelsBySetIds(setKey string, modelName string, handler replyHandler) {
+	t.script(deleteModelsBySetIdsScript, redis.Args{setKey, modelName}, handler)
 }

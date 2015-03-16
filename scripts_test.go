@@ -30,6 +30,8 @@ func TestFindModelsBySetIdsScript(t *testing.T) {
 	if err := tx.exec(); err != nil {
 		t.Fatalf("Unexected error in tx.exec: %s", err.Error())
 	}
+
+	// Check that the return value is correct
 	modelsReplies, err := redis.Values(gotReply, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error in redis.Values: %s", err.Error())
@@ -81,5 +83,63 @@ func TestFindModelsBySetIdsScript(t *testing.T) {
 				t.Errorf("Field %s was incorrect. Expected %v but got %v", fieldName, expectedField.Interface(), convertedVal)
 			}
 		}
+	}
+}
+
+func TestDeleteModelsBySetIdsScript(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Create and save some test models
+	models, err := createAndSaveTestModels(5)
+	if err != nil {
+		t.Fatalf("Unexpected error saving test models: %s", err.Error())
+	}
+
+	// The set of ids will contain three valid ids and two invalid ones
+	ids := []string{}
+	for _, model := range models[:3] {
+		ids = append(ids, model.Id)
+	}
+	ids = append(ids, "foo", "bar")
+	tempSetKey := "testModelIds"
+	conn := GetConn()
+	defer conn.Close()
+	saddArgs := redis.Args{tempSetKey}
+	saddArgs = saddArgs.Add(Interfaces(ids)...)
+	if _, err = conn.Do("SADD", saddArgs...); err != nil {
+		t.Errorf("Unexpected error in SADD: %s", err.Error())
+	}
+
+	// Run the script
+	tx := newTransaction()
+	count := 0
+	tx.deleteModelsBySetIds(tempSetKey, testModels.Name(), newScanIntHandler(&count))
+	if err := tx.exec(); err != nil {
+		t.Fatalf("Unexected error in tx.exec: %s", err.Error())
+	}
+
+	// Check that the return value is correct
+	if count != 3 {
+		t.Errorf("Expected count to be 3 but got %d", count)
+	}
+
+	// Make sure the first three models were deleted
+	for _, model := range models[:3] {
+		modelKey, err := testModels.KeyForModel(model)
+		if err != nil {
+			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
+		}
+		expectKeyDoesNotExist(t, modelKey)
+		expectSetDoesNotContain(t, testModels.KeyForAll(), model.Id)
+	}
+	// Make sure the last two models were not deleted
+	for _, model := range models[3:] {
+		modelKey, err := testModels.KeyForModel(model)
+		if err != nil {
+			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
+		}
+		expectKeyExists(t, modelKey)
+		expectSetContains(t, testModels.KeyForAll(), model.Id)
 	}
 }
