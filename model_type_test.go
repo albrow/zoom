@@ -334,7 +334,7 @@ func TestMDelete(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	// Create and save a test model
+	// Create and save some test models
 	models, err := createAndSaveTestModels(5)
 	if err != nil {
 		t.Errorf("Unexpected error saving test models: %s", err.Error())
@@ -377,4 +377,39 @@ func TestMDelete(t *testing.T) {
 func TestDeleteAll(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
+
+	// The first time we call DeleteAll we expect count to be 0 because
+	// there are no models
+	count, err := testModels.DeleteAll()
+	if err != nil {
+		t.Errorf("Unexpected error in testModels.Delete: %s", err.Error())
+	}
+	if count != 0 {
+		t.Errorf("Expected count to be 0 but got %d", count)
+	}
+
+	// Create and save some test models
+	models, err := createAndSaveTestModels(5)
+	if err != nil {
+		t.Errorf("Unexpected error saving test models: %s", err.Error())
+	}
+
+	// Call DeleteAll again
+	count, err = testModels.DeleteAll()
+	if err != nil {
+		t.Errorf("Unexpected error in testModels.Delete: %s", err.Error())
+	}
+	if count != 5 {
+		t.Errorf("Expected count to be 5 but got %d", count)
+	}
+
+	// Make sure the models were deleted
+	for _, model := range models {
+		modelKey, err := testModels.KeyForModel(model)
+		if err != nil {
+			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
+		}
+		expectKeyDoesNotExist(t, modelKey)
+		expectSetDoesNotContain(t, testModels.KeyForAll(), model.Id)
+	}
 }

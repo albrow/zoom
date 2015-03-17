@@ -338,5 +338,11 @@ func (t *transaction) delete(mt *ModelType, ids []string, count *int) {
 // http://redis.io/topics/transactions. It returns the number of models deleted
 // and an error if there was a problem connecting to the database.
 func (mt *ModelType) DeleteAll() (int, error) {
-	return 0, fmt.Errorf("DeleteAll not yet implemented!")
+	t := newTransaction()
+	count := 0
+	t.deleteModelsBySetIds(mt.KeyForAll(), mt.Name(), newScanIntHandler(&count))
+	if err := t.exec(); err != nil {
+		return count, err
+	}
+	return count, nil
 }
