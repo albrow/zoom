@@ -117,14 +117,11 @@ func TestSave(t *testing.T) {
 	}
 
 	// Make sure the model was saved correctly
-	if model.Id == "" {
-		t.Fatalf("model.Id is empty. Cannot continue.")
-	}
+	expectModelExists(t, testModels, model)
 	key, _ := testModels.KeyForModel(model)
 	expectFieldEquals(t, key, "Int", model.Int)
 	expectFieldEquals(t, key, "String", model.String)
 	expectFieldEquals(t, key, "Bool", model.Bool)
-	expectSetContains(t, testModels.KeyForAll(), model.Id)
 }
 
 func TestMSave(t *testing.T) {
@@ -138,15 +135,12 @@ func TestMSave(t *testing.T) {
 	}
 
 	// Make sure each model was saved correctly
-	for i, model := range models {
-		if model.Id == "" {
-			t.Fatalf("models[%d].Id is empty. Cannot continue.", i)
-		}
+	for _, model := range models {
+		expectModelExists(t, testModels, model)
 		key, _ := testModels.KeyForModel(model)
 		expectFieldEquals(t, key, "Int", model.Int)
 		expectFieldEquals(t, key, "String", model.String)
 		expectFieldEquals(t, key, "Bool", model.Bool)
-		expectSetContains(t, testModels.KeyForAll(), model.Id)
 	}
 }
 
@@ -313,12 +307,7 @@ func TestDelete(t *testing.T) {
 	}
 
 	// Make sure the model was deleted
-	modelKey, err := testModels.KeyForModel(model)
-	if err != nil {
-		t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
-	}
-	expectKeyDoesNotExist(t, modelKey)
-	expectSetDoesNotContain(t, testModels.KeyForAll(), model.Id)
+	expectModelDoesNotExist(t, testModels, model)
 
 	// A second call to Delete should return false
 	deleted, err = testModels.Delete(model.Id)
@@ -355,23 +344,10 @@ func TestMDelete(t *testing.T) {
 	}
 
 	// Make sure the first three models were deleted
-	for _, model := range models[:3] {
-		modelKey, err := testModels.KeyForModel(model)
-		if err != nil {
-			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
-		}
-		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, testModels.KeyForAll(), model.Id)
-	}
+	expectModelsDoNotExist(t, testModels, Models(models[0:3]))
+
 	// Make sure the last two models were not deleted
-	for _, model := range models[3:] {
-		modelKey, err := testModels.KeyForModel(model)
-		if err != nil {
-			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
-		}
-		expectKeyExists(t, modelKey)
-		expectSetContains(t, testModels.KeyForAll(), model.Id)
-	}
+	expectModelsExist(t, testModels, Models(models[3:]))
 }
 
 func TestDeleteAll(t *testing.T) {
@@ -404,12 +380,5 @@ func TestDeleteAll(t *testing.T) {
 	}
 
 	// Make sure the models were deleted
-	for _, model := range models {
-		modelKey, err := testModels.KeyForModel(model)
-		if err != nil {
-			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
-		}
-		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, testModels.KeyForAll(), model.Id)
-	}
+	expectModelsDoNotExist(t, testModels, Models(models))
 }

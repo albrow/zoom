@@ -201,3 +201,43 @@ func expectKeyDoesNotExist(t *testing.T, key string) {
 		t.Errorf("Expected key %s to not exist, but it did exist.", key)
 	}
 }
+
+func expectModelExists(t *testing.T, mt *ModelType, model Model) {
+	modelKey, err := mt.KeyForModel(model)
+	if err != nil {
+		t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
+	}
+	expectKeyExists(t, modelKey)
+	expectSetContains(t, mt.KeyForAll(), model.GetId())
+}
+
+func expectModelDoesNotExist(t *testing.T, mt *ModelType, model Model) {
+	modelKey, err := mt.KeyForModel(model)
+	if err != nil {
+		t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
+	}
+	expectKeyDoesNotExist(t, modelKey)
+	expectSetDoesNotContain(t, mt.KeyForAll(), model.GetId())
+}
+
+func expectModelsExist(t *testing.T, mt *ModelType, models []Model) {
+	for _, model := range models {
+		modelKey, err := mt.KeyForModel(model)
+		if err != nil {
+			t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
+		}
+		expectKeyExists(t, modelKey)
+		expectSetContains(t, mt.KeyForAll(), model.GetId())
+	}
+}
+
+func expectModelsDoNotExist(t *testing.T, mt *ModelType, models []Model) {
+	for _, model := range models {
+		modelKey, err := mt.KeyForModel(model)
+		if err != nil {
+			t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
+		}
+		expectKeyDoesNotExist(t, modelKey)
+		expectSetDoesNotContain(t, mt.KeyForAll(), model.GetId())
+	}
+}
