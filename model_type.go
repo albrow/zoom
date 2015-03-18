@@ -92,16 +92,13 @@ func RegisterName(name string, model Model) (*ModelType, error) {
 // which contains all the fields of the given model. It returns an error
 // iff the model does not have an id.
 func (mt *ModelType) KeyForModel(model Model) (string, error) {
-	if model.GetId() == "" {
-		return "", fmt.Errorf("zoom: Error in KeyForModel: model does not have an id and therefore cannot have a valid key")
-	}
-	return mt.Name() + ":" + model.GetId(), nil
+	return mt.spec.keyForModel(model)
 }
 
-// KeyForAll returns the key that identifies a set in the database that
+// AllIndexKey returns the key that identifies a set in the database that
 // stores all the ids for models of the given type.
-func (mt *ModelType) KeyForAll() string {
-	return mt.Name() + ":all"
+func (mt *ModelType) AllIndexKey() string {
+	return mt.spec.allIndexKey()
 }
 
 // Save writes a model (a struct which satisfies the Model interface) to the redis
@@ -159,7 +156,7 @@ func (t *transaction) save(mt *ModelType, model Model) {
 	t.command("HMSET", hashArgs, nil)
 
 	// Add the model id to the set of all models of this type
-	t.command("SADD", redis.Args{mt.KeyForAll(), model.GetId()}, nil)
+	t.command("SADD", redis.Args{mt.AllIndexKey(), model.GetId()}, nil)
 
 	// TODO: save indexes
 }
@@ -261,7 +258,7 @@ func (mt *ModelType) FindAll(models interface{}) error {
 	}
 
 	t := newTransaction()
-	t.findModelsBySetIds(mt.KeyForAll(), mt.Name(), newScanModelsHandler(mt.spec, models))
+	t.findModelsBySetIds(mt.AllIndexKey(), mt.Name(), newScanModelsHandler(mt.spec, models))
 	if err := t.exec(); err != nil {
 		return err
 	}
@@ -294,7 +291,7 @@ func checkModelsType(mt *ModelType, models interface{}) error {
 func (mt *ModelType) Count() (int, error) {
 	conn := GetConn()
 	defer conn.Close()
-	return redis.Int(conn.Do("SCARD", mt.KeyForAll()))
+	return redis.Int(conn.Do("SCARD", mt.AllIndexKey()))
 }
 
 // Delete removes the model with the given type and id from the database. It will
@@ -333,7 +330,7 @@ func (t *transaction) delete(mt *ModelType, ids []string, count *int) {
 		delArgs = delArgs.Add(mt.Name() + ":" + id)
 	}
 	t.command("DEL", delArgs, newScanIntHandler(count))
-	sremArgs := redis.Args{mt.KeyForAll()}
+	sremArgs := redis.Args{mt.AllIndexKey()}
 	sremArgs = sremArgs.Add(Interfaces(ids)...)
 	t.command("SREM", sremArgs, nil)
 }
@@ -344,7 +341,7 @@ func (t *transaction) delete(mt *ModelType, ids []string, count *int) {
 func (mt *ModelType) DeleteAll() (int, error) {
 	t := newTransaction()
 	count := 0
-	t.deleteModelsBySetIds(mt.KeyForAll(), mt.Name(), newScanIntHandler(&count))
+	t.deleteModelsBySetIds(mt.AllIndexKey(), mt.Name(), newScanIntHandler(&count))
 	if err := t.exec(); err != nil {
 		return count, err
 	}

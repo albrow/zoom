@@ -23,7 +23,7 @@ func TestFindModelsBySetIdsScript(t *testing.T) {
 	// Run the script
 	tx := newTransaction()
 	var gotReply interface{}
-	tx.findModelsBySetIds(testModels.KeyForAll(), testModels.Name(), func(reply interface{}) error {
+	tx.findModelsBySetIds(testModels.AllIndexKey(), testModels.Name(), func(reply interface{}) error {
 		gotReply = reply
 		return nil
 	})
@@ -131,7 +131,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
 		}
 		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, testModels.KeyForAll(), model.Id)
+		expectSetDoesNotContain(t, testModels.AllIndexKey(), model.Id)
 	}
 	// Make sure the last two models were not deleted
 	for _, model := range models[3:] {
@@ -140,6 +140,6 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
 		}
 		expectKeyExists(t, modelKey)
-		expectSetContains(t, testModels.KeyForAll(), model.Id)
+		expectSetContains(t, testModels.AllIndexKey(), model.Id)
 	}
 }

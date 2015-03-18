@@ -208,7 +208,7 @@ func expectModelExists(t *testing.T, mt *ModelType, model Model) {
 		t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
 	}
 	expectKeyExists(t, modelKey)
-	expectSetContains(t, mt.KeyForAll(), model.GetId())
+	expectSetContains(t, mt.AllIndexKey(), model.GetId())
 }
 
 func expectModelDoesNotExist(t *testing.T, mt *ModelType, model Model) {
@@ -217,7 +217,7 @@ func expectModelDoesNotExist(t *testing.T, mt *ModelType, model Model) {
 		t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
 	}
 	expectKeyDoesNotExist(t, modelKey)
-	expectSetDoesNotContain(t, mt.KeyForAll(), model.GetId())
+	expectSetDoesNotContain(t, mt.AllIndexKey(), model.GetId())
 }
 
 func expectModelsExist(t *testing.T, mt *ModelType, models []Model) {
@@ -227,7 +227,7 @@ func expectModelsExist(t *testing.T, mt *ModelType, models []Model) {
 			t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
 		}
 		expectKeyExists(t, modelKey)
-		expectSetContains(t, mt.KeyForAll(), model.GetId())
+		expectSetContains(t, mt.AllIndexKey(), model.GetId())
 	}
 }
 
@@ -238,6 +238,6 @@ func expectModelsDoNotExist(t *testing.T, mt *ModelType, models []Model) {
 			t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
 		}
 		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, mt.KeyForAll(), model.GetId())
+		expectSetDoesNotContain(t, mt.AllIndexKey(), model.GetId())
 	}
 }

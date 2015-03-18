@@ -152,14 +152,24 @@ func setIndexKind(fs *fieldSpec, fieldType reflect.Type) error {
 	return nil
 }
 
-func (ms modelSpec) field(fieldName string) (reflect.StructField, bool) {
+func (ms *modelSpec) field(fieldName string) (reflect.StructField, bool) {
 	return ms.typ.Elem().FieldByName(fieldName)
 }
 
-// indexKey returns a key which is used in redis to store all the ids of every model of a
+// allIndexKey returns a key which is used in redis to store all the ids of every model of a
 // given type.
-func (ms modelSpec) indexKey() string {
+func (ms *modelSpec) allIndexKey() string {
 	return ms.name + ":all"
+}
+
+// KeyForModel returns the key that identifies a hash in the database
+// which contains all the fields of the given model. It returns an error
+// iff the model does not have an id.
+func (ms *modelSpec) keyForModel(model Model) (string, error) {
+	if model.GetId() == "" {
+		return "", fmt.Errorf("zoom: Error in KeyForModel: model does not have an id and therefore cannot have a valid key")
+	}
+	return ms.name + ":" + model.GetId(), nil
 }
 
 func (ms modelSpec) fieldNames() []string {
