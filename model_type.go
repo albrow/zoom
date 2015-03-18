@@ -191,18 +191,10 @@ func (mt *ModelType) Find(id string, model Model) error {
 func (mt *ModelType) MFind(ids []string, models interface{}) error {
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
-	if reflect.TypeOf(models).Kind() != reflect.Ptr {
-		return fmt.Errorf("Zoom: error in MScanById: models should be a pointer to a slice or array of models")
+	if err := checkModelsType(mt, models); err != nil {
+		return fmt.Errorf("zoom: Error in MFind: %s", err.Error())
 	}
 	modelsVal := reflect.ValueOf(models).Elem()
-	modelType := modelsVal.Type().Elem()
-	if !typeIsSliceOrArray(modelsVal.Type()) {
-		return fmt.Errorf("Zoom: error in MScanById: models should be a pointer to a slice or array of models")
-	} else if !typeIsPointerToStruct(modelType) {
-		return fmt.Errorf("Zoom: error in MScanById: the elements in models should be pointers to structs")
-	} else if _, found := modelTypeToSpec[modelType]; !found {
-		return fmt.Errorf("Zoom: error in MScanById: the elements in models should be of a registered type\nType %s has not been registered.", modelType.String())
-	}
 
 	// Start a new transaction and add an action to find the model for each id
 	t := newTransaction()
@@ -264,17 +256,8 @@ func (t *transaction) find(mt *ModelType, id string, model Model) {
 func (mt *ModelType) FindAll(models interface{}) error {
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
-	if reflect.TypeOf(models).Kind() != reflect.Ptr {
-		return fmt.Errorf("Zoom: error in FindAll: models should be a pointer to a slice or array of models")
-	}
-	modelsVal := reflect.ValueOf(models).Elem()
-	modelType := modelsVal.Type().Elem()
-	if !typeIsSliceOrArray(modelsVal.Type()) {
-		return fmt.Errorf("Zoom: error in FindAll: models should be a pointer to a slice or array of models")
-	} else if !typeIsPointerToStruct(modelType) {
-		return fmt.Errorf("Zoom: error in FindAll: the elements in models should be pointers to structs")
-	} else if _, found := modelTypeToSpec[modelType]; !found {
-		return fmt.Errorf("Zoom: error in FindAll: the elements in models should be of a registered type\nType %s has not been registered.", modelType.String())
+	if err := checkModelsType(mt, models); err != nil {
+		return fmt.Errorf("zoom: Error in FindAll: %s", err.Error())
 	}
 
 	t := newTransaction()
@@ -282,6 +265,27 @@ func (mt *ModelType) FindAll(models interface{}) error {
 	if err := t.exec(); err != nil {
 		return err
 	}
+	return nil
+}
+
+// checkModelsType returns an error iff models is not a pointer to a slice of models of the
+// same type as mt.
+func checkModelsType(mt *ModelType, models interface{}) error {
+	if reflect.TypeOf(models).Kind() != reflect.Ptr {
+		return fmt.Errorf("models should be a pointer to a slice or array of models")
+	}
+	modelsVal := reflect.ValueOf(models).Elem()
+	modelType := modelsVal.Type().Elem()
+	if !typeIsSliceOrArray(modelsVal.Type()) {
+		return fmt.Errorf("models should be a pointer to a slice or array of models")
+	} else if !typeIsPointerToStruct(modelType) {
+		return fmt.Errorf("the elements in models should be pointers to structs")
+	} else if _, found := modelTypeToSpec[modelType]; !found {
+		return fmt.Errorf("the elements in models should be of a registered type\nType %s has not been registered.", modelType.String())
+	} else if modelType != mt.spec.typ {
+		return fmt.Errorf("models were the wrong type. Expected %s but got %s", mt.spec.typ.String(), modelType.String())
+	}
+
 	return nil
 }
 
