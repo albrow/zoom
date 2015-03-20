@@ -187,19 +187,6 @@ type modelRef struct {
 	spec  *modelSpec
 }
 
-func newModelRef(m Model) (*modelRef, error) {
-	mr := &modelRef{
-		model: m,
-	}
-	typ := reflect.TypeOf(m)
-	spec, found := modelTypeToSpec[typ]
-	if !found {
-		return nil, NewModelTypeNotRegisteredError(typ)
-	}
-	mr.spec = spec
-	return mr, nil
-}
-
 // value is an alias for reflect.ValueOf(mr.model)
 func (mr *modelRef) value() reflect.Value {
 	return reflect.ValueOf(mr.model)

@@ -68,9 +68,9 @@ func RegisterName(name string, model Model) (*ModelType, error) {
 	// Make sure the name and type have not been previously registered
 	typ := reflect.TypeOf(model)
 	if _, found := modelTypeToSpec[typ]; found {
-		return nil, NewTypeAlreadyRegisteredError(typ)
+		return nil, TypeAlreadyRegisteredError{Typ: typ}
 	} else if _, found := modelNameToSpec[name]; found {
-		return nil, NewNameAlreadyRegisteredError(name)
+		return nil, NameAlreadyRegisteredError{Name: name}
 	} else if !typeIsPointerToStruct(typ) {
 		return nil, fmt.Errorf("zoom: Register and RegisterName require a pointer to a struct as an argument. Got type %T", model)
 	}
@@ -171,6 +171,13 @@ func (mt *ModelType) Find(id string, model Model) error {
 	t := newTransaction()
 	t.find(mt, id, model)
 	if err := t.exec(); err != nil {
+		if notFoundError, ok := err.(ModelNotFoundError); ok {
+			// If there was a ModelNotFoundError, improve the error message. At the
+			// time the error was created, we didn't know that it came from a Find
+			// method, but now we do.
+			notFoundError.Msg = fmt.Sprintf("Could not find %s with id = %s", mt.Name(), id)
+			return notFoundError
+		}
 		return err
 	}
 	return nil

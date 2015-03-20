@@ -192,10 +192,16 @@ func newScanStringHandler(s *string) replyHandler {
 }
 
 func newScanModelHandler(mr *modelRef) replyHandler {
+	// TODO: come up with a way to give a better error message.
+	// Mainly need to provide the id or other criteria in the
+	// error message.
 	return func(reply interface{}) error {
 		replies, err := redis.Values(reply, nil)
 		if err != nil {
 			return err
+		}
+		if len(replies) == 0 {
+			return ModelNotFoundError{Msg: "Could not find model with the given criteria"}
 		}
 		if err := scanModel(replies, mr); err != nil {
 			return err

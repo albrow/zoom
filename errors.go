@@ -15,67 +15,29 @@ import (
 // NameAlreadyRegisteredError is returned if you try to register a
 // name which has already been registered.
 type NameAlreadyRegisteredError struct {
-	name string
+	Name string
 }
 
-func (e *NameAlreadyRegisteredError) Error() string {
-	return fmt.Sprintf("zoom: the name %s has already been registered", e.name)
-}
-
-func NewNameAlreadyRegisteredError(name string) *NameAlreadyRegisteredError {
-	return &NameAlreadyRegisteredError{name}
+func (e NameAlreadyRegisteredError) Error() string {
+	return fmt.Sprintf("zoom: NameAlreadyRegisteredError: the name %s has already been registered", e.Name)
 }
 
 // TypeAlreadyRegisteredError is returned if you try to register a
 // type which has already been registered.
 type TypeAlreadyRegisteredError struct {
-	typ reflect.Type
+	Typ reflect.Type
 }
 
-func (e *TypeAlreadyRegisteredError) Error() string {
-	return fmt.Sprintf("zoom: the type %s has already been registered", e.typ.String())
+func (e TypeAlreadyRegisteredError) Error() string {
+	return fmt.Sprintf("zoom: TypeAlreadyRegisteredError: the type %s has already been registered", e.Typ.String())
 }
 
-func NewTypeAlreadyRegisteredError(typ reflect.Type) *TypeAlreadyRegisteredError {
-	return &TypeAlreadyRegisteredError{typ}
+// ModelNotFoundError is returned from Find and Query methods if a model
+// that fits the given criteria is not found.
+type ModelNotFoundError struct {
+	Msg string
 }
 
-// ModelTypeNotRegisteredError is returned if you attempt to perform
-// certain operations for unregistered types.
-type ModelTypeNotRegisteredError struct {
-	typ reflect.Type
+func (e ModelNotFoundError) Error() string {
+	return "zoom: ModelNotFoundError: %s" + e.Msg
 }
-
-func (e *ModelTypeNotRegisteredError) Error() string {
-	return fmt.Sprintf("zoom: the type %s has not been registered", e.typ.String())
-}
-
-func NewModelTypeNotRegisteredError(typ reflect.Type) *ModelTypeNotRegisteredError {
-	return &ModelTypeNotRegisteredError{typ}
-}
-
-// ModelNameNotRegisteredError is returned if you attempt to perform
-// certain operations for unregistered names.
-type ModelNameNotRegisteredError struct {
-	name string
-}
-
-func (e *ModelNameNotRegisteredError) Error() string {
-	return fmt.Sprintf("zoom: the model name %s has not been registered", e.name)
-}
-
-func NewModelNameNotRegisteredError(name string) *ModelNameNotRegisteredError {
-	return &ModelNameNotRegisteredError{name}
-}
-
-// // ModelNotFoundError is returned from Find, Scan, and Query methods if a model
-// // that fits the given criteria is not found.
-// type ModelNotFoundError struct{}
-
-// func (e *ModelNotFoundError) Error() string {
-// 	return "zoom: could not find a model which matches the query criteria"
-// }
-
-// func NewModelNotFoundError() *ModelNotFoundError {
-// 	return &ModelNotFoundError{}
-// }
