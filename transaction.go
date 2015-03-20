@@ -36,8 +36,8 @@ type action struct {
 type actionKind int
 
 const (
-	actionCommand actionKind = iota
-	actionScript
+	commandAction actionKind = iota
+	scriptAction
 )
 
 // replyHandler is a function which does something with the reply from a redis
@@ -65,7 +65,7 @@ func (t *transaction) setError(err error) {
 // the transaction is executed.
 func (t *transaction) command(name string, args redis.Args, handler replyHandler) {
 	t.actions = append(t.actions, &action{
-		kind:    actionCommand,
+		kind:    commandAction,
 		name:    name,
 		args:    args,
 		handler: handler,
@@ -77,7 +77,7 @@ func (t *transaction) command(name string, args redis.Args, handler replyHandler
 // the transaction is executed.
 func (t *transaction) script(script *redis.Script, args redis.Args, handler replyHandler) {
 	t.actions = append(t.actions, &action{
-		kind:    actionScript,
+		kind:    scriptAction,
 		script:  script,
 		args:    args,
 		handler: handler,
@@ -87,9 +87,9 @@ func (t *transaction) script(script *redis.Script, args redis.Args, handler repl
 // sendAction writes a to a connection buffer using conn.Send()
 func (t *transaction) sendAction(a *action) error {
 	switch a.kind {
-	case actionCommand:
+	case commandAction:
 		return t.conn.Send(a.name, a.args...)
-	case actionScript:
+	case scriptAction:
 		return a.script.Send(t.conn, a.args...)
 	}
 	return nil
@@ -99,9 +99,9 @@ func (t *transaction) sendAction(a *action) error {
 // flushes the buffer and reads the reply via conn.Do()
 func (t *transaction) doAction(a *action) (interface{}, error) {
 	switch a.kind {
-	case actionCommand:
+	case commandAction:
 		return t.conn.Do(a.name, a.args...)
-	case actionScript:
+	case scriptAction:
 		return a.script.Do(t.conn, a.args...)
 	}
 	return nil, nil
