@@ -8,6 +8,7 @@
 package zoom
 
 import (
+	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"reflect"
 )
@@ -201,7 +202,13 @@ func newScanModelHandler(mr *modelRef) replyHandler {
 			return err
 		}
 		if len(replies) == 0 {
-			return ModelNotFoundError{Msg: "Could not find model with the given criteria"}
+			var msg string
+			if mr.model.GetId() != "" {
+				msg = fmt.Sprintf("Could not find %s with id = %s", mr.spec.name, mr.model.GetId())
+			} else {
+				msg = fmt.Sprintf("Could not find %s with the given criteria", mr.spec.name)
+			}
+			return ModelNotFoundError{Msg: msg}
 		}
 		if err := scanModel(replies, mr); err != nil {
 			return err

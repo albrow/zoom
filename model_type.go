@@ -171,13 +171,6 @@ func (mt *ModelType) Find(id string, model Model) error {
 	t := newTransaction()
 	t.find(mt, id, model)
 	if err := t.exec(); err != nil {
-		if notFoundError, ok := err.(ModelNotFoundError); ok {
-			// If there was a ModelNotFoundError, improve the error message. At the
-			// time the error was created, we didn't know that it came from a Find
-			// method, but now we do.
-			notFoundError.Msg = fmt.Sprintf("Could not find %s with id = %s", mt.Name(), id)
-			return notFoundError
-		}
 		return err
 	}
 	return nil
