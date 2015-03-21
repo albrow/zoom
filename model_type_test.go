@@ -126,26 +126,6 @@ func TestSave(t *testing.T) {
 	expectFieldEquals(t, key, "Bool", model.Bool)
 }
 
-func TestMSave(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	// Create and some test models
-	models := createTestModels(5)
-	if err := testModels.MSave(Models(models)); err != nil {
-		t.Errorf("Unexpected error in testModels.MSave: %s", err.Error())
-	}
-
-	// Make sure each model was saved correctly
-	for _, model := range models {
-		expectModelExists(t, testModels, model)
-		key, _ := testModels.KeyForModel(model)
-		expectFieldEquals(t, key, "Int", model.Int)
-		expectFieldEquals(t, key, "String", model.String)
-		expectFieldEquals(t, key, "Bool", model.Bool)
-	}
-}
-
 func TestFind(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -164,51 +144,6 @@ func TestFind(t *testing.T) {
 	}
 	if !reflect.DeepEqual(model, modelCopy) {
 		t.Errorf("Found model was incorrect.\n\tExpected: %+v\n\tBut got:  %+v", model, modelCopy)
-	}
-}
-
-func TestMFind(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	// Create and save some test models
-	models, err := createAndSaveTestModels(5)
-	if err != nil {
-		t.Errorf("Unexpected error saving test models: %s", err.Error())
-	}
-
-	// Use MFind to find four of the models in the database and store them in
-	// modelsCopy
-	modelsCopy := []*testModel{}
-	ids := []string{}
-	for _, model := range models[1:] {
-		ids = append(ids, model.Id)
-	}
-	if err := testModels.MFind(ids, &modelsCopy); err != nil {
-		t.Errorf("Unexpected error in testModels.MFind: %s", err.Error())
-	}
-
-	// Check the models in modelsCopy
-	if len(modelsCopy) != len(models[1:]) {
-		t.Errorf("modelsCopy was the wrong length. Expected %d but got %d", len(models[1:]), len(modelsCopy))
-	}
-	modelsById := map[string]*testModel{}
-	for _, model := range models {
-		modelsById[model.Id] = model
-	}
-	for i, modelCopy := range modelsCopy {
-		if modelCopy.Id == "" {
-			t.Errorf("modelsCopy[%d].Id is empty.")
-			continue
-		}
-		model, found := modelsById[modelCopy.Id]
-		if !found {
-			t.Errorf("modelsCopy[%d].Id was invalid. Got %s but expected one of %v", i, modelCopy.Id, ids)
-			continue
-		}
-		if !reflect.DeepEqual(model, modelCopy) {
-			t.Errorf("Found model was incorrect.\n\tExpected: %+v\n\tBut got:  %+v", model, modelCopy)
-		}
 	}
 }
 
@@ -319,37 +254,6 @@ func TestDelete(t *testing.T) {
 	if deleted {
 		t.Errorf("Expected deleted to be false but got true")
 	}
-}
-
-func TestMDelete(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	// Create and save some test models
-	models, err := createAndSaveTestModels(5)
-	if err != nil {
-		t.Errorf("Unexpected error saving test models: %s", err.Error())
-	}
-
-	// Call MDelete with 3 valid ids and 2 invalid ones
-	ids := []string{}
-	for _, model := range models[:3] {
-		ids = append(ids, model.Id)
-	}
-	ids = append(ids, "foo", "bar")
-	count, err := testModels.MDelete(ids)
-	if err != nil {
-		t.Errorf("Unexpected error in testModels.Delete: %s", err.Error())
-	}
-	if count != 3 {
-		t.Errorf("Expected count to be 3 but got %d", count)
-	}
-
-	// Make sure the first three models were deleted
-	expectModelsDoNotExist(t, testModels, Models(models[0:3]))
-
-	// Make sure the last two models were not deleted
-	expectModelsExist(t, testModels, Models(models[3:]))
 }
 
 func TestDeleteAll(t *testing.T) {
