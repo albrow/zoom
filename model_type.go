@@ -22,6 +22,9 @@ var (
 	modelNameToSpec map[string]*modelSpec = map[string]*modelSpec{}
 )
 
+// ModelType represents a specific registered type of model. It has methods
+// for saving, finding, and deleting models of a specific type. Use the
+// Register and RegisterName functions to register new types.
 type ModelType struct {
 	spec *modelSpec
 }
@@ -324,6 +327,9 @@ func (mt *ModelType) MDelete(ids []string) (int, error) {
 	return count, nil
 }
 
+// delete removes (a) model(s) with the given type and id(s) in an existing transaction
+// delete expects a pointer to an int, which it will set to the number of models that were
+// successfully deleted when the transaction is executed. It will never return an error.
 func (t *transaction) delete(mt *ModelType, ids []string, count *int) {
 	delArgs := redis.Args{}
 	for _, id := range ids {
@@ -335,7 +341,7 @@ func (t *transaction) delete(mt *ModelType, ids []string, count *int) {
 	t.command("SREM", sremArgs, nil)
 }
 
-// DeleteAll all the models of the given type in a single transaction. See
+// DeleteAll deletes all the models of the given type in a single transaction. See
 // http://redis.io/topics/transactions. It returns the number of models deleted
 // and an error if there was a problem connecting to the database.
 func (mt *ModelType) DeleteAll() (int, error) {

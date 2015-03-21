@@ -29,14 +29,17 @@ type Model interface {
 	// TODO: add getters and setters for other default fields?
 }
 
+// GetId returns the id of the model, satisfying the Model interface
 func (d DefaultData) GetId() string {
 	return d.Id
 }
 
+// SetId sets the id of the model, satisfying the Model interface
 func (d *DefaultData) SetId(id string) {
 	d.Id = id
 }
 
+// modelSpec contains parsed information about a particular type of model
 type modelSpec struct {
 	typ          reflect.Type
 	name         string
@@ -44,6 +47,7 @@ type modelSpec struct {
 	fields       []*fieldSpec
 }
 
+// fieldSpec contains parsed information about a particular field
 type fieldSpec struct {
 	kind      fieldKind
 	name      string
@@ -52,14 +56,18 @@ type fieldSpec struct {
 	indexKind indexKind
 }
 
+// fieldKind is the kind of a particular field, and is either a primative,
+// a pointer, or an inconvertible.
 type fieldKind int
 
 const (
-	primativeField fieldKind = iota
-	pointerField
-	inconvertibleField
+	primativeField     fieldKind = iota // any primative type
+	pointerField                        // pointer to any primative type
+	inconvertibleField                  // all other types
 )
 
+// indexKind is the kind of an index, and is either noIndex, numericIndex,
+// stringIndex, or booleanIndex.
 type indexKind int
 
 const (
@@ -69,6 +77,8 @@ const (
 	booleanIndex
 )
 
+// compilesModelSpec examines typ using reflection, parses its fields,
+// and returns a modelSpec.
 func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 	ms := &modelSpec{fieldsByName: map[string]*fieldSpec{}, typ: typ}
 
@@ -138,6 +148,7 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 	return ms, nil
 }
 
+// setIndexKind sets the indexKind field of fs based on fieldType
 func setIndexKind(fs *fieldSpec, fieldType reflect.Type) error {
 	switch {
 	case typeIsNumeric(fieldType):
@@ -152,12 +163,13 @@ func setIndexKind(fs *fieldSpec, fieldType reflect.Type) error {
 	return nil
 }
 
+// field returns the reflect.StrucField for the given modelSpec corresponding to fieldName
 func (ms *modelSpec) field(fieldName string) (reflect.StructField, bool) {
 	return ms.typ.Elem().FieldByName(fieldName)
 }
 
 // allIndexKey returns a key which is used in redis to store all the ids of every model of a
-// given type.
+// given type
 func (ms *modelSpec) allIndexKey() string {
 	return ms.name + ":all"
 }
@@ -172,6 +184,7 @@ func (ms *modelSpec) keyForModel(model Model) (string, error) {
 	return ms.name + ":" + model.GetId(), nil
 }
 
+// fieldNames returns all the field names for the given modelSpec
 func (ms modelSpec) fieldNames() []string {
 	names := make([]string, len(ms.fields))
 	count := 0
@@ -182,6 +195,9 @@ func (ms modelSpec) fieldNames() []string {
 	return names
 }
 
+// modelRef represents a reference to a particular model. It consists of the model object
+// itself and a pointer to the corresponding spec. This allows us to avoid constant lookups
+// in the modelTypeToSpec map.
 type modelRef struct {
 	model Model
 	spec  *modelSpec

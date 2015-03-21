@@ -19,8 +19,13 @@ var (
 	database *int    = flag.Int("database", 9, "the redis database number to use for testing")
 )
 
+// setUpOnce is used to enforce that the setup process happens exactly once,
+// no matter how many times testingSetUp is called
 var setUpOnce = sync.Once{}
 
+// testingSetUp prepares the database for testing and registers the testing types.
+// The setup-related code only runs once, no matter how many times you call
+// testingSetUp
 func testingSetUp() {
 	setUpOnce.Do(func() {
 		Init(&Configuration{
@@ -33,6 +38,7 @@ func testingSetUp() {
 	})
 }
 
+// testModel is a model type that is used for testing
 type testModel struct {
 	Int    int
 	String string
@@ -40,6 +46,8 @@ type testModel struct {
 	DefaultData
 }
 
+// createTestModels creates and returns n testModels with
+// random field values, but does not save them to the database.
 func createTestModels(n int) []*testModel {
 	models := make([]*testModel, n)
 	for i := 0; i < n; i++ {
@@ -52,6 +60,8 @@ func createTestModels(n int) []*testModel {
 	return models
 }
 
+// createAndSaveTestModels creates n testModels with random field
+// values, saves them, and returns them.
 func createAndSaveTestModels(n int) ([]*testModel, error) {
 	models := createTestModels(n)
 	t := newTransaction()
@@ -64,6 +74,8 @@ func createAndSaveTestModels(n int) ([]*testModel, error) {
 	return models, nil
 }
 
+// indexedTestModel is a model type used for testing indexes
+// and queries.
 type indexedTestModel struct {
 	Int    int    `zoom:"index"`
 	String string `zoom:"index"`
@@ -76,6 +88,7 @@ var (
 	indexedTestModels *ModelType
 )
 
+// registerTestingTypes registers the common types used for testing
 func registerTestingTypes() {
 	testModelTypes := []struct {
 		modelType **ModelType
@@ -99,6 +112,8 @@ func registerTestingTypes() {
 	}
 }
 
+// checkDatabaseEmpty panics if the database to be used for testing
+// is not empty.
 func checkDatabaseEmpty() {
 	conn := GetConn()
 	defer conn.Close()
@@ -112,6 +127,8 @@ func checkDatabaseEmpty() {
 	}
 }
 
+// testingTearDown flushes the database. It should be run at the end
+// of each test that toches the database, typically by using defer.
 func testingTearDown() {
 	// flush and close the database
 	conn := GetConn()
@@ -202,6 +219,9 @@ func expectKeyDoesNotExist(t *testing.T, key string) {
 	}
 }
 
+// expectModelExists sets an error via t.Errorf if model does not exist in
+// the database. It checks for the main hash as well as the id in the index of all
+// ids for a given type.
 func expectModelExists(t *testing.T, mt *ModelType, model Model) {
 	modelKey, err := mt.KeyForModel(model)
 	if err != nil {
@@ -211,6 +231,9 @@ func expectModelExists(t *testing.T, mt *ModelType, model Model) {
 	expectSetContains(t, mt.AllIndexKey(), model.GetId())
 }
 
+// expectModelDoesNotExist sets an error via t.Errorf if model exists in the database.
+// It checks for the main hash as well as the id in the index of all ids for a
+// given type.
 func expectModelDoesNotExist(t *testing.T, mt *ModelType, model Model) {
 	modelKey, err := mt.KeyForModel(model)
 	if err != nil {
@@ -220,6 +243,9 @@ func expectModelDoesNotExist(t *testing.T, mt *ModelType, model Model) {
 	expectSetDoesNotContain(t, mt.AllIndexKey(), model.GetId())
 }
 
+// expectModelsExist sets an error via t.Errorf for each model in models that
+// does not exist in the database. It checks for the main hash as well as the id in
+// the index of all ids for a given type.
 func expectModelsExist(t *testing.T, mt *ModelType, models []Model) {
 	for _, model := range models {
 		modelKey, err := mt.KeyForModel(model)
@@ -231,6 +257,9 @@ func expectModelsExist(t *testing.T, mt *ModelType, models []Model) {
 	}
 }
 
+// expectModelsDoNotExist sets an error via t.Errorf for each model in models that
+// exists in the database. It checks for the main hash as well as the id in the index
+// of all ids for a given type.
 func expectModelsDoNotExist(t *testing.T, mt *ModelType, models []Model) {
 	for _, model := range models {
 		modelKey, err := mt.KeyForModel(model)

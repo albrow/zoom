@@ -22,8 +22,12 @@ type Configuration struct {
 	Database int    // Database id to use (using SELECT). Default: 0
 }
 
+// pool is a pool of redis connections
 var pool *redis.Pool
 
+// defaultConfiguration holds the default values for each config option
+// if the zero value is provided in the input configuration, the value
+// will fallback to the default value
 var defaultConfiguration = Configuration{
 	Address:  "localhost:6379",
 	Network:  "tcp",
@@ -31,7 +35,7 @@ var defaultConfiguration = Configuration{
 }
 
 // GetConn gets a connection from the connection pool and returns it.
-// It can be used for directly interacting with the database. Check out
+// It can be used for directly interacting with the database. See
 // http://godoc.org/github.com/garyburd/redigo/redis for full documentation
 // on the redis.Conn type.
 func GetConn() redis.Conn {

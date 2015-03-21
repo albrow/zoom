@@ -28,7 +28,9 @@ type MarshalerUnmarshaler interface {
 // uses the builtin gob encoding.
 type gobMarshalerUnmarshaler struct{}
 
-var defaultMarshalerUnmarshaler gobMarshalerUnmarshaler = gobMarshalerUnmarshaler{}
+// defaultMarshalerUnmarshaler is used to marshal and unmarshal inconvertible
+// fields whenever a custom MarshalerUnmarshaler is not provided.
+var defaultMarshalerUnmarshaler MarshalerUnmarshaler = gobMarshalerUnmarshaler{}
 
 // Marshal returns the gob encoding of v.
 func (gobMarshalerUnmarshaler) Marshal(v interface{}) ([]byte, error) {

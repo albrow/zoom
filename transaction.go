@@ -159,6 +159,8 @@ func (t *transaction) exec() error {
 	return nil
 }
 
+// newScanIntHandler returns a replyHandler which will set the value of i to the
+// converted value of reply.
 func newScanIntHandler(i *int) replyHandler {
 	return func(reply interface{}) error {
 		var err error
@@ -170,6 +172,8 @@ func newScanIntHandler(i *int) replyHandler {
 	}
 }
 
+// newScanIntHandler returns a replyHandler which will set the value of b to the
+// converted value of reply.
 func newScanBoolHandler(b *bool) replyHandler {
 	return func(reply interface{}) error {
 		var err error
@@ -181,6 +185,8 @@ func newScanBoolHandler(b *bool) replyHandler {
 	}
 }
 
+// newScanIntHandler returns a replyHandler which will set the value of s to the
+// converted value of reply.
 func newScanStringHandler(s *string) replyHandler {
 	return func(reply interface{}) error {
 		var err error
@@ -192,10 +198,9 @@ func newScanStringHandler(s *string) replyHandler {
 	}
 }
 
+// newScanModelHandler returns a replyHandler which will scan all the fields in
+// reply into the fields of mr.model.
 func newScanModelHandler(mr *modelRef) replyHandler {
-	// TODO: come up with a way to give a better error message.
-	// Mainly need to provide the id or other criteria in the
-	// error message.
 	return func(reply interface{}) error {
 		replies, err := redis.Values(reply, nil)
 		if err != nil {
@@ -217,6 +222,9 @@ func newScanModelHandler(mr *modelRef) replyHandler {
 	}
 }
 
+// newScanModelsHandler returns a reply handler which will scan all the replies
+// in reply into a model in models. models should be a pointer to a slice of some
+// model type. The returned replyHandler will grow or shrink models as needed.
 func newScanModelsHandler(spec *modelSpec, models interface{}) replyHandler {
 	return func(reply interface{}) error {
 		modelsFields, err := redis.Values(reply, nil)

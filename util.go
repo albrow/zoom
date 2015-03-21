@@ -64,6 +64,7 @@ func Interfaces(in interface{}) []interface{} {
 	return results
 }
 
+// reverseString returns s reversed
 func reverseString(s string) string {
 	runes := []rune(s)
 	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
@@ -72,6 +73,8 @@ func reverseString(s string) string {
 	return string(runes)
 }
 
+// indexOfStringSlice returns the index of a in list, or
+// -1 if a is not found in list
 func indexOfStringSlice(a string, list []string) int {
 	for i, b := range list {
 		if b == a {
@@ -81,6 +84,9 @@ func indexOfStringSlice(a string, list []string) int {
 	return -1
 }
 
+// indexOfSlice returns the index of a in list, or
+// -1 if a is not found in list. list should have an underlying
+// type of a slice or array
 func indexOfSlice(a interface{}, list interface{}) int {
 	lVal := reflect.ValueOf(list)
 	size := lVal.Len()
@@ -93,18 +99,24 @@ func indexOfSlice(a interface{}, list interface{}) int {
 	return -1
 }
 
-func stringSliceContains(a string, list []string) bool {
-	return indexOfStringSlice(a, list) != -1
+// stringSliceContains returns true iff list contains s
+func stringSliceContains(s string, list []string) bool {
+	return indexOfStringSlice(s, list) != -1
 }
 
+// sliceContains returns true iff list contains a
 func sliceContains(a interface{}, list interface{}) bool {
 	return indexOfSlice(a, list) != -1
 }
 
+// removeFromStringSlice removes the element at index i from list and
+// returns the new slice.
 func removeFromStringSlice(list []string, i int) []string {
 	return append(list[:i], list[i+1:]...)
 }
 
+// removeElementFromStringSlice removes elem from list and returns
+// the new slice.
 func removeElementFromStringSlice(list []string, elem string) []string {
 	for i, e := range list {
 		if e == elem {
@@ -114,6 +126,10 @@ func removeElementFromStringSlice(list []string, elem string) []string {
 	return list
 }
 
+// compareAsStringSet compares expecteds and gots as if they were sets, i.e.,
+// it checks if they contain the same values, regardless of order. It returns true
+// and an empty string if expecteds and gots contain all the same values and false
+// and a detailed message if they do not.
 func compareAsStringSet(expecteds, gots []string) (bool, string) {
 	// make sure everything in expecteds is also in gots
 	for _, e := range expecteds {
@@ -136,6 +152,10 @@ func compareAsStringSet(expecteds, gots []string) (bool, string) {
 	return true, "ok"
 }
 
+// compareAsSet compares expecteds and gots as if they were sets, i.e.,
+// it checks if they contain the same values, regardless of order. It returns true
+// and an empty string if expecteds and gots contain all the same values and false
+// and a detailed message if they do not.
 func compareAsSet(expecteds, gots interface{}) (bool, string) {
 	eVal := reflect.ValueOf(expecteds)
 	gVal := reflect.ValueOf(gots)
@@ -168,20 +188,25 @@ func compareAsSet(expecteds, gots interface{}) (bool, string) {
 	return true, "ok"
 }
 
+// typeIsSliceOrArray returns true iff typ is a slice or array
 func typeIsSliceOrArray(typ reflect.Type) bool {
 	k := typ.Kind()
 	return (k == reflect.Slice || k == reflect.Array) && typ.Elem().Kind() != reflect.Uint8
 }
 
+// typeIsPointerToStruct returns true iff typ is a pointer to a struct
 func typeIsPointerToStruct(typ reflect.Type) bool {
 	return typ.Kind() == reflect.Ptr && typ.Elem().Kind() == reflect.Struct
 }
 
+// typeIsString returns true iff typ is a string or an array or slice of bytes
+// (which is freely castable to a string)
 func typeIsString(typ reflect.Type) bool {
 	k := typ.Kind()
 	return k == reflect.String || ((k == reflect.Slice || k == reflect.Array) && typ.Elem().Kind() == reflect.Uint8)
 }
 
+// typeIsNumeric returns true iff typ is one of the numeric primative types
 func typeIsNumeric(typ reflect.Type) bool {
 	k := typ.Kind()
 	switch k {
@@ -192,11 +217,14 @@ func typeIsNumeric(typ reflect.Type) bool {
 	}
 }
 
+// typeIsBool returns true iff typ is a bool
 func typeIsBool(typ reflect.Type) bool {
 	k := typ.Kind()
 	return k == reflect.Bool
 }
 
+// typeIsPrimative returns true iff typ is a primative type, i.e. either a
+// string, bool, or numeric type.
 func typeIsPrimative(typ reflect.Type) bool {
 	return typeIsString(typ) || typeIsNumeric(typ) || typeIsBool(typ)
 }
@@ -220,6 +248,8 @@ func looseEquals(one, two interface{}) (bool, error) {
 	return (string(oneBytes) == string(twoBytes)), nil
 }
 
+// convertNumericToFloat64 converts val to a float64. It panics if val
+// is not a numeric type
 func convertNumericToFloat64(val reflect.Value) float64 {
 	switch val.Type().Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
@@ -236,15 +266,16 @@ func convertNumericToFloat64(val reflect.Value) float64 {
 	}
 }
 
-func modelIds(ms []Model) []string {
-	results := make([]string, len(ms))
-	for i, m := range ms {
+// modelIds returns the ids for models
+func modelIds(models []Model) []string {
+	results := make([]string, len(models))
+	for i, m := range models {
 		results[i] = m.GetId()
 	}
 	return results
 }
 
-// converts a bool to an int using the following rule:
+// boolToInt converts a bool to an int using the following rule:
 // false = 0
 // true = 1
 func boolToInt(b bool) int {
@@ -265,14 +296,18 @@ func generateRandomId() string {
 	return randomString + timeString
 }
 
+// randomInt returns a psuedo-random int between the minimum and maximum
+// possible values.
 func randomInt() int {
 	return rand.Int()
 }
 
+// randomString returns a random string of length 16
 func randomString() string {
 	return uniuri.NewLen(16)
 }
 
+// randomBool returns a random bool
 func randomBool() bool {
 	return rand.Int()%2 == 0
 }

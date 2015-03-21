@@ -12,6 +12,8 @@ import (
 	"testing"
 )
 
+// regTestModel is a model type that is only used for testing
+// the Register and RegisterName functions
 type regTestModel struct {
 	DefaultData
 	Int    int
