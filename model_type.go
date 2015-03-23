@@ -143,7 +143,13 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 	if err != nil {
 		t.setError(err)
 	}
-	t.Command("HMSET", hashArgs, nil)
+	if len(hashArgs) > 1 {
+		// Only save the main hash if there are any fields
+		// The first element in hashArgs is the model key,
+		// so there are fields if the length is greater than
+		// 1.
+		t.Command("HMSET", hashArgs, nil)
+	}
 
 	// Add the model id to the set of all models of this type
 	t.Command("SADD", redis.Args{mt.AllIndexKey(), model.GetId()}, nil)

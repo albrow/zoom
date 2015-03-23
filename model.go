@@ -92,16 +92,15 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 			continue
 		}
 
-		fs := &fieldSpec{name: field.Name, fieldType: field.Type}
-		ms.fieldsByName[fs.name] = fs
-		ms.fields = append(ms.fields, fs)
-
 		// Parse the "redis" tag
 		tag := field.Tag
 		redisTag := tag.Get("redis")
 		if redisTag == "-" {
 			continue // skip field
 		}
+		fs := &fieldSpec{name: field.Name, fieldType: field.Type}
+		ms.fieldsByName[fs.name] = fs
+		ms.fields = append(ms.fields, fs)
 		if redisTag != "" {
 			fs.redisName = redisTag
 		} else {
