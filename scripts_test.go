@@ -21,14 +21,14 @@ func TestFindModelsBySetIdsScript(t *testing.T) {
 	}
 
 	// Run the script
-	tx := newTransaction()
+	tx := NewTransaction()
 	var gotReply interface{}
 	tx.findModelsBySetIds(testModels.AllIndexKey(), testModels.Name(), func(reply interface{}) error {
 		gotReply = reply
 		return nil
 	})
-	if err := tx.exec(); err != nil {
-		t.Fatalf("Unexected error in tx.exec: %s", err.Error())
+	if err := tx.Exec(); err != nil {
+		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
 
 	// Check that the return value is correct
@@ -112,11 +112,11 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 	}
 
 	// Run the script
-	tx := newTransaction()
+	tx := NewTransaction()
 	count := 0
 	tx.deleteModelsBySetIds(tempSetKey, testModels.Name(), newScanIntHandler(&count))
-	if err := tx.exec(); err != nil {
-		t.Fatalf("Unexected error in tx.exec: %s", err.Error())
+	if err := tx.Exec(); err != nil {
+		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
 
 	// Check that the return value is correct

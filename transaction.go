@@ -13,71 +13,73 @@ import (
 	"reflect"
 )
 
-// transaction is an abstraction layer around a redis transaction.
-// transactions feature delayed execution, so nothing touches the database
-// until exec is called.
-type transaction struct {
+// Transaction is an abstraction layer around a redis transaction.
+// Transactions consist of a set of actions which are either redis
+// commands or lua scripts. Transactions feature delayed execution,
+// so nothing toches the database until you call Exec.
+type Transaction struct {
 	conn    redis.Conn
-	actions []*action
+	actions []*Action
 	err     error
 }
 
-// action is a single step in a transaction and must be either a command
-// or a script with optional arguments.
-type action struct {
-	kind    actionKind
+// Action is a single step in a transaction and must be either a command
+// or a script with optional arguments and a reply handler.
+type Action struct {
+	kind    ActionKind
 	name    string
 	script  *redis.Script
 	args    redis.Args
-	handler replyHandler
+	handler ReplyHandler
 }
 
-// actionKind is either a command or a script
-type actionKind int
+// ActionKind is either a command or a script
+type ActionKind int
 
 const (
-	commandAction actionKind = iota
-	scriptAction
+	CommandAction ActionKind = iota
+	ScriptAction
 )
 
-// replyHandler is a function which does something with the reply from a redis
-// command or script.
-type replyHandler func(interface{}) error
+// ReplyHandler is a function which does something with the reply from a redis
+// command or script. Each ReplyHandler is executed immediately after its
+// corresponding script or command is run.
+type ReplyHandler func(interface{}) error
 
-// newTransaction instantiates and returns a new transaction.
-func newTransaction() *transaction {
-	t := &transaction{
+// NewTransaction instantiates and returns a new transaction.
+func NewTransaction() *Transaction {
+	t := &Transaction{
 		conn: GetConn(),
 	}
 	return t
 }
 
-// setError sets the err property of the transaction iff it was not already
+// SetError sets the err property of the transaction iff it was not already
 // set. This will cause exec to fail immediately.
-func (t *transaction) setError(err error) {
+func (t *Transaction) setError(err error) {
 	if t.err == nil {
 		t.err = err
 	}
 }
 
-// command adds a command action to the transaction with the given args.
+// Command adds a command action to the transaction with the given args.
 // handler will be called with the reply from this specific command when
 // the transaction is executed.
-func (t *transaction) command(name string, args redis.Args, handler replyHandler) {
-	t.actions = append(t.actions, &action{
-		kind:    commandAction,
+func (t *Transaction) Command(name string, args redis.Args, handler ReplyHandler) {
+	t.actions = append(t.actions, &Action{
+		kind:    CommandAction,
 		name:    name,
 		args:    args,
 		handler: handler,
 	})
 }
 
-// command adds a script action to the transaction with the given args.
+// Script adds a script action to the transaction with the given args.
 // handler will be called with the reply from this specific script when
 // the transaction is executed.
-func (t *transaction) script(script *redis.Script, args redis.Args, handler replyHandler) {
-	t.actions = append(t.actions, &action{
-		kind:    scriptAction,
+func (t *Transaction) Script(script *redis.Script, args redis.Args, handler ReplyHandler) {
+	t.actions = append(t.actions, &Action{
+		kind:    ScriptAction,
 		script:  script,
 		args:    args,
 		handler: handler,
@@ -85,11 +87,11 @@ func (t *transaction) script(script *redis.Script, args redis.Args, handler repl
 }
 
 // sendAction writes a to a connection buffer using conn.Send()
-func (t *transaction) sendAction(a *action) error {
+func (t *Transaction) sendAction(a *Action) error {
 	switch a.kind {
-	case commandAction:
+	case CommandAction:
 		return t.conn.Send(a.name, a.args...)
-	case scriptAction:
+	case ScriptAction:
 		return a.script.Send(t.conn, a.args...)
 	}
 	return nil
@@ -97,19 +99,19 @@ func (t *transaction) sendAction(a *action) error {
 
 // doAction writes a to the connection buffer and then immediately
 // flushes the buffer and reads the reply via conn.Do()
-func (t *transaction) doAction(a *action) (interface{}, error) {
+func (t *Transaction) doAction(a *Action) (interface{}, error) {
 	switch a.kind {
-	case commandAction:
+	case CommandAction:
 		return t.conn.Do(a.name, a.args...)
-	case scriptAction:
+	case ScriptAction:
 		return a.script.Do(t.conn, a.args...)
 	}
 	return nil, nil
 }
 
-// exec executes the transaction, sequentially sending each action and
+// Exec executes the transaction, sequentially sending each action and
 // calling all the action handlers with the corresponding replies.
-func (t *transaction) exec() error {
+func (t *Transaction) Exec() error {
 	// Return the connection to the pool when we are done
 	defer t.conn.Close()
 
@@ -159,9 +161,9 @@ func (t *transaction) exec() error {
 	return nil
 }
 
-// newScanIntHandler returns a replyHandler which will set the value of i to the
+// newScanIntHandler returns a ReplyHandler which will set the value of i to the
 // converted value of reply.
-func newScanIntHandler(i *int) replyHandler {
+func newScanIntHandler(i *int) ReplyHandler {
 	return func(reply interface{}) error {
 		var err error
 		(*i), err = redis.Int(reply, nil)
@@ -172,9 +174,9 @@ func newScanIntHandler(i *int) replyHandler {
 	}
 }
 
-// newScanIntHandler returns a replyHandler which will set the value of b to the
+// newScanIntHandler returns a ReplyHandler which will set the value of b to the
 // converted value of reply.
-func newScanBoolHandler(b *bool) replyHandler {
+func newScanBoolHandler(b *bool) ReplyHandler {
 	return func(reply interface{}) error {
 		var err error
 		(*b), err = redis.Bool(reply, nil)
@@ -185,9 +187,9 @@ func newScanBoolHandler(b *bool) replyHandler {
 	}
 }
 
-// newScanIntHandler returns a replyHandler which will set the value of s to the
+// newScanIntHandler returns a ReplyHandler which will set the value of s to the
 // converted value of reply.
-func newScanStringHandler(s *string) replyHandler {
+func newScanStringHandler(s *string) ReplyHandler {
 	return func(reply interface{}) error {
 		var err error
 		(*s), err = redis.String(reply, nil)
@@ -198,9 +200,9 @@ func newScanStringHandler(s *string) replyHandler {
 	}
 }
 
-// newScanModelHandler returns a replyHandler which will scan all the fields in
+// newScanModelHandler returns a ReplyHandler which will scan all the fields in
 // reply into the fields of mr.model.
-func newScanModelHandler(mr *modelRef) replyHandler {
+func newScanModelHandler(mr *modelRef) ReplyHandler {
 	return func(reply interface{}) error {
 		replies, err := redis.Values(reply, nil)
 		if err != nil {
@@ -225,7 +227,7 @@ func newScanModelHandler(mr *modelRef) replyHandler {
 // newScanModelsHandler returns a reply handler which will scan all the replies
 // in reply into a model in models. models should be a pointer to a slice of some
 // model type. The returned replyHandler will grow or shrink models as needed.
-func newScanModelsHandler(spec *modelSpec, models interface{}) replyHandler {
+func newScanModelsHandler(spec *modelSpec, models interface{}) ReplyHandler {
 	return func(reply interface{}) error {
 		modelsFields, err := redis.Values(reply, nil)
 		if err != nil {

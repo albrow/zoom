@@ -110,9 +110,9 @@ func (mt *ModelType) AllIndexKey() string {
 // setting the Id. To make a struct satisfy the Model interface, you can embed
 // zoom.DefaultData.
 func (mt *ModelType) Save(model Model) error {
-	t := newTransaction()
-	t.save(mt, model)
-	if err := t.exec(); err != nil {
+	t := NewTransaction()
+	t.Save(mt, model)
+	if err := t.Exec(); err != nil {
 		return err
 	}
 	return nil
@@ -126,7 +126,7 @@ func (mt *ModelType) Save(model Model) error {
 // satisfy the Model interface, you can embed zoom.DefaultData. Any errors encountered
 // will be added to the transaction and returned as an error when the transaction is
 // executed.
-func (t *transaction) save(mt *ModelType, model Model) {
+func (t *Transaction) Save(mt *ModelType, model Model) {
 	// Generate id if needed
 	if model.GetId() == "" {
 		model.SetId(generateRandomId())
@@ -143,10 +143,10 @@ func (t *transaction) save(mt *ModelType, model Model) {
 	if err != nil {
 		t.setError(err)
 	}
-	t.command("HMSET", hashArgs, nil)
+	t.Command("HMSET", hashArgs, nil)
 
 	// Add the model id to the set of all models of this type
-	t.command("SADD", redis.Args{mt.AllIndexKey(), model.GetId()}, nil)
+	t.Command("SADD", redis.Args{mt.AllIndexKey(), model.GetId()}, nil)
 
 	// TODO: save indexes
 }
@@ -158,9 +158,9 @@ func (t *transaction) save(mt *ModelType, model Model) {
 // with the given id does not exist, if the given model was the wrong type, or
 // if there was a problem connecting to the database.
 func (mt *ModelType) Find(id string, model Model) error {
-	t := newTransaction()
-	t.find(mt, id, model)
-	if err := t.exec(); err != nil {
+	t := NewTransaction()
+	t.Find(mt, id, model)
+	if err := t.Exec(); err != nil {
 		return err
 	}
 	return nil
@@ -172,7 +172,7 @@ func (mt *ModelType) Find(id string, model Model) error {
 // filling in its fields and overwriting any previous values. Any errors encountered
 // will be added to the transaction and returned as an error when the transaction is
 // executed.
-func (t *transaction) find(mt *ModelType, id string, model Model) {
+func (t *Transaction) Find(mt *ModelType, id string, model Model) {
 	model.SetId(id)
 
 	// Create a modelRef and start a transaction
@@ -182,7 +182,7 @@ func (t *transaction) find(mt *ModelType, id string, model Model) {
 	}
 
 	// Get the fields from the main hash for this model
-	t.command("HGETALL", redis.Args{mr.key()}, newScanModelHandler(mr))
+	t.Command("HGETALL", redis.Args{mr.key()}, newScanModelHandler(mr))
 }
 
 // FindAll finds all the models of the given type. It executes the commands needed
@@ -199,9 +199,9 @@ func (mt *ModelType) FindAll(models interface{}) error {
 		return fmt.Errorf("zoom: Error in FindAll: %s", err.Error())
 	}
 
-	t := newTransaction()
-	t.findAll(mt, models)
-	if err := t.exec(); err != nil {
+	t := NewTransaction()
+	t.FindAll(mt, models)
+	if err := t.Exec(); err != nil {
 		return err
 	}
 	return nil
@@ -214,7 +214,7 @@ func (mt *ModelType) FindAll(models interface{}) error {
 // models slice are nil, FindAll will use reflection to allocate memory for them.
 // Any errors encountered will be added to the transaction and returned as an error
 // when the transaction is executed.
-func (t *transaction) findAll(mt *ModelType, models interface{}) {
+func (t *Transaction) FindAll(mt *ModelType, models interface{}) {
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
 	// TODO: any way to avoid checking the type twice?
@@ -228,10 +228,10 @@ func (t *transaction) findAll(mt *ModelType, models interface{}) {
 // Count returns the number of models of the given type that exist in the database.
 // It returns an error if there was a problem connecting to the database.
 func (mt *ModelType) Count() (int, error) {
-	t := newTransaction()
+	t := NewTransaction()
 	count := 0
-	t.count(mt, &count)
-	if err := t.exec(); err != nil {
+	t.Count(mt, &count)
+	if err := t.Exec(); err != nil {
 		return count, err
 	}
 	return count, nil
@@ -241,8 +241,8 @@ func (mt *ModelType) Count() (int, error) {
 // transaction. It sets the value of count to the number of models. Any errors
 // encountered will be added to the transaction and returned as an error when the
 // transaction is executed.
-func (t *transaction) count(mt *ModelType, count *int) {
-	t.command("SCARD", redis.Args{mt.AllIndexKey()}, newScanIntHandler(count))
+func (t *Transaction) Count(mt *ModelType, count *int) {
+	t.Command("SCARD", redis.Args{mt.AllIndexKey()}, newScanIntHandler(count))
 }
 
 // Delete removes the model with the given type and id from the database. It will
@@ -251,10 +251,10 @@ func (t *transaction) count(mt *ModelType, count *int) {
 // or not the model was found and deleted, and will only return an error
 // if there was a problem connecting to the database.
 func (mt *ModelType) Delete(id string) (bool, error) {
-	t := newTransaction()
+	t := NewTransaction()
 	deleted := false
-	t.delete(mt, id, &deleted)
-	if err := t.exec(); err != nil {
+	t.Delete(mt, id, &deleted)
+	if err := t.Exec(); err != nil {
 		return deleted, err
 	}
 	return deleted, nil
@@ -266,19 +266,19 @@ func (mt *ModelType) Delete(id string) (bool, error) {
 // the value of deleted will be set to false. Any errors encountered will be
 // added to the transaction and returned as an error when the transaction is
 // executed.
-func (t *transaction) delete(mt *ModelType, id string, deleted *bool) {
-	t.command("DEL", redis.Args{mt.Name() + ":" + id}, newScanBoolHandler(deleted))
-	t.command("SREM", redis.Args{mt.AllIndexKey(), id}, nil)
+func (t *Transaction) Delete(mt *ModelType, id string, deleted *bool) {
+	t.Command("DEL", redis.Args{mt.Name() + ":" + id}, newScanBoolHandler(deleted))
+	t.Command("SREM", redis.Args{mt.AllIndexKey(), id}, nil)
 }
 
 // DeleteAll deletes all the models of the given type in a single transaction. See
 // http://redis.io/topics/transactions. It returns the number of models deleted
 // and an error if there was a problem connecting to the database.
 func (mt *ModelType) DeleteAll() (int, error) {
-	t := newTransaction()
+	t := NewTransaction()
 	count := 0
-	t.deleteAll(mt, &count)
-	if err := t.exec(); err != nil {
+	t.DeleteAll(mt, &count)
+	if err := t.Exec(); err != nil {
 		return count, err
 	}
 	return count, nil
@@ -288,7 +288,7 @@ func (mt *ModelType) DeleteAll() (int, error) {
 // The value of count will be set to the number of models that were successfully deleted
 // when the transaction is executed. Any errors encountered will be added to the transaction
 // and returned as an error when the transaction is executed.
-func (t *transaction) deleteAll(mt *ModelType, count *int) {
+func (t *Transaction) DeleteAll(mt *ModelType, count *int) {
 	t.deleteModelsBySetIds(mt.AllIndexKey(), mt.Name(), newScanIntHandler(count))
 }
 

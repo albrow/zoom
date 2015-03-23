@@ -64,11 +64,11 @@ func createTestModels(n int) []*testModel {
 // values, saves them, and returns them.
 func createAndSaveTestModels(n int) ([]*testModel, error) {
 	models := createTestModels(n)
-	t := newTransaction()
+	t := NewTransaction()
 	for _, model := range models {
-		t.save(testModels, model)
+		t.Save(testModels, model)
 	}
-	if err := t.exec(); err != nil {
+	if err := t.Exec(); err != nil {
 		return nil, err
 	}
 	return models, nil
