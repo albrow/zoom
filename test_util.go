@@ -83,6 +83,34 @@ type indexedTestModel struct {
 	DefaultData
 }
 
+// createIndexedTestModels creates and returns n testModels with
+// random field values, but does not save them to the database.
+func createIndexedTestModels(n int) []*testModel {
+	models := make([]*testModel, n)
+	for i := 0; i < n; i++ {
+		models[i] = &testModel{
+			Int:    randomInt(),
+			String: randomString(),
+			Bool:   randomBool(),
+		}
+	}
+	return models
+}
+
+// createAndSaveIndexedTestModels creates n indexedTestModels with
+// random field values, saves them, and returns them.
+func createAndSaveIndexedTestModels(n int) ([]*testModel, error) {
+	models := createIndexedTestModels(n)
+	t := NewTransaction()
+	for _, model := range models {
+		t.Save(testModels, model)
+	}
+	if err := t.Exec(); err != nil {
+		return nil, err
+	}
+	return models, nil
+}
+
 var (
 	testModels        *ModelType
 	indexedTestModels *ModelType
@@ -269,4 +297,103 @@ func expectModelsDoNotExist(t *testing.T, mt *ModelType, models []Model) {
 		expectKeyDoesNotExist(t, modelKey)
 		expectSetDoesNotContain(t, mt.AllIndexKey(), model.GetId())
 	}
+}
+
+// indexExists returns true iff an index for the given type and field exists in the database.
+// It returns an error if modelType does not have a field called fieldName, the field identified
+// by fieldName is not an indexed field, there was a problem connecting to the database, or
+// there was some other unexpected problem.
+func indexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
+	fs, found := modelType.spec.fieldsByName[fieldName]
+	if !found {
+		return false, fmt.Errorf("Type %s has no field called %s", modelType.spec.typ.String(), fieldName)
+	} else if fs.indexKind == noIndex {
+		return false, fmt.Errorf("%s.%s is not an indexed field", modelType.spec.typ.String(), fieldName)
+	}
+	switch {
+	case typeIsNumeric(fs.fieldType):
+		return numericIndexExists(modelType, model, fieldName)
+	case typeIsString(fs.fieldType):
+		return stringIndexExists(modelType, model, fieldName)
+	case typeIsBool(fs.fieldType):
+		return booleanIndexExists(modelType, model, fieldName)
+	default:
+		return false, fmt.Errorf("Unknown indexed field type %s", fs.fieldType)
+	}
+}
+
+// expectIndexExists sets an error via t.Error if an index on the given type and field
+// does not exist in the database. It also reports an error if modelType does not have a field
+// called fieldName, the field identified by fieldName is not an indexed field, there was a
+// problem connecting to the database, or there was some other unexpected problem.
+func expectIndexExists(t *testing.T, modelType *ModelType, model Model, fieldName string) {
+	if exists, err := indexExists(modelType, model, fieldName); err != nil {
+		t.Errorf("Unexpected error in indexExists: %s", err.Error())
+	} else if !exists {
+		t.Errorf("Expected an index for %s.%s to exist but it did not", modelType.spec.typ.String(), fieldName)
+	}
+}
+
+// expectIndexDoesNotExist sets an error via t.Error if an index on the given type and field
+// does exist in the database. It also reports an error if modelType does not have a field
+// called fieldName, the field identified by fieldName is not an indexed field, there was a
+// problem connecting to the database, or there was some other unexpected problem.
+func expectIndexDoesNotExist(t *testing.T, modelType *ModelType, model Model, fieldName string) {
+	if exists, err := indexExists(modelType, model, fieldName); err != nil {
+		t.Errorf("Unexpected error in indexExists: %s", err.Error())
+	} else if exists {
+		t.Errorf("Expected an index for %s.%s to not exist but it did", modelType.spec.typ.String(), fieldName)
+	}
+}
+
+// numericIndexExists returns true iff a numeric index on the given type and field exists.
+func numericIndexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
+	indexKey, err := modelType.FieldIndexKey(fieldName)
+	if err != nil {
+		return false, err
+	}
+	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName)
+	score := convertNumericToFloat64(fieldValue)
+	conn := GetConn()
+	defer conn.Close()
+	gotIds, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
+	if err != nil {
+		return false, fmt.Errorf("Error in ZRANGEBYSCORE: %s", err.Error())
+	}
+	return stringSliceContains(gotIds, model.GetId()), nil
+}
+
+// stringIndexExists returns true iff a string index on the given type and field exists
+func stringIndexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
+	indexKey, err := modelType.FieldIndexKey(fieldName)
+	if err != nil {
+		return false, err
+	}
+	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName).String()
+	memberKey := fieldValue + " " + model.GetId()
+	conn := GetConn()
+	defer conn.Close()
+	reply, err := conn.Do("ZRANK", indexKey, memberKey)
+	if err != nil {
+		return false, fmt.Errorf("Error in ZRANK: %s", err.Error())
+	} else {
+		return reply != nil, nil
+	}
+}
+
+// boolesnIndexExists returns true iff a boolesn index on the given type and field exists
+func booleanIndexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
+	indexKey, err := modelType.FieldIndexKey(fieldName)
+	if err != nil {
+		return false, err
+	}
+	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName).Bool()
+	score := convertBoolToInt(fieldValue)
+	conn := GetConn()
+	defer conn.Close()
+	gotIds, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
+	if err != nil {
+		return false, fmt.Errorf("Error in ZRANGEBYSCORE: %s", err.Error())
+	}
+	return stringSliceContains(gotIds, model.GetId()), nil
 }

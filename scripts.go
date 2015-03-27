@@ -18,6 +18,7 @@ import (
 var (
 	findModelsBySetIdsScript   *redis.Script
 	deleteModelsBySetIdsScript *redis.Script
+	saveStringIndexScript      *redis.Script
 )
 
 var (
@@ -40,6 +41,11 @@ func init() {
 			script:   &deleteModelsBySetIdsScript,
 			filename: "delete_models_by_set_ids.lua",
 			keyCount: 1,
+		},
+		{
+			script:   &saveStringIndexScript,
+			filename: "save_string_index.lua",
+			keyCount: 0,
 		},
 	}
 	for _, s := range scriptsToParse {
@@ -68,4 +74,12 @@ func (t *Transaction) findModelsBySetIds(setKey string, modelName string, handle
 // of models that were deleted. You can use the handler to capture the return value.
 func (t *Transaction) deleteModelsBySetIds(setKey string, modelName string, handler ReplyHandler) {
 	t.Script(deleteModelsBySetIdsScript, redis.Args{setKey, modelName}, handler)
+}
+
+// saveStringIndex is a small function wrapper around saveStringIndexScript.
+// It offers some type safety and helps make sure the arguments you pass through to the are correct.
+// The script will atomically save a string index with the given parameters, removing the old index
+// if needed.
+func (t *Transaction) saveStringIndex(modelName, modelId, fieldName, fieldValue string) {
+	t.Script(saveStringIndexScript, redis.Args{modelName, modelId, fieldName, fieldValue}, nil)
 }

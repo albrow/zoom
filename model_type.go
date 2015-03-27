@@ -104,6 +104,13 @@ func (mt *ModelType) AllIndexKey() string {
 	return mt.spec.allIndexKey()
 }
 
+// FieldIndexKey returns the key for the sorted set used to index the field identified
+// by fieldName. It returns an error if fieldName does not identify a field in the spec
+// or if the field it identifies is not an indexed field.
+func (mt *ModelType) FieldIndexKey(fieldName string) (string, error) {
+	return mt.spec.fieldIndexKey(fieldName)
+}
+
 // Save writes a model (a struct which satisfies the Model interface) to the redis
 // database. Save throws an error if the type of model does not match the registered
 // ModelType. If the Id field of the struct is empty, Save will mutate the struct by
@@ -138,6 +145,11 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 		model: model,
 	}
 
+	// Save indexes
+	// This must happen first, because it relies on reading the old field values
+	// from the hash for string indexes (if any)
+	t.saveModelIndexes(mr)
+
 	// Save the model fields in a hash in the database
 	hashArgs, err := mr.mainHashArgs()
 	if err != nil {
@@ -153,8 +165,42 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 
 	// Add the model id to the set of all models of this type
 	t.Command("SADD", redis.Args{mt.AllIndexKey(), model.GetId()}, nil)
+}
 
-	// TODO: save indexes
+func (t *Transaction) saveModelIndexes(mr *modelRef) {
+	for _, fs := range mr.spec.fields {
+		switch fs.indexKind {
+		case noIndex:
+			continue
+		case numericIndex:
+			t.saveNumericIndex(mr, fs)
+		case booleanIndex:
+			t.saveBooleanIndex(mr, fs)
+		case stringIndex:
+			// NOTE saveStringIndex invokes a script and so it is found in scripts.go
+			t.saveStringIndex(mr.spec.name, mr.model.GetId(), fs.name, mr.fieldValue(fs.name).String())
+		}
+	}
+}
+
+func (t *Transaction) saveNumericIndex(mr *modelRef, fs *fieldSpec) {
+	fieldValue := mr.fieldValue(fs.name)
+	score := convertNumericToFloat64(fieldValue)
+	indexKey, err := mr.spec.fieldIndexKey(fs.name)
+	if err != nil {
+		t.setError(err)
+	}
+	t.Command("ZADD", redis.Args{indexKey, score, mr.model.GetId()}, nil)
+}
+
+func (t *Transaction) saveBooleanIndex(mr *modelRef, fs *fieldSpec) {
+	fieldValue := mr.fieldValue(fs.name).Bool()
+	score := convertBoolToInt(fieldValue)
+	indexKey, err := mr.spec.fieldIndexKey(fs.name)
+	if err != nil {
+		t.setError(err)
+	}
+	t.Command("ZADD", redis.Args{indexKey, score, mr.model.GetId()}, nil)
 }
 
 // Find retrieves a model with the given id from redis and scans its values

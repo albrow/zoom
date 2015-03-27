@@ -194,6 +194,19 @@ func (ms modelSpec) fieldNames() []string {
 	return names
 }
 
+// fieldIndexKey returns the key for the sorted set used to index the field identified
+// by fieldName. It returns an error if fieldName does not identify a field in the spec
+// or if the field it identifies is not an indexed field.
+func (ms *modelSpec) fieldIndexKey(fieldName string) (string, error) {
+	fs, found := ms.fieldsByName[fieldName]
+	if !found {
+		return "", fmt.Errorf("Type %s has no field named %s", ms.typ.Name(), fieldName)
+	} else if fs.indexKind == noIndex {
+		return "", fmt.Errorf("%s.%s is not an indexed field", ms.typ.Name(), fieldName)
+	}
+	return ms.name + ":" + fieldName, nil
+}
+
 // modelRef represents a reference to a particular model. It consists of the model object
 // itself and a pointer to the corresponding spec. This allows us to avoid constant lookups
 // in the modelTypeToSpec map.

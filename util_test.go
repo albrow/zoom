@@ -19,24 +19,24 @@ func TestReverseString(t *testing.T) {
 }
 
 func TestIndexOfStringSlice(t *testing.T) {
-	slice := []string{"one", "two", "three"}
-	index := indexOfStringSlice("two", slice)
+	strings := []string{"one", "two", "three"}
+	index := indexOfStringSlice(strings, "two")
 	if index != 1 {
 		t.Errorf("index was incorrect.\nExpected: %d\nGot: %d\n", 1, index)
 	}
-	index = indexOfStringSlice("four", slice)
+	index = indexOfStringSlice(strings, "four")
 	if index != -1 {
 		t.Errorf("index was incorrect.\nExpected: %d\nGot: %d\n", -1, index)
 	}
 }
 
 func TestStringSliceContains(t *testing.T) {
-	slice := []string{"one", "two", "three"}
-	contains := stringSliceContains("two", slice)
+	strings := []string{"one", "two", "three"}
+	contains := stringSliceContains(strings, "two")
 	if contains != true {
 		t.Errorf("contains was incorrect.\nExpected: %t\nGot: %t\n", true, contains)
 	}
-	contains = stringSliceContains("four", slice)
+	contains = stringSliceContains(strings, "four")
 	if contains != false {
 		t.Errorf("contains was incorrect.\nExpected: %t\nGot: %t\n", false, contains)
 	}

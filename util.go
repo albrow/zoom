@@ -73,11 +73,11 @@ func reverseString(s string) string {
 	return string(runes)
 }
 
-// indexOfStringSlice returns the index of a in list, or
-// -1 if a is not found in list
-func indexOfStringSlice(a string, list []string) int {
-	for i, b := range list {
-		if b == a {
+// indexOfStringSlice returns the index of s in strings, or
+// -1 if a is not found in strings
+func indexOfStringSlice(strings []string, s string) int {
+	for i, b := range strings {
+		if b == s {
 			return i
 		}
 	}
@@ -99,9 +99,9 @@ func indexOfSlice(a interface{}, list interface{}) int {
 	return -1
 }
 
-// stringSliceContains returns true iff list contains s
-func stringSliceContains(s string, list []string) bool {
-	return indexOfStringSlice(s, list) != -1
+// stringSliceContains returns true iff strings contains s
+func stringSliceContains(strings []string, s string) bool {
+	return indexOfStringSlice(strings, s) != -1
 }
 
 // sliceContains returns true iff list contains a
@@ -133,7 +133,7 @@ func removeElementFromStringSlice(list []string, elem string) []string {
 func compareAsStringSet(expecteds, gots []string) (bool, string) {
 	// make sure everything in expecteds is also in gots
 	for _, e := range expecteds {
-		index := indexOfStringSlice(e, gots)
+		index := indexOfStringSlice(gots, e)
 		if index == -1 {
 			msg := fmt.Sprintf("Missing expected element: %v", e)
 			return false, msg
@@ -142,7 +142,7 @@ func compareAsStringSet(expecteds, gots []string) (bool, string) {
 
 	// make sure everything in gots is also in expecteds
 	for _, g := range gots {
-		index := indexOfStringSlice(g, expecteds)
+		index := indexOfStringSlice(expecteds, g)
 		if index == -1 {
 			msg := fmt.Sprintf("Found extra element: %v", g)
 			return false, msg
@@ -266,6 +266,17 @@ func convertNumericToFloat64(val reflect.Value) float64 {
 	}
 }
 
+// convertBoolToInt converts a bool to an int using the following rule:
+// false = 0
+// true = 1
+func convertBoolToInt(b bool) int {
+	if b {
+		return 1
+	} else {
+		return 0
+	}
+}
+
 // modelIds returns the ids for models
 func modelIds(models []Model) []string {
 	results := make([]string, len(models))
@@ -273,17 +284,6 @@ func modelIds(models []Model) []string {
 		results[i] = m.GetId()
 	}
 	return results
-}
-
-// boolToInt converts a bool to an int using the following rule:
-// false = 0
-// true = 1
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	} else {
-		return 0
-	}
 }
 
 // generateRandomId generates a random string that is more or less

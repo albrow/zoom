@@ -143,3 +143,56 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 		expectSetContains(t, testModels.AllIndexKey(), model.Id)
 	}
 }
+
+func TestSaveStringIndexScript(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	type stringIndexModel struct {
+		String string `zoom:"index"`
+		DefaultData
+	}
+	stringIndexModels, err := Register(&stringIndexModel{})
+	if err != nil {
+		t.Errorf("Unexpected error registering stringIndexModel: %s", err.Error())
+	}
+	model := &stringIndexModel{
+		String: "foo",
+	}
+	model.Id = "testId"
+
+	// Run the script without an old field value
+	tx := NewTransaction()
+	tx.saveStringIndex(stringIndexModels.Name(), model.Id, "String", model.String)
+	if err := tx.Exec(); err != nil {
+		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
+	}
+
+	// Check that the index was set correctly
+	expectIndexExists(t, stringIndexModels, model, "String")
+
+	// Set the field value in the main hash
+	conn := GetConn()
+	defer conn.Close()
+	modelKey, _ := stringIndexModels.KeyForModel(model)
+	if _, err := conn.Do("HSET", modelKey, "String", model.String); err != nil {
+		t.Errorf("Unexpected error in HSET")
+	}
+
+	// Create a new model with the same id and change the value of the field
+	newModel := &stringIndexModel{
+		String: "bar",
+	}
+	newModel.Id = model.Id
+
+	// Run the script again. This time we expect the old index to be removed
+	tx = NewTransaction()
+	tx.saveStringIndex(stringIndexModels.Name(), newModel.Id, "String", newModel.String)
+	if err := tx.Exec(); err != nil {
+		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
+	}
+
+	// Check that the index was set correctly
+	expectIndexDoesNotExist(t, stringIndexModels, model, "String")
+	expectIndexExists(t, stringIndexModels, newModel, "String")
+}
