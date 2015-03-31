@@ -148,7 +148,7 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 	// Save indexes
 	// This must happen first, because it relies on reading the old field values
 	// from the hash for string indexes (if any)
-	t.saveModelIndexes(mr)
+	t.saveFieldIndexes(mr)
 
 	// Save the model fields in a hash in the database
 	hashArgs, err := mr.mainHashArgs()
@@ -167,7 +167,9 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 	t.Command("SADD", redis.Args{mt.AllIndexKey(), model.GetId()}, nil)
 }
 
-func (t *Transaction) saveModelIndexes(mr *modelRef) {
+// saveFieldIndexes adds commands to the transaction for saving the indexes
+// for all indexed fields.
+func (t *Transaction) saveFieldIndexes(mr *modelRef) {
 	for _, fs := range mr.spec.fields {
 		switch fs.indexKind {
 		case noIndex:
@@ -182,6 +184,8 @@ func (t *Transaction) saveModelIndexes(mr *modelRef) {
 	}
 }
 
+// saveNumericIndex adds commands to the transaction for saving a numeric
+// index on the given field.
 func (t *Transaction) saveNumericIndex(mr *modelRef, fs *fieldSpec) {
 	fieldValue := mr.fieldValue(fs.name)
 	score := numericScore(fieldValue)
@@ -192,6 +196,8 @@ func (t *Transaction) saveNumericIndex(mr *modelRef, fs *fieldSpec) {
 	t.Command("ZADD", redis.Args{indexKey, score, mr.model.GetId()}, nil)
 }
 
+// saveBooleanIndex adds commands to the transaction for saving a boolean
+// index on the given field.
 func (t *Transaction) saveBooleanIndex(mr *modelRef, fs *fieldSpec) {
 	fieldValue := mr.fieldValue(fs.name)
 	score := boolScore(fieldValue)
@@ -202,6 +208,8 @@ func (t *Transaction) saveBooleanIndex(mr *modelRef, fs *fieldSpec) {
 	t.Command("ZADD", redis.Args{indexKey, score, mr.model.GetId()}, nil)
 }
 
+// saveStringIndex adds commands to the transaction for saving a string
+// index on the given field. This includes removing the old index (if any).
 func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 	// Remove the old index (if any)
 	t.deleteStringIndex(mr.spec.name, mr.model.GetId(), fs.name)
@@ -336,14 +344,16 @@ func (t *Transaction) Delete(mt *ModelType, id string, deleted *bool) {
 	// Delete any field indexes
 	// This must happen first, because it relies on reading the old field values
 	// from the hash for string indexes (if any)
-	t.deleteModelIndexes(mt, id)
+	t.deleteFieldIndexes(mt, id)
 	// Delete the main hash
 	t.Command("DEL", redis.Args{mt.Name() + ":" + id}, newScanBoolHandler(deleted))
 	// Remvoe the id from the index of all models for the given type
 	t.Command("SREM", redis.Args{mt.AllIndexKey(), id}, nil)
 }
 
-func (t *Transaction) deleteModelIndexes(mt *ModelType, id string) {
+// deleteFieldIndexes adds commands to the transaction for deleting the field
+// indexes for all indexed fields of the given model type.
+func (t *Transaction) deleteFieldIndexes(mt *ModelType, id string) {
 	for _, fs := range mt.spec.fields {
 		switch fs.indexKind {
 		case noIndex:
@@ -357,6 +367,8 @@ func (t *Transaction) deleteModelIndexes(mt *ModelType, id string) {
 	}
 }
 
+// deleteNumericOrBooleanIndex removes the model from a numeric or boolean index for the given
+// field. I.e. it removes the model id from a sorted set.
 func (t *Transaction) deleteNumericOrBooleanIndex(fs *fieldSpec, ms *modelSpec, modelId string) {
 	indexKey, err := ms.fieldIndexKey(fs.name)
 	if err != nil {

@@ -14,131 +14,6 @@ import (
 	"testing"
 )
 
-var (
-	indexedPrimativesModels *ModelType
-	indexedPointersModels   *ModelType
-)
-
-type indexedPrimativesModel struct {
-	Uint    uint    `zoom:"index"`
-	Uint8   uint8   `zoom:"index"`
-	Uint16  uint16  `zoom:"index"`
-	Uint32  uint32  `zoom:"index"`
-	Uint64  uint64  `zoom:"index"`
-	Int     int     `zoom:"index"`
-	Int8    int8    `zoom:"index"`
-	Int16   int16   `zoom:"index"`
-	Int32   int32   `zoom:"index"`
-	Int64   int64   `zoom:"index"`
-	Float32 float32 `zoom:"index"`
-	Float64 float64 `zoom:"index"`
-	Byte    byte    `zoom:"index"`
-	Rune    rune    `zoom:"index"`
-	String  string  `zoom:"index"`
-	Bool    bool    `zoom:"index"`
-	DefaultData
-}
-
-type indexedPointersModel struct {
-	Uint    *uint    `zoom:"index"`
-	Uint8   *uint8   `zoom:"index"`
-	Uint16  *uint16  `zoom:"index"`
-	Uint32  *uint32  `zoom:"index"`
-	Uint64  *uint64  `zoom:"index"`
-	Int     *int     `zoom:"index"`
-	Int8    *int8    `zoom:"index"`
-	Int16   *int16   `zoom:"index"`
-	Int32   *int32   `zoom:"index"`
-	Int64   *int64   `zoom:"index"`
-	Float32 *float32 `zoom:"index"`
-	Float64 *float64 `zoom:"index"`
-	Byte    *byte    `zoom:"index"`
-	Rune    *rune    `zoom:"index"`
-	String  *string  `zoom:"index"`
-	Bool    *bool    `zoom:"index"`
-	DefaultData
-}
-
-func registerIndexedPointersModel() {
-	if indexedPointersModels == nil {
-		var err error
-		indexedPointersModels, err = Register(&indexedPointersModel{})
-		if err != nil {
-			msg := fmt.Sprintf("Unexpected error in Register: %s", err.Error())
-			panic(msg)
-		}
-	}
-}
-
-func registerIndexedPrimativesModel() {
-	if indexedPrimativesModels == nil {
-		var err error
-		indexedPrimativesModels, err = Register(&indexedPrimativesModel{})
-		if err != nil {
-			msg := fmt.Sprintf("Unexpected error in Register: %s", err.Error())
-			panic(msg)
-		}
-	}
-}
-
-func createIndexedPrimativesModel() *indexedPrimativesModel {
-	return &indexedPrimativesModel{
-		Uint:    uint(randomInt()),
-		Uint8:   uint8(randomInt()),
-		Uint16:  uint16(randomInt()),
-		Uint32:  uint32(randomInt()),
-		Uint64:  uint64(randomInt()),
-		Int:     randomInt(),
-		Int8:    int8(randomInt()),
-		Int16:   int16(randomInt()),
-		Int32:   int32(randomInt()),
-		Int64:   int64(randomInt()),
-		Float32: float32(randomInt()),
-		Float64: float64(randomInt()),
-		Byte:    []byte(randomString())[0],
-		Rune:    []rune(randomString())[0],
-		String:  randomString(),
-		Bool:    randomBool(),
-	}
-}
-
-func createIndexedPointersModel() *indexedPointersModel {
-	Uint := uint(randomInt())
-	Uint8 := uint8(randomInt())
-	Uint16 := uint16(randomInt())
-	Uint32 := uint32(randomInt())
-	Uint64 := uint64(randomInt())
-	Int := randomInt()
-	Int8 := int8(randomInt())
-	Int16 := int16(randomInt())
-	Int32 := int32(randomInt())
-	Int64 := int64(randomInt())
-	Float32 := float32(randomInt())
-	Float64 := float64(randomInt())
-	Byte := []byte(randomString())[0]
-	Rune := []rune(randomString())[0]
-	String := randomString()
-	Bool := randomBool()
-	return &indexedPointersModel{
-		Uint:    &Uint,
-		Uint8:   &Uint8,
-		Uint16:  &Uint16,
-		Uint32:  &Uint32,
-		Uint64:  &Uint64,
-		Int:     &Int,
-		Int8:    &Int8,
-		Int16:   &Int16,
-		Int32:   &Int32,
-		Int64:   &Int64,
-		Float32: &Float32,
-		Float64: &Float64,
-		Byte:    &Byte,
-		Rune:    &Rune,
-		String:  &String,
-		Bool:    &Bool,
-	}
-}
-
 // Test that the redis ignore struct tag causes a field to be ignored
 func TestRedisIgnoreOption(t *testing.T) {
 	testingSetUp()
@@ -229,6 +104,139 @@ func TestInvalidOptionThrowsError(t *testing.T) {
 	}
 	if _, err := Register(&invalid{}); err == nil {
 		t.Error("Expected error when registering struct with invalid tag")
+	}
+}
+
+var (
+	indexedPrimativesModels *ModelType
+	indexedPointersModels   *ModelType
+)
+
+type indexedPrimativesModel struct {
+	Uint    uint    `zoom:"index"`
+	Uint8   uint8   `zoom:"index"`
+	Uint16  uint16  `zoom:"index"`
+	Uint32  uint32  `zoom:"index"`
+	Uint64  uint64  `zoom:"index"`
+	Int     int     `zoom:"index"`
+	Int8    int8    `zoom:"index"`
+	Int16   int16   `zoom:"index"`
+	Int32   int32   `zoom:"index"`
+	Int64   int64   `zoom:"index"`
+	Float32 float32 `zoom:"index"`
+	Float64 float64 `zoom:"index"`
+	Byte    byte    `zoom:"index"`
+	Rune    rune    `zoom:"index"`
+	String  string  `zoom:"index"`
+	Bool    bool    `zoom:"index"`
+	DefaultData
+}
+
+type indexedPointersModel struct {
+	Uint    *uint    `zoom:"index"`
+	Uint8   *uint8   `zoom:"index"`
+	Uint16  *uint16  `zoom:"index"`
+	Uint32  *uint32  `zoom:"index"`
+	Uint64  *uint64  `zoom:"index"`
+	Int     *int     `zoom:"index"`
+	Int8    *int8    `zoom:"index"`
+	Int16   *int16   `zoom:"index"`
+	Int32   *int32   `zoom:"index"`
+	Int64   *int64   `zoom:"index"`
+	Float32 *float32 `zoom:"index"`
+	Float64 *float64 `zoom:"index"`
+	Byte    *byte    `zoom:"index"`
+	Rune    *rune    `zoom:"index"`
+	String  *string  `zoom:"index"`
+	Bool    *bool    `zoom:"index"`
+	DefaultData
+}
+
+// registerIndexedPrimativesModel registers the indexedPrimativesModel type and sets the value
+// of indexedPrimativesModels the first time it is called. Successive calls have no effect.
+func registerIndexedPrimativesModel() {
+	if indexedPrimativesModels == nil {
+		var err error
+		indexedPrimativesModels, err = Register(&indexedPrimativesModel{})
+		if err != nil {
+			msg := fmt.Sprintf("Unexpected error in Register: %s", err.Error())
+			panic(msg)
+		}
+	}
+}
+
+// registerIndexedPointersModel registers the indexedPointersModel type and sets the value
+// of indexedPointersModels the first time it is called. Successive calls have no effect.
+func registerIndexedPointersModel() {
+	if indexedPointersModels == nil {
+		var err error
+		indexedPointersModels, err = Register(&indexedPointersModel{})
+		if err != nil {
+			msg := fmt.Sprintf("Unexpected error in Register: %s", err.Error())
+			panic(msg)
+		}
+	}
+}
+
+// createIndexedPrimativesModel instantiates and returns an indexedPrimativesModel with
+// random values for all fields.
+func createIndexedPrimativesModel() *indexedPrimativesModel {
+	return &indexedPrimativesModel{
+		Uint:    uint(randomInt()),
+		Uint8:   uint8(randomInt()),
+		Uint16:  uint16(randomInt()),
+		Uint32:  uint32(randomInt()),
+		Uint64:  uint64(randomInt()),
+		Int:     randomInt(),
+		Int8:    int8(randomInt()),
+		Int16:   int16(randomInt()),
+		Int32:   int32(randomInt()),
+		Int64:   int64(randomInt()),
+		Float32: float32(randomInt()),
+		Float64: float64(randomInt()),
+		Byte:    []byte(randomString())[0],
+		Rune:    []rune(randomString())[0],
+		String:  randomString(),
+		Bool:    randomBool(),
+	}
+}
+
+// createIndexedPointersModel instantiates and returns an indexedPointersModel with
+// random values for all fields.
+func createIndexedPointersModel() *indexedPointersModel {
+	Uint := uint(randomInt())
+	Uint8 := uint8(randomInt())
+	Uint16 := uint16(randomInt())
+	Uint32 := uint32(randomInt())
+	Uint64 := uint64(randomInt())
+	Int := randomInt()
+	Int8 := int8(randomInt())
+	Int16 := int16(randomInt())
+	Int32 := int32(randomInt())
+	Int64 := int64(randomInt())
+	Float32 := float32(randomInt())
+	Float64 := float64(randomInt())
+	Byte := []byte(randomString())[0]
+	Rune := []rune(randomString())[0]
+	String := randomString()
+	Bool := randomBool()
+	return &indexedPointersModel{
+		Uint:    &Uint,
+		Uint8:   &Uint8,
+		Uint16:  &Uint16,
+		Uint32:  &Uint32,
+		Uint64:  &Uint64,
+		Int:     &Int,
+		Int8:    &Int8,
+		Int16:   &Int16,
+		Int32:   &Int32,
+		Int64:   &Int64,
+		Float32: &Float32,
+		Float64: &Float64,
+		Byte:    &Byte,
+		Rune:    &Rune,
+		String:  &String,
+		Bool:    &Bool,
 	}
 }
 
@@ -332,51 +340,3 @@ func TestDeleteIndexedPointersModel(t *testing.T) {
 		expectIndexDoesNotExist(t, indexedPointersModels, model, field.Name)
 	}
 }
-
-// // Test that the indexes are removed from redis after a model with pointer indexes is deleted
-// func TestDeleteIndexedPointersModel(t *testing.T) {
-// 	testingSetUp()
-// 	defer testingTearDown()
-
-// 	ms, err := newIndexedPointersModels(1)
-// 	if err != nil {
-// 		t.Error(err)
-// 	}
-// 	m := ms[0]
-
-// 	if err := Save(m); err != nil {
-// 		t.Error(err)
-// 	}
-// 	if err := Delete(m); err != nil {
-// 		t.Error(err)
-// 	}
-
-// 	conn := GetConn()
-// 	defer conn.Close()
-
-// 	spec, found := modelSpecs["indexedPointersModel"]
-// 	if !found {
-// 		t.Error("Could not find modelSpec for indexedPointersModel")
-// 	}
-// 	numFields := spec.modelType.Elem().NumField()
-
-// 	// iterate through each field using reflection and validate that the index was set properly
-// 	for i := 0; i < numFields; i++ {
-// 		field := spec.modelType.Elem().Field(i)
-// 		if field.Anonymous {
-// 			continue // skip embedded structs
-// 		}
-// 		ptr := reflect.ValueOf(m).Elem().FieldByName(field.Name)
-// 		val := ptr.Elem()
-// 		switch {
-// 		case typeIsNumeric(field.Type.Elem()):
-// 			validateNumericIndexNotExists(t, "indexedPointersModel", m.Id, field.Name, val, conn)
-// 		case typeIsString(field.Type.Elem()):
-// 			validateAlphaIndexNotExists(t, "indexedPointersModel", m.Id, field.Name, val.String(), conn)
-// 		case typeIsBool(field.Type.Elem()):
-// 			validateBooleanIndexNotExists(t, "indexedPointersModel", m.Id, field.Name, val.Bool(), conn)
-// 		default:
-// 			t.Errorf("Unexpected type %s in struct for %s", field.Type.String(), "indexedPrimativesModel")
-// 		}
-// 	}
-// }

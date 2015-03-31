@@ -350,7 +350,9 @@ func expectIndexDoesNotExist(t *testing.T, modelType *ModelType, model Model, fi
 	}
 }
 
-// numericIndexExists returns true iff a numeric index on the given type and field exists.
+// numericIndexExists returns true iff a numeric index on the given type and field exists. It
+// reads the current field value from model and if it is a pointer, dereferences it until
+// it reaches the underlying value.
 func numericIndexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
 	indexKey, err := modelType.FieldIndexKey(fieldName)
 	if err != nil {
@@ -367,7 +369,9 @@ func numericIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 	return stringSliceContains(gotIds, model.GetId()), nil
 }
 
-// stringIndexExists returns true iff a string index on the given type and field exists
+// stringIndexExists returns true iff a string index on the given type and field exists. It
+// reads the current field value from model and if it is a pointer, dereferences it until
+// it reaches the underlying value.
 func stringIndexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
 	indexKey, err := modelType.FieldIndexKey(fieldName)
 	if err != nil {
@@ -388,7 +392,9 @@ func stringIndexExists(modelType *ModelType, model Model, fieldName string) (boo
 	}
 }
 
-// boolesnIndexExists returns true iff a boolesn index on the given type and field exists
+// booleanIndexExists returns true iff a boolean index on the given type and field exists. It
+// reads the current field value from model and if it is a pointer, dereferences it until
+// it reaches the underlying value.
 func booleanIndexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
 	indexKey, err := modelType.FieldIndexKey(fieldName)
 	if err != nil {
