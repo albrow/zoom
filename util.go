@@ -248,10 +248,14 @@ func looseEquals(one, two interface{}) (bool, error) {
 	return (string(oneBytes) == string(twoBytes)), nil
 }
 
-// convertNumericToFloat64 converts val to a float64. It panics if val
-// is not a numeric type
-func convertNumericToFloat64(val reflect.Value) float64 {
-	switch val.Type().Kind() {
+// numericScore returns a float64 which is the score for val in a sorted set.
+// If val is a pointer, it will keep dereferencing until it reaches the underlying
+// value. It panics if val is not a numeric type or a pointer to a numeric type.
+func numericScore(val reflect.Value) float64 {
+	for val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	switch val.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		integer := val.Int()
 		return float64(integer)
@@ -261,9 +265,23 @@ func convertNumericToFloat64(val reflect.Value) float64 {
 	case reflect.Float32, reflect.Float64:
 		return val.Float()
 	default:
-		msg := fmt.Sprintf("zoom: attempt to call convertNumericToFloat64 on non-numeric type %s", val.Type().String())
+		msg := fmt.Sprintf("zoom: attempt to call numericScore on non-numeric type %s", val.Type().String())
 		panic(msg)
 	}
+}
+
+// boolScore returns an int which is the score for val in a sorted set.
+// If val is a pointer, it will keep dereferencing until it reaches the underlying
+// value. It panics if val is not a boolean or a pointer to a boolean.
+func boolScore(val reflect.Value) int {
+	for val.Kind() == reflect.Ptr {
+		val = val.Elem()
+	}
+	if val.Kind() != reflect.Bool {
+		msg := fmt.Sprintf("zoom: attempt to call boolScore on non-boolean type %s", val.Type().String())
+		panic(msg)
+	}
+	return convertBoolToInt(val.Bool())
 }
 
 // convertBoolToInt converts a bool to an int using the following rule:

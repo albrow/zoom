@@ -177,15 +177,14 @@ func (t *Transaction) saveModelIndexes(mr *modelRef) {
 		case booleanIndex:
 			t.saveBooleanIndex(mr, fs)
 		case stringIndex:
-			// NOTE saveStringIndex invokes a script and so it is found in scripts.go
-			t.saveStringIndex(mr.spec.name, mr.model.GetId(), fs.name, mr.fieldValue(fs.name).String())
+			t.saveStringIndex(mr, fs)
 		}
 	}
 }
 
 func (t *Transaction) saveNumericIndex(mr *modelRef, fs *fieldSpec) {
 	fieldValue := mr.fieldValue(fs.name)
-	score := convertNumericToFloat64(fieldValue)
+	score := numericScore(fieldValue)
 	indexKey, err := mr.spec.fieldIndexKey(fs.name)
 	if err != nil {
 		t.setError(err)
@@ -194,13 +193,28 @@ func (t *Transaction) saveNumericIndex(mr *modelRef, fs *fieldSpec) {
 }
 
 func (t *Transaction) saveBooleanIndex(mr *modelRef, fs *fieldSpec) {
-	fieldValue := mr.fieldValue(fs.name).Bool()
-	score := convertBoolToInt(fieldValue)
+	fieldValue := mr.fieldValue(fs.name)
+	score := boolScore(fieldValue)
 	indexKey, err := mr.spec.fieldIndexKey(fs.name)
 	if err != nil {
 		t.setError(err)
 	}
 	t.Command("ZADD", redis.Args{indexKey, score, mr.model.GetId()}, nil)
+}
+
+func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
+	// Remove the old index (if any)
+	t.deleteStringIndex(mr.spec.name, mr.model.GetId(), fs.name)
+	fieldValue := mr.fieldValue(fs.name)
+	for fieldValue.Kind() == reflect.Ptr {
+		fieldValue = fieldValue.Elem()
+	}
+	member := fieldValue.String() + " " + mr.model.GetId()
+	indexKey, err := mr.spec.fieldIndexKey(fs.name)
+	if err != nil {
+		t.setError(err)
+	}
+	t.Command("ZADD", redis.Args{indexKey, 0, member}, nil)
 }
 
 // Find retrieves a model with the given id from redis and scans its values
@@ -319,8 +333,36 @@ func (mt *ModelType) Delete(id string) (bool, error) {
 // added to the transaction and returned as an error when the transaction is
 // executed.
 func (t *Transaction) Delete(mt *ModelType, id string, deleted *bool) {
+	// Delete any field indexes
+	// This must happen first, because it relies on reading the old field values
+	// from the hash for string indexes (if any)
+	t.deleteModelIndexes(mt, id)
+	// Delete the main hash
 	t.Command("DEL", redis.Args{mt.Name() + ":" + id}, newScanBoolHandler(deleted))
+	// Remvoe the id from the index of all models for the given type
 	t.Command("SREM", redis.Args{mt.AllIndexKey(), id}, nil)
+}
+
+func (t *Transaction) deleteModelIndexes(mt *ModelType, id string) {
+	for _, fs := range mt.spec.fields {
+		switch fs.indexKind {
+		case noIndex:
+			continue
+		case numericIndex, booleanIndex:
+			t.deleteNumericOrBooleanIndex(fs, mt.spec, id)
+		case stringIndex:
+			// NOTE: this invokes a lua script which is defined in scripts/delete_string_index.lua
+			t.deleteStringIndex(mt.Name(), id, fs.name)
+		}
+	}
+}
+
+func (t *Transaction) deleteNumericOrBooleanIndex(fs *fieldSpec, ms *modelSpec, modelId string) {
+	indexKey, err := ms.fieldIndexKey(fs.name)
+	if err != nil {
+		t.setError(err)
+	}
+	t.Command("ZREM", redis.Args{indexKey, modelId}, nil)
 }
 
 // DeleteAll deletes all the models of the given type in a single transaction. See

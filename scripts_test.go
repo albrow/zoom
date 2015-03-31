@@ -144,10 +144,11 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 	}
 }
 
-func TestSaveStringIndexScript(t *testing.T) {
+func TestDeleteStringIndexScript(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
+	// Register a new model type with an indexed string field
 	type stringIndexModel struct {
 		String string `zoom:"index"`
 		DefaultData
@@ -156,20 +157,19 @@ func TestSaveStringIndexScript(t *testing.T) {
 	if err != nil {
 		t.Errorf("Unexpected error registering stringIndexModel: %s", err.Error())
 	}
+
+	// Create a new model (but don't save it yet)
 	model := &stringIndexModel{
 		String: "foo",
 	}
 	model.Id = "testId"
 
-	// Run the script without an old field value
+	// Run the script before saving the hash, to make sure it does not cause an error
 	tx := NewTransaction()
-	tx.saveStringIndex(stringIndexModels.Name(), model.Id, "String", model.String)
+	tx.deleteStringIndex(stringIndexModels.Name(), model.Id, "String")
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
-
-	// Check that the index was set correctly
-	expectIndexExists(t, stringIndexModels, model, "String")
 
 	// Set the field value in the main hash
 	conn := GetConn()
@@ -179,20 +179,23 @@ func TestSaveStringIndexScript(t *testing.T) {
 		t.Errorf("Unexpected error in HSET")
 	}
 
-	// Create a new model with the same id and change the value of the field
-	newModel := &stringIndexModel{
-		String: "bar",
+	// Add the model to the index for the string field
+	fieldIndexKey, err := stringIndexModels.FieldIndexKey("String")
+	if err != nil {
+		t.Fatalf("Unexpected error in FieldIndexKey: %s", err.Error())
 	}
-	newModel.Id = model.Id
+	member := model.String + " " + model.Id
+	if _, err := conn.Do("ZADD", fieldIndexKey, 0, member); err != nil {
+		t.Fatalf("Unexpected error in ZADD: %s", err.Error())
+	}
 
-	// Run the script again. This time we expect the old index to be removed
+	// Run the script again. This time we expect the index to be removed
 	tx = NewTransaction()
-	tx.saveStringIndex(stringIndexModels.Name(), newModel.Id, "String", newModel.String)
+	tx.deleteStringIndex(stringIndexModels.Name(), model.Id, "String")
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
 
-	// Check that the index was set correctly
+	// Check that the index was removed
 	expectIndexDoesNotExist(t, stringIndexModels, model, "String")
-	expectIndexExists(t, stringIndexModels, newModel, "String")
 }

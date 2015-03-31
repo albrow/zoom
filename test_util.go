@@ -310,12 +310,16 @@ func indexExists(modelType *ModelType, model Model, fieldName string) (bool, err
 	} else if fs.indexKind == noIndex {
 		return false, fmt.Errorf("%s.%s is not an indexed field", modelType.spec.typ.String(), fieldName)
 	}
+	typ := fs.fieldType
+	for typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
 	switch {
-	case typeIsNumeric(fs.fieldType):
+	case typeIsNumeric(typ):
 		return numericIndexExists(modelType, model, fieldName)
-	case typeIsString(fs.fieldType):
+	case typeIsString(typ):
 		return stringIndexExists(modelType, model, fieldName)
-	case typeIsBool(fs.fieldType):
+	case typeIsBool(typ):
 		return booleanIndexExists(modelType, model, fieldName)
 	default:
 		return false, fmt.Errorf("Unknown indexed field type %s", fs.fieldType)
@@ -353,7 +357,7 @@ func numericIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 		return false, err
 	}
 	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName)
-	score := convertNumericToFloat64(fieldValue)
+	score := numericScore(fieldValue)
 	conn := GetConn()
 	defer conn.Close()
 	gotIds, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
@@ -369,8 +373,11 @@ func stringIndexExists(modelType *ModelType, model Model, fieldName string) (boo
 	if err != nil {
 		return false, err
 	}
-	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName).String()
-	memberKey := fieldValue + " " + model.GetId()
+	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName)
+	for fieldValue.Kind() == reflect.Ptr {
+		fieldValue = fieldValue.Elem()
+	}
+	memberKey := fieldValue.String() + " " + model.GetId()
 	conn := GetConn()
 	defer conn.Close()
 	reply, err := conn.Do("ZRANK", indexKey, memberKey)
@@ -387,8 +394,8 @@ func booleanIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 	if err != nil {
 		return false, err
 	}
-	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName).Bool()
-	score := convertBoolToInt(fieldValue)
+	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName)
+	score := boolScore(fieldValue)
 	conn := GetConn()
 	defer conn.Close()
 	gotIds, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))

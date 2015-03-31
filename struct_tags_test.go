@@ -9,9 +9,135 @@
 package zoom
 
 import (
+	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"testing"
 )
+
+var (
+	indexedPrimativesModels *ModelType
+	indexedPointersModels   *ModelType
+)
+
+type indexedPrimativesModel struct {
+	Uint    uint    `zoom:"index"`
+	Uint8   uint8   `zoom:"index"`
+	Uint16  uint16  `zoom:"index"`
+	Uint32  uint32  `zoom:"index"`
+	Uint64  uint64  `zoom:"index"`
+	Int     int     `zoom:"index"`
+	Int8    int8    `zoom:"index"`
+	Int16   int16   `zoom:"index"`
+	Int32   int32   `zoom:"index"`
+	Int64   int64   `zoom:"index"`
+	Float32 float32 `zoom:"index"`
+	Float64 float64 `zoom:"index"`
+	Byte    byte    `zoom:"index"`
+	Rune    rune    `zoom:"index"`
+	String  string  `zoom:"index"`
+	Bool    bool    `zoom:"index"`
+	DefaultData
+}
+
+type indexedPointersModel struct {
+	Uint    *uint    `zoom:"index"`
+	Uint8   *uint8   `zoom:"index"`
+	Uint16  *uint16  `zoom:"index"`
+	Uint32  *uint32  `zoom:"index"`
+	Uint64  *uint64  `zoom:"index"`
+	Int     *int     `zoom:"index"`
+	Int8    *int8    `zoom:"index"`
+	Int16   *int16   `zoom:"index"`
+	Int32   *int32   `zoom:"index"`
+	Int64   *int64   `zoom:"index"`
+	Float32 *float32 `zoom:"index"`
+	Float64 *float64 `zoom:"index"`
+	Byte    *byte    `zoom:"index"`
+	Rune    *rune    `zoom:"index"`
+	String  *string  `zoom:"index"`
+	Bool    *bool    `zoom:"index"`
+	DefaultData
+}
+
+func registerIndexedPointersModel() {
+	if indexedPointersModels == nil {
+		var err error
+		indexedPointersModels, err = Register(&indexedPointersModel{})
+		if err != nil {
+			msg := fmt.Sprintf("Unexpected error in Register: %s", err.Error())
+			panic(msg)
+		}
+	}
+}
+
+func registerIndexedPrimativesModel() {
+	if indexedPrimativesModels == nil {
+		var err error
+		indexedPrimativesModels, err = Register(&indexedPrimativesModel{})
+		if err != nil {
+			msg := fmt.Sprintf("Unexpected error in Register: %s", err.Error())
+			panic(msg)
+		}
+	}
+}
+
+func createIndexedPrimativesModel() *indexedPrimativesModel {
+	return &indexedPrimativesModel{
+		Uint:    uint(randomInt()),
+		Uint8:   uint8(randomInt()),
+		Uint16:  uint16(randomInt()),
+		Uint32:  uint32(randomInt()),
+		Uint64:  uint64(randomInt()),
+		Int:     randomInt(),
+		Int8:    int8(randomInt()),
+		Int16:   int16(randomInt()),
+		Int32:   int32(randomInt()),
+		Int64:   int64(randomInt()),
+		Float32: float32(randomInt()),
+		Float64: float64(randomInt()),
+		Byte:    []byte(randomString())[0],
+		Rune:    []rune(randomString())[0],
+		String:  randomString(),
+		Bool:    randomBool(),
+	}
+}
+
+func createIndexedPointersModel() *indexedPointersModel {
+	Uint := uint(randomInt())
+	Uint8 := uint8(randomInt())
+	Uint16 := uint16(randomInt())
+	Uint32 := uint32(randomInt())
+	Uint64 := uint64(randomInt())
+	Int := randomInt()
+	Int8 := int8(randomInt())
+	Int16 := int16(randomInt())
+	Int32 := int32(randomInt())
+	Int64 := int64(randomInt())
+	Float32 := float32(randomInt())
+	Float64 := float64(randomInt())
+	Byte := []byte(randomString())[0]
+	Rune := []rune(randomString())[0]
+	String := randomString()
+	Bool := randomBool()
+	return &indexedPointersModel{
+		Uint:    &Uint,
+		Uint8:   &Uint8,
+		Uint16:  &Uint16,
+		Uint32:  &Uint32,
+		Uint64:  &Uint64,
+		Int:     &Int,
+		Int8:    &Int8,
+		Int16:   &Int16,
+		Int32:   &Int32,
+		Int64:   &Int64,
+		Float32: &Float32,
+		Float64: &Float64,
+		Byte:    &Byte,
+		Rune:    &Rune,
+		String:  &String,
+		Bool:    &Bool,
+	}
+}
 
 // Test that the redis ignore struct tag causes a field to be ignored
 func TestRedisIgnoreOption(t *testing.T) {
@@ -106,123 +232,106 @@ func TestInvalidOptionThrowsError(t *testing.T) {
 	}
 }
 
-// Test that the indexes are actually created in redis for a model with primative indexes
-func TestSaveIndexedTestModel(t *testing.T) {
+// Test that the indexes are actually created in redis for a model with all
+// the different indexed primative fields
+func TestSaveIndexedPrimativesModel(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
+	registerIndexedPrimativesModel()
 
-	models, err := createAndSaveIndexedTestModels(1)
-	if err != nil {
-		t.Error(err)
-	}
-	model := models[0]
-
-	if err := indexedTestModels.Save(model); err != nil {
-		t.Error("Unexpected error in Save: %s", err.Error())
+	// Create and save a new model with random primative fields
+	model := createIndexedPrimativesModel()
+	if err := indexedPrimativesModels.Save(model); err != nil {
+		t.Fatalf("Unexpected error in Save: %s", err.Error())
 	}
 
-	// iterate through each field using reflection and validate that the index was set properly
-	numFields := indexedTestModels.spec.typ.Elem().NumField()
+	// Iterate through each field using reflection and validate that the index was set properly
+	numFields := indexedPrimativesModels.spec.typ.Elem().NumField()
 	for i := 0; i < numFields; i++ {
-		field := indexedTestModels.spec.typ.Elem().Field(i)
+		field := indexedPrimativesModels.spec.typ.Elem().Field(i)
 		if field.Anonymous {
-			continue // skip embedded structs
+			continue // Skip embedded structs
 		}
-		expectIndexExists(t, indexedTestModels, model, field.Name)
+		expectIndexExists(t, indexedPrimativesModels, model, field.Name)
 	}
 }
 
-// // Test that the indexes are actually created in redis for a model with pointer indexes
-// func TestSaveIndexedPointersModel(t *testing.T) {
-// 	testingSetUp()
-// 	defer testingTearDown()
+// Test that the indexes are actually created in redis for a model with all
+// the different indexed pointer to primative fields
+func TestSaveIndexedPointersModel(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+	registerIndexedPointersModel()
 
-// 	ms, err := newIndexedPointersModels(1)
-// 	if err != nil {
-// 		t.Error(err)
-// 	}
-// 	m := ms[0]
+	// Create and save a new model with random pointer to primative fields
+	model := createIndexedPointersModel()
+	if err := indexedPointersModels.Save(model); err != nil {
+		t.Fatalf("Unexpected error in Save: %s", err.Error())
+	}
 
-// 	if err := Save(m); err != nil {
-// 		t.Error(err)
-// 	}
+	// Iterate through each field using reflection and validate that the index was set properly
+	numFields := indexedPointersModels.spec.typ.Elem().NumField()
+	for i := 0; i < numFields; i++ {
+		field := indexedPointersModels.spec.typ.Elem().Field(i)
+		if field.Anonymous {
+			continue // Skip embedded structs
+		}
+		expectIndexExists(t, indexedPointersModels, model, field.Name)
+	}
+}
 
-// 	conn := GetConn()
-// 	defer conn.Close()
+// Test that the indexes are removed from redis after a model with primative indexes is deleted
+func TestDeleteIndexedPrimativesModel(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+	registerIndexedPrimativesModel()
 
-// 	spec, found := modelSpecs["indexedPointersModel"]
-// 	if !found {
-// 		t.Error("Could not find modelSpec for indexedPointersModel")
-// 	}
-// 	numFields := spec.modelType.Elem().NumField()
+	// Create and save a new model with random primative fields
+	model := createIndexedPrimativesModel()
+	if err := indexedPrimativesModels.Save(model); err != nil {
+		t.Fatalf("Unexpected error in Save: %s", err.Error())
+	}
+	if _, err := indexedPrimativesModels.Delete(model.Id); err != nil {
+		t.Fatalf("Unexpected error in Delete: %s", err.Error())
+	}
 
-// 	// iterate through each field using reflection and validate that the index was set properly
-// 	for i := 0; i < numFields; i++ {
-// 		field := spec.modelType.Elem().Field(i)
-// 		if field.Anonymous {
-// 			continue // skip embedded structs
-// 		}
-// 		ptr := reflect.ValueOf(m).Elem().FieldByName(field.Name)
-// 		val := ptr.Elem()
-// 		switch {
-// 		case typeIsNumeric(field.Type.Elem()):
-// 			validateNumericIndexExists(t, "indexedPointersModel", m.Id, field.Name, val, conn)
-// 		case typeIsString(field.Type.Elem()):
-// 			validateAlphaIndexExists(t, "indexedPointersModel", m.Id, field.Name, val.String(), conn)
-// 		case typeIsBool(field.Type.Elem()):
-// 			validateBooleanIndexExists(t, "indexedPointersModel", m.Id, field.Name, val.Bool(), conn)
-// 		default:
-// 			t.Errorf("Unexpected type %s in struct for %s", field.Type.String(), "indexedPrimativesModel")
-// 		}
-// 	}
-// }
+	// Iterate through each field using reflection and validate that the index was set properly
+	numFields := indexedPrimativesModels.spec.typ.Elem().NumField()
+	for i := 0; i < numFields; i++ {
+		field := indexedPrimativesModels.spec.typ.Elem().Field(i)
+		if field.Anonymous {
+			continue // Skip embedded structs
+		}
+		expectIndexDoesNotExist(t, indexedPrimativesModels, model, field.Name)
+	}
+}
 
-// // Test that the indexes are removed from redis after a model with primative indexes is deleted
-// func TestDeleteIndexedPrimativesModel(t *testing.T) {
-// 	testingSetUp()
-// 	defer testingTearDown()
+// Test that the indexes are removed from redis after a model with indexed pointer to primative
+// fields is deleted
+func TestDeleteIndexedPointersModel(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+	registerIndexedPointersModel()
 
-// 	ms, err := newIndexedPrimativesModels(1)
-// 	if err != nil {
-// 		t.Error(err)
-// 	}
-// 	m := ms[0]
+	// Create and save a new model with random pointer to primative fields
+	model := createIndexedPointersModel()
+	if err := indexedPointersModels.Save(model); err != nil {
+		t.Fatalf("Unexpected error in Save: %s", err.Error())
+	}
+	if _, err := indexedPointersModels.Delete(model.Id); err != nil {
+		t.Fatalf("Unexpected error in Delete: %s", err.Error())
+	}
 
-// 	if err := Save(m); err != nil {
-// 		t.Error(err)
-// 	}
-// 	if err := Delete(m); err != nil {
-// 		t.Error(err)
-// 	}
-
-// 	conn := GetConn()
-// 	defer conn.Close()
-
-// 	spec, found := modelSpecs["indexedPrimativesModel"]
-// 	if !found {
-// 		t.Error("Could not find modelSpec for indexedPrimativesModel")
-// 	}
-// 	numFields := spec.modelType.Elem().NumField()
-
-// 	// iterate through each field using reflection and validate that the index was set properly
-// 	for i := 0; i < numFields; i++ {
-// 		field := spec.modelType.Elem().Field(i)
-// 		if field.Anonymous {
-// 			continue // skip embedded structs
-// 		}
-// 		val := reflect.ValueOf(m).Elem().FieldByName(field.Name)
-// 		switch {
-// 		case typeIsNumeric(field.Type):
-// 			validateNumericIndexNotExists(t, "indexedPrimativesModel", m.Id, field.Name, val, conn)
-// 		case typeIsString(field.Type):
-// 			validateAlphaIndexNotExists(t, "indexedPrimativesModel", m.Id, field.Name, val.String(), conn)
-// 		case typeIsBool(field.Type):
-// 			validateBooleanIndexNotExists(t, "indexedPrimativesModel", m.Id, field.Name, val.Bool(), conn)
-// 		default:
-// 			t.Errorf("Unexpected type %s in struct for %s", field.Type.String(), "indexedPrimativesModel")
-// 		}
-// 	}
-// }
+	// Iterate through each field using reflection and validate that the index was set properly
+	numFields := indexedPointersModels.spec.typ.Elem().NumField()
+	for i := 0; i < numFields; i++ {
+		field := indexedPointersModels.spec.typ.Elem().Field(i)
+		if field.Anonymous {
+			continue // Skip embedded structs
+		}
+		expectIndexDoesNotExist(t, indexedPointersModels, model, field.Name)
+	}
+}
 
 // // Test that the indexes are removed from redis after a model with pointer indexes is deleted
 // func TestDeleteIndexedPointersModel(t *testing.T) {
@@ -270,79 +379,4 @@ func TestSaveIndexedTestModel(t *testing.T) {
 // 			t.Errorf("Unexpected type %s in struct for %s", field.Type.String(), "indexedPrimativesModel")
 // 		}
 // 	}
-// }
-
-// func TestUpdateIndexedNumericModel(t *testing.T) {
-// 	testingSetUp()
-// 	defer testingTearDown()
-
-// 	conn := GetConn()
-// 	defer conn.Close()
-
-// 	m := new(indexedPrimativesModel)
-// 	m.Int = 123
-// 	if err := Save(m); err != nil {
-// 		t.Error(err)
-// 	}
-// 	validateNumericIndexExists(t, "indexedPrimativesModel", m.Id, "Int", reflect.ValueOf(123), conn)
-
-// 	// now change the Int field and make sure the index was updated
-// 	m.Int = 456
-// 	if err := Save(m); err != nil {
-// 		t.Error(err)
-// 	}
-// 	// index should exist on field value 456 (the new value)
-// 	validateNumericIndexExists(t, "indexedPrimativesModel", m.Id, "Int", reflect.ValueOf(456), conn)
-// 	// index should not exist on field value 123 (the old value)
-// 	validateNumericIndexNotExists(t, "indexedPrimativesModel", m.Id, "Int", reflect.ValueOf(123), conn)
-// }
-
-// func TestUpdateIndexedAlphaModel(t *testing.T) {
-// 	testingSetUp()
-// 	defer testingTearDown()
-
-// 	conn := GetConn()
-// 	defer conn.Close()
-
-// 	m := new(indexedPrimativesModel)
-// 	m.String = "aaa"
-// 	if err := Save(m); err != nil {
-// 		t.Error(err)
-// 	}
-// 	validateAlphaIndexExists(t, "indexedPrimativesModel", m.Id, "String", "aaa", conn)
-
-// 	// now change the String field and make sure the index was updated
-// 	m.String = "bbb"
-// 	if err := Save(m); err != nil {
-// 		t.Error(err)
-// 	}
-// 	// index should exist on field value "bbb" (the new value)
-// 	validateAlphaIndexExists(t, "indexedPrimativesModel", m.Id, "String", "bbb", conn)
-// 	// index should not exist on field value "aaa" (the old value)
-// 	validateAlphaIndexNotExists(t, "indexedPrimativesModel", m.Id, "String", "aaa", conn)
-// }
-
-// func TestUpdateIndexedBooleanModel(t *testing.T) {
-// 	testingSetUp()
-// 	defer testingTearDown()
-
-// 	conn := GetConn()
-// 	defer conn.Close()
-
-// 	m := new(indexedPrimativesModel)
-// 	m.Bool = false
-// 	if err := Save(m); err != nil {
-// 		t.Error(err)
-// 	}
-// 	validateBooleanIndexExists(t, "indexedPrimativesModel", m.Id, "Bool", false, conn)
-
-// 	// now change the Bool field and make sure the index was updated
-// 	m.Bool = true
-// 	if err := Save(m); err != nil {
-// 		t.Error(err)
-// 	}
-// 	// index should exist on field value true (the new value)
-// 	validateBooleanIndexExists(t, "indexedPrimativesModel", m.Id, "Bool", true, conn)
-// 	// index should not exist on field value false (the old value)
-// 	validateBooleanIndexNotExists(t, "indexedPrimativesModel", m.Id, "Bool", false, conn)
 // }

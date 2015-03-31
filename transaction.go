@@ -135,7 +135,9 @@ func (t *Transaction) Exec() error {
 		}
 	} else {
 		// Send all the commands and scripts at once using MULTI/EXEC
-		t.conn.Send("MULTI")
+		if err := t.conn.Send("MULTI"); err != nil {
+			return err
+		}
 		for _, a := range t.actions {
 			if err := t.sendAction(a); err != nil {
 				return err
