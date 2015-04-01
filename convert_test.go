@@ -12,21 +12,21 @@ import (
 	"testing"
 )
 
-func TestPrimativeTypes(t *testing.T) {
+func TestConvertPrimatives(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 	model := createIndexedPrimativesModel()
 	testConvertType(t, indexedPrimativesModels, model)
 }
 
-func TestPointerTypes(t *testing.T) {
+func TestConvertPointers(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 	model := createIndexedPointersModel()
 	testConvertType(t, indexedPointersModels, model)
 }
 
-func TestInconvertibleTypes(t *testing.T) {
+func TestConvertInconvertibles(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -54,6 +54,50 @@ func TestInconvertibleTypes(t *testing.T) {
 		IntMap:      map[int]int{randomInt(): randomInt(), randomInt(): randomInt()},
 	}
 	testConvertType(t, inconvertiblesModels, model)
+}
+
+func TestConvertEmbeddedStruct(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	type embeddedStructModel struct {
+		testModel
+		DefaultData
+	}
+	embededStructModels, err := Register(&embeddedStructModel{})
+	if err != nil {
+		t.Errorf("Unexpected error in Register: %s", err.Error())
+	}
+	model := &embeddedStructModel{
+		testModel: testModel{
+			Int:    randomInt(),
+			String: randomString(),
+			Bool:   randomBool(),
+		},
+	}
+	testConvertType(t, embededStructModels, model)
+}
+
+func TestEmbeddedPointerToStruct(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	type embeddedPointerToStructModel struct {
+		*testModel
+		DefaultData
+	}
+	embededPointerToStructModels, err := Register(&embeddedPointerToStructModel{})
+	if err != nil {
+		t.Errorf("Unexpected error in Register: %s", err.Error())
+	}
+	model := &embeddedPointerToStructModel{
+		testModel: &testModel{
+			Int:    randomInt(),
+			String: randomString(),
+			Bool:   randomBool(),
+		},
+	}
+	testConvertType(t, embededPointerToStructModels, model)
 }
 
 // a general test that uses reflection
