@@ -44,9 +44,8 @@ func (gobMarshalerUnmarshaler) Marshal(v interface{}) ([]byte, error) {
 
 // Unmarshal parses the gob-encoded data and stores the result in the value pointed to by v.
 func (gobMarshalerUnmarshaler) Unmarshal(data []byte, v interface{}) error {
-	var buff bytes.Buffer
-	dec := gob.NewDecoder(&buff)
-	buff.Write(data)
+	buff := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buff)
 	if err := dec.Decode(v); err != nil {
 		return err
 	}
