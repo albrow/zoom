@@ -202,3 +202,39 @@ func TestDeleteIndexedPointersModel(t *testing.T) {
 		expectIndexDoesNotExist(t, indexedPointersModels, model, field.Name)
 	}
 }
+
+// Test that the indexes are actually created in redis for a model with all
+// the different indexed primative fields
+func TestIndexAndCustomName(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	type customIndexModel struct {
+		Int    int    `zoom:"index" redis:"integer"`
+		String string `zoom:"index" redis:"str"`
+		Bool   bool   `zoom:"index" redis:"boolean"`
+		DefaultData
+	}
+	customIndexModels, err := Register(&customIndexModel{})
+	if err != nil {
+		t.Fatalf("Unexpected error in Register: %s", err.Error())
+	}
+	model := &customIndexModel{
+		Int:    randomInt(),
+		String: randomString(),
+		Bool:   randomBool(),
+	}
+	if err := customIndexModels.Save(model); err != nil {
+		t.Fatalf("Unexpected error in Save: %s", err.Error())
+	}
+
+	// Iterate through each field using reflection and validate that the index was set properly
+	numFields := customIndexModels.spec.typ.Elem().NumField()
+	for i := 0; i < numFields; i++ {
+		field := customIndexModels.spec.typ.Elem().Field(i)
+		if field.Anonymous {
+			continue // Skip embedded structs
+		}
+		expectIndexExists(t, customIndexModels, model, field.Name)
+	}
+}

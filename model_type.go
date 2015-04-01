@@ -218,7 +218,7 @@ func (t *Transaction) saveBooleanIndex(mr *modelRef, fs *fieldSpec) {
 // index on the given field. This includes removing the old index (if any).
 func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 	// Remove the old index (if any)
-	t.deleteStringIndex(mr.spec.name, mr.model.GetId(), fs.name)
+	t.deleteStringIndex(mr.spec.name, mr.model.GetId(), fs.redisName)
 	fieldValue := mr.fieldValue(fs.name)
 	for fieldValue.Kind() == reflect.Ptr {
 		if fieldValue.IsNil() {
@@ -371,7 +371,7 @@ func (t *Transaction) deleteFieldIndexes(mt *ModelType, id string) {
 			t.deleteNumericOrBooleanIndex(fs, mt.spec, id)
 		case stringIndex:
 			// NOTE: this invokes a lua script which is defined in scripts/delete_string_index.lua
-			t.deleteStringIndex(mt.Name(), id, fs.name)
+			t.deleteStringIndex(mt.Name(), id, fs.redisName)
 		}
 	}
 }

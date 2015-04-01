@@ -204,7 +204,7 @@ func (ms *modelSpec) fieldIndexKey(fieldName string) (string, error) {
 	} else if fs.indexKind == noIndex {
 		return "", fmt.Errorf("%s.%s is not an indexed field", ms.typ.Name(), fieldName)
 	}
-	return ms.name + ":" + fieldName, nil
+	return ms.name + ":" + fs.redisName, nil
 }
 
 // modelRef represents a reference to a particular model. It consists of the model object
