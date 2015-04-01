@@ -162,11 +162,6 @@ func setIndexKind(fs *fieldSpec, fieldType reflect.Type) error {
 	return nil
 }
 
-// field returns the reflect.StrucField for the given modelSpec corresponding to fieldName
-func (ms *modelSpec) field(fieldName string) (reflect.StructField, bool) {
-	return ms.typ.Elem().FieldByName(fieldName)
-}
-
 // allIndexKey returns a key which is used in redis to store all the ids of every model of a
 // given type
 func (ms *modelSpec) allIndexKey() string {
