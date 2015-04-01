@@ -422,7 +422,7 @@ func indexExists(modelType *ModelType, model Model, fieldName string) (bool, err
 	} else if fs.indexKind == noIndex {
 		return false, fmt.Errorf("%s.%s is not an indexed field", modelType.spec.typ.String(), fieldName)
 	}
-	typ := fs.fieldType
+	typ := fs.typ
 	for typ.Kind() == reflect.Ptr {
 		typ = typ.Elem()
 	}
@@ -434,7 +434,7 @@ func indexExists(modelType *ModelType, model Model, fieldName string) (bool, err
 	case typeIsBool(typ):
 		return booleanIndexExists(modelType, model, fieldName)
 	default:
-		return false, fmt.Errorf("Unknown indexed field type %s", fs.fieldType)
+		return false, fmt.Errorf("Unknown indexed field type %s", fs.typ)
 	}
 }
 

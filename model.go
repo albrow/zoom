@@ -52,7 +52,7 @@ type fieldSpec struct {
 	kind      fieldKind
 	name      string
 	redisName string
-	fieldType reflect.Type
+	typ       reflect.Type
 	indexKind indexKind
 }
 
@@ -98,7 +98,7 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 		if redisTag == "-" {
 			continue // skip field
 		}
-		fs := &fieldSpec{name: field.Name, fieldType: field.Type}
+		fs := &fieldSpec{name: field.Name, typ: field.Type}
 		ms.fieldsByName[fs.name] = fs
 		ms.fields = append(ms.fields, fs)
 		if redisTag != "" {
