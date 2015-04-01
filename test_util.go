@@ -111,9 +111,113 @@ func createAndSaveIndexedTestModels(n int) ([]*testModel, error) {
 	return models, nil
 }
 
+type indexedPrimativesModel struct {
+	Uint    uint    `zoom:"index"`
+	Uint8   uint8   `zoom:"index"`
+	Uint16  uint16  `zoom:"index"`
+	Uint32  uint32  `zoom:"index"`
+	Uint64  uint64  `zoom:"index"`
+	Int     int     `zoom:"index"`
+	Int8    int8    `zoom:"index"`
+	Int16   int16   `zoom:"index"`
+	Int32   int32   `zoom:"index"`
+	Int64   int64   `zoom:"index"`
+	Float32 float32 `zoom:"index"`
+	Float64 float64 `zoom:"index"`
+	Byte    byte    `zoom:"index"`
+	Rune    rune    `zoom:"index"`
+	String  string  `zoom:"index"`
+	Bool    bool    `zoom:"index"`
+	DefaultData
+}
+
+// createIndexedPrimativesModel instantiates and returns an indexedPrimativesModel with
+// random values for all fields.
+func createIndexedPrimativesModel() *indexedPrimativesModel {
+	return &indexedPrimativesModel{
+		Uint:    uint(randomInt()),
+		Uint8:   uint8(randomInt()),
+		Uint16:  uint16(randomInt()),
+		Uint32:  uint32(randomInt()),
+		Uint64:  uint64(randomInt()),
+		Int:     randomInt(),
+		Int8:    int8(randomInt()),
+		Int16:   int16(randomInt()),
+		Int32:   int32(randomInt()),
+		Int64:   int64(randomInt()),
+		Float32: float32(randomInt()),
+		Float64: float64(randomInt()),
+		Byte:    []byte(randomString())[0],
+		Rune:    []rune(randomString())[0],
+		String:  randomString(),
+		Bool:    randomBool(),
+	}
+}
+
+type indexedPointersModel struct {
+	Uint    *uint    `zoom:"index"`
+	Uint8   *uint8   `zoom:"index"`
+	Uint16  *uint16  `zoom:"index"`
+	Uint32  *uint32  `zoom:"index"`
+	Uint64  *uint64  `zoom:"index"`
+	Int     *int     `zoom:"index"`
+	Int8    *int8    `zoom:"index"`
+	Int16   *int16   `zoom:"index"`
+	Int32   *int32   `zoom:"index"`
+	Int64   *int64   `zoom:"index"`
+	Float32 *float32 `zoom:"index"`
+	Float64 *float64 `zoom:"index"`
+	Byte    *byte    `zoom:"index"`
+	Rune    *rune    `zoom:"index"`
+	String  *string  `zoom:"index"`
+	Bool    *bool    `zoom:"index"`
+	DefaultData
+}
+
+// createIndexedPointersModel instantiates and returns an indexedPointersModel with
+// random values for all fields.
+func createIndexedPointersModel() *indexedPointersModel {
+	Uint := uint(randomInt())
+	Uint8 := uint8(randomInt())
+	Uint16 := uint16(randomInt())
+	Uint32 := uint32(randomInt())
+	Uint64 := uint64(randomInt())
+	Int := randomInt()
+	Int8 := int8(randomInt())
+	Int16 := int16(randomInt())
+	Int32 := int32(randomInt())
+	Int64 := int64(randomInt())
+	Float32 := float32(randomInt())
+	Float64 := float64(randomInt())
+	Byte := []byte(randomString())[0]
+	Rune := []rune(randomString())[0]
+	String := randomString()
+	Bool := randomBool()
+	return &indexedPointersModel{
+		Uint:    &Uint,
+		Uint8:   &Uint8,
+		Uint16:  &Uint16,
+		Uint32:  &Uint32,
+		Uint64:  &Uint64,
+		Int:     &Int,
+		Int8:    &Int8,
+		Int16:   &Int16,
+		Int32:   &Int32,
+		Int64:   &Int64,
+		Float32: &Float32,
+		Float64: &Float64,
+		Byte:    &Byte,
+		Rune:    &Rune,
+		String:  &String,
+		Bool:    &Bool,
+	}
+}
+
 var (
-	testModels        *ModelType
-	indexedTestModels *ModelType
+	testModels              *ModelType
+	indexedTestModels       *ModelType
+	indexedPrimativesModels *ModelType
+	indexedPointersModels   *ModelType
 )
 
 // registerTestingTypes registers the common types used for testing
@@ -129,6 +233,14 @@ func registerTestingTypes() {
 		{
 			modelType: &indexedTestModels,
 			model:     &indexedTestModel{},
+		},
+		{
+			modelType: &indexedPrimativesModels,
+			model:     &indexedPrimativesModel{},
+		},
+		{
+			modelType: &indexedPointersModels,
+			model:     &indexedPointersModel{},
 		},
 	}
 	for _, m := range testModelTypes {

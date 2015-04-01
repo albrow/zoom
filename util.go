@@ -8,9 +8,9 @@
 package zoom
 
 import (
-	"encoding/json"
 	"fmt"
 	"github.com/dchest/uniuri"
+	"math/cmplx"
 	"math/rand"
 	"reflect"
 	"strconv"
@@ -229,25 +229,6 @@ func typeIsPrimative(typ reflect.Type) bool {
 	return typeIsString(typ) || typeIsNumeric(typ) || typeIsBool(typ)
 }
 
-// looseEquals returns true if the two things are equal.
-// equality is based on underlying value, so if the pointer addresses
-// are different it doesn't matter. We use gob encoding for simplicity,
-// assuming that if the gob representation of two things is the same,
-// those two things can be considered equal. Differs from reflect.DeepEqual
-// because of the indifference concerning pointer addresses.
-func looseEquals(one, two interface{}) (bool, error) {
-	oneBytes, err := json.Marshal(one)
-	if err != nil {
-		return false, err
-	}
-	twoBytes, err := json.Marshal(two)
-	if err != nil {
-		return false, err
-	}
-
-	return (string(oneBytes) == string(twoBytes)), nil
-}
-
 // numericScore returns a float64 which is the score for val in a sorted set.
 // If val is a pointer, it will keep dereferencing until it reaches the underlying
 // value. It panics if val is not a numeric type or a pointer to a numeric type.
@@ -328,4 +309,14 @@ func randomString() string {
 // randomBool returns a random bool
 func randomBool() bool {
 	return rand.Int()%2 == 0
+}
+
+// randomFloat returns a random float64
+func randomFloat() float64 {
+	return rand.Float64()
+}
+
+// randomComplex returns a random complex128
+func randomComplex() complex128 {
+	return cmplx.Rect(randomFloat(), randomFloat())
 }

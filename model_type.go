@@ -188,6 +188,9 @@ func (t *Transaction) saveFieldIndexes(mr *modelRef) {
 // index on the given field.
 func (t *Transaction) saveNumericIndex(mr *modelRef, fs *fieldSpec) {
 	fieldValue := mr.fieldValue(fs.name)
+	if fieldValue.Kind() == reflect.Ptr && fieldValue.IsNil() {
+		return
+	}
 	score := numericScore(fieldValue)
 	indexKey, err := mr.spec.fieldIndexKey(fs.name)
 	if err != nil {
@@ -200,6 +203,9 @@ func (t *Transaction) saveNumericIndex(mr *modelRef, fs *fieldSpec) {
 // index on the given field.
 func (t *Transaction) saveBooleanIndex(mr *modelRef, fs *fieldSpec) {
 	fieldValue := mr.fieldValue(fs.name)
+	if fieldValue.Kind() == reflect.Ptr && fieldValue.IsNil() {
+		return
+	}
 	score := boolScore(fieldValue)
 	indexKey, err := mr.spec.fieldIndexKey(fs.name)
 	if err != nil {
@@ -215,6 +221,9 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 	t.deleteStringIndex(mr.spec.name, mr.model.GetId(), fs.name)
 	fieldValue := mr.fieldValue(fs.name)
 	for fieldValue.Kind() == reflect.Ptr {
+		if fieldValue.IsNil() {
+			return
+		}
 		fieldValue = fieldValue.Elem()
 	}
 	member := fieldValue.String() + " " + mr.model.GetId()

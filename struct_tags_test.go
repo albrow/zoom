@@ -9,7 +9,6 @@
 package zoom
 
 import (
-	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"testing"
 )
@@ -107,145 +106,11 @@ func TestInvalidOptionThrowsError(t *testing.T) {
 	}
 }
 
-var (
-	indexedPrimativesModels *ModelType
-	indexedPointersModels   *ModelType
-)
-
-type indexedPrimativesModel struct {
-	Uint    uint    `zoom:"index"`
-	Uint8   uint8   `zoom:"index"`
-	Uint16  uint16  `zoom:"index"`
-	Uint32  uint32  `zoom:"index"`
-	Uint64  uint64  `zoom:"index"`
-	Int     int     `zoom:"index"`
-	Int8    int8    `zoom:"index"`
-	Int16   int16   `zoom:"index"`
-	Int32   int32   `zoom:"index"`
-	Int64   int64   `zoom:"index"`
-	Float32 float32 `zoom:"index"`
-	Float64 float64 `zoom:"index"`
-	Byte    byte    `zoom:"index"`
-	Rune    rune    `zoom:"index"`
-	String  string  `zoom:"index"`
-	Bool    bool    `zoom:"index"`
-	DefaultData
-}
-
-type indexedPointersModel struct {
-	Uint    *uint    `zoom:"index"`
-	Uint8   *uint8   `zoom:"index"`
-	Uint16  *uint16  `zoom:"index"`
-	Uint32  *uint32  `zoom:"index"`
-	Uint64  *uint64  `zoom:"index"`
-	Int     *int     `zoom:"index"`
-	Int8    *int8    `zoom:"index"`
-	Int16   *int16   `zoom:"index"`
-	Int32   *int32   `zoom:"index"`
-	Int64   *int64   `zoom:"index"`
-	Float32 *float32 `zoom:"index"`
-	Float64 *float64 `zoom:"index"`
-	Byte    *byte    `zoom:"index"`
-	Rune    *rune    `zoom:"index"`
-	String  *string  `zoom:"index"`
-	Bool    *bool    `zoom:"index"`
-	DefaultData
-}
-
-// registerIndexedPrimativesModel registers the indexedPrimativesModel type and sets the value
-// of indexedPrimativesModels the first time it is called. Successive calls have no effect.
-func registerIndexedPrimativesModel() {
-	if indexedPrimativesModels == nil {
-		var err error
-		indexedPrimativesModels, err = Register(&indexedPrimativesModel{})
-		if err != nil {
-			msg := fmt.Sprintf("Unexpected error in Register: %s", err.Error())
-			panic(msg)
-		}
-	}
-}
-
-// registerIndexedPointersModel registers the indexedPointersModel type and sets the value
-// of indexedPointersModels the first time it is called. Successive calls have no effect.
-func registerIndexedPointersModel() {
-	if indexedPointersModels == nil {
-		var err error
-		indexedPointersModels, err = Register(&indexedPointersModel{})
-		if err != nil {
-			msg := fmt.Sprintf("Unexpected error in Register: %s", err.Error())
-			panic(msg)
-		}
-	}
-}
-
-// createIndexedPrimativesModel instantiates and returns an indexedPrimativesModel with
-// random values for all fields.
-func createIndexedPrimativesModel() *indexedPrimativesModel {
-	return &indexedPrimativesModel{
-		Uint:    uint(randomInt()),
-		Uint8:   uint8(randomInt()),
-		Uint16:  uint16(randomInt()),
-		Uint32:  uint32(randomInt()),
-		Uint64:  uint64(randomInt()),
-		Int:     randomInt(),
-		Int8:    int8(randomInt()),
-		Int16:   int16(randomInt()),
-		Int32:   int32(randomInt()),
-		Int64:   int64(randomInt()),
-		Float32: float32(randomInt()),
-		Float64: float64(randomInt()),
-		Byte:    []byte(randomString())[0],
-		Rune:    []rune(randomString())[0],
-		String:  randomString(),
-		Bool:    randomBool(),
-	}
-}
-
-// createIndexedPointersModel instantiates and returns an indexedPointersModel with
-// random values for all fields.
-func createIndexedPointersModel() *indexedPointersModel {
-	Uint := uint(randomInt())
-	Uint8 := uint8(randomInt())
-	Uint16 := uint16(randomInt())
-	Uint32 := uint32(randomInt())
-	Uint64 := uint64(randomInt())
-	Int := randomInt()
-	Int8 := int8(randomInt())
-	Int16 := int16(randomInt())
-	Int32 := int32(randomInt())
-	Int64 := int64(randomInt())
-	Float32 := float32(randomInt())
-	Float64 := float64(randomInt())
-	Byte := []byte(randomString())[0]
-	Rune := []rune(randomString())[0]
-	String := randomString()
-	Bool := randomBool()
-	return &indexedPointersModel{
-		Uint:    &Uint,
-		Uint8:   &Uint8,
-		Uint16:  &Uint16,
-		Uint32:  &Uint32,
-		Uint64:  &Uint64,
-		Int:     &Int,
-		Int8:    &Int8,
-		Int16:   &Int16,
-		Int32:   &Int32,
-		Int64:   &Int64,
-		Float32: &Float32,
-		Float64: &Float64,
-		Byte:    &Byte,
-		Rune:    &Rune,
-		String:  &String,
-		Bool:    &Bool,
-	}
-}
-
 // Test that the indexes are actually created in redis for a model with all
 // the different indexed primative fields
 func TestSaveIndexedPrimativesModel(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
-	registerIndexedPrimativesModel()
 
 	// Create and save a new model with random primative fields
 	model := createIndexedPrimativesModel()
@@ -269,7 +134,6 @@ func TestSaveIndexedPrimativesModel(t *testing.T) {
 func TestSaveIndexedPointersModel(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
-	registerIndexedPointersModel()
 
 	// Create and save a new model with random pointer to primative fields
 	model := createIndexedPointersModel()
@@ -292,7 +156,6 @@ func TestSaveIndexedPointersModel(t *testing.T) {
 func TestDeleteIndexedPrimativesModel(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
-	registerIndexedPrimativesModel()
 
 	// Create and save a new model with random primative fields
 	model := createIndexedPrimativesModel()
@@ -319,7 +182,6 @@ func TestDeleteIndexedPrimativesModel(t *testing.T) {
 func TestDeleteIndexedPointersModel(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
-	registerIndexedPointersModel()
 
 	// Create and save a new model with random pointer to primative fields
 	model := createIndexedPointersModel()
