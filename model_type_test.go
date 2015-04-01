@@ -120,7 +120,7 @@ func TestSave(t *testing.T) {
 
 	// Make sure the model was saved correctly
 	expectModelExists(t, testModels, model)
-	key, _ := testModels.KeyForModel(model)
+	key, _ := testModels.ModelKey(model)
 	expectFieldEquals(t, key, "Int", model.Int)
 	expectFieldEquals(t, key, "String", model.String)
 	expectFieldEquals(t, key, "Bool", model.Bool)

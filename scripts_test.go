@@ -126,18 +126,18 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 
 	// Make sure the first three models were deleted
 	for _, model := range models[:3] {
-		modelKey, err := testModels.KeyForModel(model)
+		modelKey, err := testModels.ModelKey(model)
 		if err != nil {
-			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
+			t.Errorf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyDoesNotExist(t, modelKey)
 		expectSetDoesNotContain(t, testModels.AllIndexKey(), model.Id)
 	}
 	// Make sure the last two models were not deleted
 	for _, model := range models[3:] {
-		modelKey, err := testModels.KeyForModel(model)
+		modelKey, err := testModels.ModelKey(model)
 		if err != nil {
-			t.Errorf("Unexpected error in KeyForModel: %s", err.Error())
+			t.Errorf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyExists(t, modelKey)
 		expectSetContains(t, testModels.AllIndexKey(), model.Id)
@@ -174,7 +174,7 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	// Set the field value in the main hash
 	conn := GetConn()
 	defer conn.Close()
-	modelKey, _ := stringIndexModels.KeyForModel(model)
+	modelKey, _ := stringIndexModels.ModelKey(model)
 	if _, err := conn.Do("HSET", modelKey, "String", model.String); err != nil {
 		t.Errorf("Unexpected error in HSET")
 	}

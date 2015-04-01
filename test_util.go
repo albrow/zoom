@@ -363,9 +363,9 @@ func expectKeyDoesNotExist(t *testing.T, key string) {
 // the database. It checks for the main hash as well as the id in the index of all
 // ids for a given type.
 func expectModelExists(t *testing.T, mt *ModelType, model Model) {
-	modelKey, err := mt.KeyForModel(model)
+	modelKey, err := mt.ModelKey(model)
 	if err != nil {
-		t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
+		t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 	}
 	expectKeyExists(t, modelKey)
 	expectSetContains(t, mt.AllIndexKey(), model.GetId())
@@ -375,9 +375,9 @@ func expectModelExists(t *testing.T, mt *ModelType, model Model) {
 // It checks for the main hash as well as the id in the index of all ids for a
 // given type.
 func expectModelDoesNotExist(t *testing.T, mt *ModelType, model Model) {
-	modelKey, err := mt.KeyForModel(model)
+	modelKey, err := mt.ModelKey(model)
 	if err != nil {
-		t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
+		t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 	}
 	expectKeyDoesNotExist(t, modelKey)
 	expectSetDoesNotContain(t, mt.AllIndexKey(), model.GetId())
@@ -388,9 +388,9 @@ func expectModelDoesNotExist(t *testing.T, mt *ModelType, model Model) {
 // the index of all ids for a given type.
 func expectModelsExist(t *testing.T, mt *ModelType, models []Model) {
 	for _, model := range models {
-		modelKey, err := mt.KeyForModel(model)
+		modelKey, err := mt.ModelKey(model)
 		if err != nil {
-			t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
+			t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyExists(t, modelKey)
 		expectSetContains(t, mt.AllIndexKey(), model.GetId())
@@ -402,9 +402,9 @@ func expectModelsExist(t *testing.T, mt *ModelType, models []Model) {
 // of all ids for a given type.
 func expectModelsDoNotExist(t *testing.T, mt *ModelType, models []Model) {
 	for _, model := range models {
-		modelKey, err := mt.KeyForModel(model)
+		modelKey, err := mt.ModelKey(model)
 		if err != nil {
-			t.Fatalf("Unexpected error in KeyForModel: %s", err.Error())
+			t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyDoesNotExist(t, modelKey)
 		expectSetDoesNotContain(t, mt.AllIndexKey(), model.GetId())

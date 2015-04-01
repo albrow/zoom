@@ -173,12 +173,12 @@ func (ms *modelSpec) allIndexKey() string {
 	return ms.name + ":all"
 }
 
-// KeyForModel returns the key that identifies a hash in the database
+// modelKey returns the key that identifies a hash in the database
 // which contains all the fields of the given model. It returns an error
 // iff the model does not have an id.
-func (ms *modelSpec) keyForModel(model Model) (string, error) {
+func (ms *modelSpec) modelKey(model Model) (string, error) {
 	if model.GetId() == "" {
-		return "", fmt.Errorf("zoom: Error in KeyForModel: model does not have an id and therefore cannot have a valid key")
+		return "", fmt.Errorf("zoom: Error in modelKey: model does not have an id and therefore cannot have a valid key")
 	}
 	return ms.name + ":" + model.GetId(), nil
 }

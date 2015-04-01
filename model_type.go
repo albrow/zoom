@@ -91,11 +91,11 @@ func RegisterName(name string, model Model) (*ModelType, error) {
 	return &ModelType{spec}, nil
 }
 
-// KeyForModel returns the key that identifies a hash in the database
+// ModelKey returns the key that identifies a hash in the database
 // which contains all the fields of the given model. It returns an error
 // iff the model does not have an id.
-func (mt *ModelType) KeyForModel(model Model) (string, error) {
-	return mt.spec.keyForModel(model)
+func (mt *ModelType) ModelKey(model Model) (string, error) {
+	return mt.spec.modelKey(model)
 }
 
 // AllIndexKey returns the key that identifies a set in the database that
