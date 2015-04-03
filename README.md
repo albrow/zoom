@@ -248,7 +248,7 @@ Enforcing Thread-Safety
 
 ***WARNING***: Zoom currently only provides thread-safety in the context of a single application server. If you have
 multiple servers using Zoom to communicate to the same Redis database, it is currently not thread-safe. In the future,
-Zoom will enforce thread-safety accross different servers, most likely via optimistic locking. See the [TODO](#todo)
+Zoom will enforce thread-safety across different servers, most likely via optimistic locking. See the [TODO](#todo)
 section for a general roadmap for new features.
 
 ### How it Works
