@@ -29,10 +29,35 @@ type Query struct {
 	err       error
 }
 
+func (q *Query) String() string {
+	result := fmt.Sprintf("%s.NewQuery()", q.modelSpec.name)
+	for _, filter := range q.filters {
+		result += fmt.Sprintf(".%s", filter)
+	}
+	if q.order.fieldName != "" {
+		result += fmt.Sprintf(".%s", q.order)
+	}
+	if q.offset != 0 {
+		result += fmt.Sprintf(".Offset(%d)", q.offset)
+	}
+	if q.limit != 0 {
+		result += fmt.Sprintf(".Limit(%d)", q.limit)
+	}
+	return result
+}
+
 type order struct {
 	fieldName string
 	redisName string
 	kind      orderKind
+}
+
+func (o order) String() string {
+	if o.kind == ascendingOrder {
+		return fmt.Sprintf("Order(%s)", o.fieldName)
+	} else {
+		return fmt.Sprintf("Order(-%s)", o.fieldName)
+	}
 }
 
 type orderKind int
@@ -41,6 +66,16 @@ const (
 	ascendingOrder orderKind = iota
 	descendingOrder
 )
+
+func (ok orderKind) String() string {
+	switch ok {
+	case ascendingOrder:
+		return "ascending"
+	case descendingOrder:
+		return "descending"
+	}
+	return ""
+}
 
 type filter struct {
 	fieldName string
@@ -428,47 +463,4 @@ func (o order) string() string {
 		return fmt.Sprintf("(order -%s)", o.fieldName)
 	}
 	return ""
-}
-
-// String returns a string representation of the query and its modifiers
-func (q *Query) String() string {
-	modelName := q.modelSpec.name
-	filters := ""
-	for _, f := range q.filters {
-		filters += f.string() + " "
-	}
-	order := q.order.string()
-	limit := ""
-	offset := ""
-	if q.limit != 0 {
-		limit = fmt.Sprintf("(limit %v)", q.limit)
-	}
-	if q.offset != 0 {
-		offset = fmt.Sprintf("(offset %v)", q.offset)
-	}
-	includes := ""
-	if len(q.includes) > 0 {
-		fields := "["
-		for i, in := range q.includes {
-			fields += in
-			if i != len(q.includes)-1 {
-				fields += ", "
-			}
-		}
-		fields += "]"
-		includes = fmt.Sprintf("(include %s)", fields)
-	}
-	excludes := ""
-	if len(q.excludes) > 0 {
-		fields := "["
-		for i, ex := range q.excludes {
-			fields += ex
-			if i != len(q.excludes)-1 {
-				fields += ", "
-			}
-		}
-		fields += "]"
-		excludes = fmt.Sprintf("(exclude %s)", fields)
-	}
-	return fmt.Sprintf("%s: %s%s %s %s %s%s", modelName, filters, order, limit, offset, includes, excludes)
 }
