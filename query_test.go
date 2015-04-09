@@ -39,10 +39,11 @@ func testQuery(t *testing.T, q *Query, models []*indexedTestModel) {
 func testQueryRun(t *testing.T, q *Query, expected []*indexedTestModel) {
 	got := make([]*indexedTestModel, 0)
 	if err := q.Run(&got); err != nil {
-		t.Error(err)
+		t.Errorf("Unexpected error in query.Run: %s", err.Error())
 	}
-
-	// TODO: fill this in
+	if err := expectModelsToBeEqual(expected, got, q.order.fieldName != ""); err != nil {
+		t.Errorf("testQueryRun failed for query %s\nExpected: %#v\nGot:  %#v", q, expected, got)
+	}
 }
 
 func testQueryCount(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
@@ -55,7 +56,22 @@ func testQueryCount(t *testing.T, q *Query, expectedModels []*indexedTestModel) 
 }
 
 func testQueryIds(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
-	// TODO: fill this in
+	got, err := q.Ids()
+	if err != nil {
+		t.Errorf("Unexpected error in query.Ids: %s", err.Error())
+	}
+	expected := modelIds(Models(expectedModels))
+	if q.order.fieldName != "" {
+		// Order matters
+		if !reflect.DeepEqual(expected, got) {
+			t.Errorf("testQueryIds failed for query %s\nExpected: %v\nGot:  %v", q, expected, got)
+		}
+	} else {
+		// Order does not matter
+		if equal, msg := compareAsStringSet(expected, got); !equal {
+			t.Errorf("testQueryIds failed for query %s\n%s\nExpected: %v\nGot:  %v", q, msg, expected, got)
+		}
+	}
 }
 
 // expectedResultsForQuery returns the expected results for q on the given set of models.

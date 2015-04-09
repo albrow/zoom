@@ -538,7 +538,7 @@ func (ms ById) Len() int           { return len(ms) }
 func (ms ById) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
 func (ms ById) Less(i, j int) bool { return ms[i].Id < ms[j].Id }
 
-// expectModelSlicesToBeEqual returns an error if the two slices do not contain the exact
+// expectModelsToBeEqual returns an error if the two slices do not contain the exact
 // same models.
 func expectModelsToBeEqual(expected []*indexedTestModel, got []*indexedTestModel, orderMatters bool) error {
 	if len(expected) != len(got) {
