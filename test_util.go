@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/garyburd/redigo/redis"
 	"reflect"
+	"sort"
 	"sync"
 	"testing"
 )
@@ -83,12 +84,19 @@ type indexedTestModel struct {
 	DefaultData
 }
 
+func (m *indexedTestModel) GoString() string {
+	if m == nil {
+		return fmt.Sprintf("(%T) nil", m)
+	}
+	return fmt.Sprintf("%v", *m)
+}
+
 // createIndexedTestModels creates and returns n testModels with
 // random field values, but does not save them to the database.
-func createIndexedTestModels(n int) []*testModel {
-	models := make([]*testModel, n)
+func createIndexedTestModels(n int) []*indexedTestModel {
+	models := make([]*indexedTestModel, n)
 	for i := 0; i < n; i++ {
-		models[i] = &testModel{
+		models[i] = &indexedTestModel{
 			Int:    randomInt(),
 			String: randomString(),
 			Bool:   randomBool(),
@@ -99,7 +107,7 @@ func createIndexedTestModels(n int) []*testModel {
 
 // createAndSaveIndexedTestModels creates n indexedTestModels with
 // random field values, saves them, and returns them.
-func createAndSaveIndexedTestModels(n int) ([]*testModel, error) {
+func createAndSaveIndexedTestModels(n int) ([]*indexedTestModel, error) {
 	models := createIndexedTestModels(n)
 	t := NewTransaction()
 	for _, model := range models {
@@ -521,4 +529,35 @@ func booleanIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 		return false, fmt.Errorf("Error in ZRANGEBYSCORE: %s", err.Error())
 	}
 	return stringSliceContains(gotIds, model.GetId()), nil
+}
+
+// ById is a utility type for quickly sorting by id
+type ById []*indexedTestModel
+
+func (ms ById) Len() int           { return len(ms) }
+func (ms ById) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
+func (ms ById) Less(i, j int) bool { return ms[i].Id < ms[j].Id }
+
+// expectModelSlicesToBeEqual returns an error if the two slices do not contain the exact
+// same models.
+func expectModelsToBeEqual(expected []*indexedTestModel, got []*indexedTestModel, orderMatters bool) error {
+	if len(expected) != len(got) {
+		return fmt.Errorf("Lengths did not match.\nExpected: %v\nBut got:  %v", modelIds(Models(expected)), modelIds(Models(got)))
+	}
+	eCopy, gCopy := make([]*indexedTestModel, len(expected)), make([]*indexedTestModel, len(got))
+	copy(eCopy, expected)
+	copy(gCopy, got)
+	if !orderMatters {
+		// if order doesn't matter, first sort by Id, which is unique.
+		// this way we can do a straightforward comparison
+		sort.Sort(ById(eCopy))
+		sort.Sort(ById(gCopy))
+	}
+	for i, e := range eCopy {
+		g := gCopy[i]
+		if !reflect.DeepEqual(e, g) {
+			return fmt.Errorf("Inequality detected at iteration %d.Expected: %+v\nGot:  %+v", *e, *g)
+		}
+	}
+	return nil
 }
