@@ -111,7 +111,7 @@ func createAndSaveIndexedTestModels(n int) ([]*indexedTestModel, error) {
 	models := createIndexedTestModels(n)
 	t := NewTransaction()
 	for _, model := range models {
-		t.Save(testModels, model)
+		t.Save(indexedTestModels, model)
 	}
 	if err := t.Exec(); err != nil {
 		return nil, err

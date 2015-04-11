@@ -13,6 +13,18 @@ import (
 	"testing"
 )
 
+func TestQueryAll(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	ms, err := createAndSaveIndexedTestModels(5)
+	if err != nil {
+		t.Error(err)
+	}
+	q := indexedTestModels.NewQuery()
+	testQuery(t, q, ms)
+}
+
 // There's a huge amount of test cases to cover above.
 // Below is some code that makes it easier, but needs to be
 // tested itself. Testing for correctness using a brute force
@@ -37,11 +49,12 @@ func testQuery(t *testing.T, q *Query, models []*indexedTestModel) {
 }
 
 func testQueryRun(t *testing.T, q *Query, expected []*indexedTestModel) {
-	got := make([]*indexedTestModel, 0)
+	got := []*indexedTestModel{}
 	if err := q.Run(&got); err != nil {
 		t.Errorf("Unexpected error in query.Run: %s", err.Error())
 	}
-	if err := expectModelsToBeEqual(expected, got, q.order.fieldName != ""); err != nil {
+	orderMatters := q.order.fieldName != ""
+	if err := expectModelsToBeEqual(expected, got, orderMatters); err != nil {
 		t.Errorf("testQueryRun failed for query %s\nExpected: %#v\nGot:  %#v", q, expected, got)
 	}
 }

@@ -9,6 +9,7 @@ package zoom
 import (
 	"errors"
 	"fmt"
+	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"strings"
 )
@@ -369,7 +370,14 @@ func (q *Query) filterById(operator string, value interface{}) *Query {
 // return the first error that occured during the lifetime of the query object
 // (if any). It will also return an error if models is the wrong type.
 func (q *Query) Run(models interface{}) error {
-	return nil
+	// TODO: type-checking
+	t := NewTransaction()
+	switch {
+	case !q.hasFilters() && !q.hasOrder():
+		// Just return the models whose ids are in the all index
+		t.findModelsBySetIds(q.modelSpec.allIndexKey(), q.modelSpec.name, newScanModelsHandler(q.modelSpec, models))
+	}
+	return t.Exec()
 }
 
 // RunOne is exactly like Run but finds only the first model that fits the
@@ -384,6 +392,13 @@ func (q *Query) RunOne(model Model) error {
 // error that occured during the lifetime of the query object (if any).
 // Otherwise, the second return value will be nil.
 func (q *Query) Count() (int, error) {
+	switch {
+	case !q.hasFilters() && !q.hasOrder():
+		// Just return the number of ids in the all index set
+		conn := GetConn()
+		defer conn.Close()
+		return redis.Int(conn.Do("SCARD", q.modelSpec.allIndexKey()))
+	}
 	return 0, nil
 }
 
@@ -391,6 +406,13 @@ func (q *Query) Count() (int, error) {
 // models themselves. Ids will return the first error that occured
 // during the lifetime of the query object (if any).
 func (q *Query) Ids() ([]string, error) {
+	switch {
+	case !q.hasFilters() && !q.hasOrder():
+		// Just return the ids in the all index set
+		conn := GetConn()
+		defer conn.Close()
+		return redis.Strings(conn.Do("SMEMBERS", q.modelSpec.allIndexKey()))
+	}
 	return nil, nil
 }
 
@@ -427,40 +449,10 @@ func getMinMaxForNumericFilter(f filter) (min interface{}, max interface{}) {
 	return min, max
 }
 
-// string returns a string representation of the filterKind
-func (fk filterKind) string() string {
-	switch fk {
-	case equalFilter:
-		return "="
-	case notEqualFilter:
-		return "!="
-	case greaterFilter:
-		return ">"
-	case lessFilter:
-		return "<"
-	case greaterOrEqualFilter:
-		return ">="
-	case lessOrEqualFilter:
-		return "<="
-	}
-	return ""
+func (q *Query) hasFilters() bool {
+	return len(q.filters) > 0
 }
 
-// string returns a string representation of the filter
-func (f filter) string() string {
-	return fmt.Sprintf("(filter %s %s %v)", f.fieldName, f.kind.string(), f.value.Interface())
-}
-
-// string returns a string representation of the order
-func (o order) string() string {
-	if o.fieldName == "" {
-		return ""
-	}
-	switch o.kind {
-	case ascendingOrder:
-		return fmt.Sprintf("(order %s)", o.fieldName)
-	case descendingOrder:
-		return fmt.Sprintf("(order -%s)", o.fieldName)
-	}
-	return ""
+func (q *Query) hasOrder() bool {
+	return q.order.fieldName != ""
 }
