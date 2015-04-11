@@ -53,8 +53,7 @@ func testQueryRun(t *testing.T, q *Query, expected []*indexedTestModel) {
 	if err := q.Run(&got); err != nil {
 		t.Errorf("Unexpected error in query.Run: %s", err.Error())
 	}
-	orderMatters := q.order.fieldName != ""
-	if err := expectModelsToBeEqual(expected, got, orderMatters); err != nil {
+	if err := expectModelsToBeEqual(expected, got, q.hasOrder()); err != nil {
 		t.Errorf("testQueryRun failed for query %s\nExpected: %#v\nGot:  %#v", q, expected, got)
 	}
 }
@@ -74,7 +73,7 @@ func testQueryIds(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
 		t.Errorf("Unexpected error in query.Ids: %s", err.Error())
 	}
 	expected := modelIds(Models(expectedModels))
-	if q.order.fieldName != "" {
+	if q.hasOrder() {
 		// Order matters
 		if !reflect.DeepEqual(expected, got) {
 			t.Errorf("testQueryIds failed for query %s\nExpected: %v\nGot:  %v", q, expected, got)
@@ -101,7 +100,7 @@ func expectedResultsForQuery(q *Query, models []*indexedTestModel) []*indexedTes
 	}
 
 	// apply order (if applicable)
-	if q.order.fieldName != "" {
+	if q.hasOrder() {
 		expected = applyOrder(expected, q.order)
 	}
 
@@ -109,9 +108,9 @@ func expectedResultsForQuery(q *Query, models []*indexedTestModel) []*indexedTes
 	expected = applyLimitAndOffset(expected, q.limit, q.offset)
 
 	// apply includes/excludes
-	if len(q.includes) > 0 {
+	if q.hasIncludes() {
 		expected = applyIncludes(expected, q.includes)
-	} else if len(q.excludes) > 0 {
+	} else if q.hasExcludes() {
 		expected = applyExcludes(expected, q.excludes)
 	}
 

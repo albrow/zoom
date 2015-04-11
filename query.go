@@ -35,14 +35,19 @@ func (q *Query) String() string {
 	for _, filter := range q.filters {
 		result += fmt.Sprintf(".%s", filter)
 	}
-	if q.order.fieldName != "" {
+	if q.hasOrder() {
 		result += fmt.Sprintf(".%s", q.order)
 	}
-	if q.offset != 0 {
+	if q.hasOffset() {
 		result += fmt.Sprintf(".Offset(%d)", q.offset)
 	}
-	if q.limit != 0 {
+	if q.hasLimit() {
 		result += fmt.Sprintf(".Limit(%d)", q.limit)
+	}
+	if q.hasIncludes() {
+		result += fmt.Sprintf(`.Include("%s")`, strings.Join(q.includes, `", "`))
+	} else if q.hasExcludes() {
+		result += fmt.Sprintf(`.Exclude("%s")`, strings.Join(q.excludes, `", "`))
 	}
 	return result
 }
@@ -55,9 +60,9 @@ type order struct {
 
 func (o order) String() string {
 	if o.kind == ascendingOrder {
-		return fmt.Sprintf("Order(%s)", o.fieldName)
+		return fmt.Sprintf(`Order("%s")`, o.fieldName)
 	} else {
-		return fmt.Sprintf("Order(-%s)", o.fieldName)
+		return fmt.Sprintf(`Order("-%s")`, o.fieldName)
 	}
 }
 
@@ -87,7 +92,11 @@ type filter struct {
 }
 
 func (f filter) String() string {
-	return fmt.Sprintf(`Filter("%s %s", %v)`, f.fieldName, f.kind, f.value.Interface())
+	if f.value.Kind() == reflect.String {
+		return fmt.Sprintf(`Filter("%s %s", "%s")`, f.fieldName, f.kind, f.value.String())
+	} else {
+		return fmt.Sprintf(`Filter("%s %s", %v)`, f.fieldName, f.kind, f.value.Interface())
+	}
 }
 
 type filterKind int
@@ -143,7 +152,7 @@ func (modelType *ModelType) NewQuery() *Query {
 }
 
 func (q *Query) setError(e error) {
-	if q.err == nil {
+	if !q.hasError() {
 		q.err = e
 	}
 }
@@ -164,7 +173,7 @@ func (q *Query) setError(e error) {
 // is executed. When the query is executed the first error that occured during
 // the lifetime of the query object (if any) will be returned.
 func (q *Query) Order(fieldName string) *Query {
-	if q.order.fieldName != "" {
+	if q.hasOrder() {
 		// TODO: allow secondary sort orders?
 		q.setError(errors.New("zoom: error in Query.Order: previous order already specified. Only one order per query is allowed."))
 	}
@@ -217,7 +226,7 @@ func (q *Query) Offset(amount uint) *Query {
 // error that occured during the lifetime of the query object (if any) will be
 // returned.
 func (q *Query) Include(fields ...string) *Query {
-	if len(q.excludes) > 0 {
+	if q.hasExcludes() {
 		q.setError(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
 		return q
 	}
@@ -234,7 +243,7 @@ func (q *Query) Include(fields ...string) *Query {
 // is executed. When the query is executed the first error that occured during
 // the lifetime of the query object (if any) will be returned.
 func (q *Query) Exclude(fields ...string) *Query {
-	if len(q.includes) > 0 {
+	if q.hasIncludes() {
 		q.setError(errors.New("zoom: cannot use both Include and Exclude modifiers on a query"))
 		return q
 	}
@@ -242,20 +251,22 @@ func (q *Query) Exclude(fields ...string) *Query {
 	return q
 }
 
-// getIncludes parses the includes and excludes properties to return a list of
-// fieldNames which should be included in all find operations. a return value of
-// nil means that all fields should be considered.
-func (q *Query) getIncludes() []string {
-	if len(q.includes) != 0 {
+// fieldNames parses the includes and excludes properties to return a list of
+// field names which should be included in all find operations. If there are no
+// includes or excludes, it returns all the field names.
+func (q *Query) fieldNames() []string {
+	switch {
+	case q.hasIncludes():
 		return q.includes
-	} else if len(q.excludes) != 0 {
+	case q.hasExcludes():
 		results := q.modelSpec.fieldNames()
 		for _, name := range q.excludes {
 			results = removeElementFromStringSlice(results, name)
 		}
 		return results
+	default:
+		return q.modelSpec.fieldNames()
 	}
-	return nil
 }
 
 // Filter applies a filter to the query, which will cause the query to only
@@ -421,7 +432,7 @@ func (q *Query) Ids() ([]string, error) {
 func (q *Query) getStartStop() (int, int) {
 	start := int(q.offset)
 	stop := -1
-	if q.limit != 0 {
+	if q.hasLimit() {
 		stop = int(start) + int(q.limit) - 1
 	}
 	return start, stop
@@ -455,4 +466,24 @@ func (q *Query) hasFilters() bool {
 
 func (q *Query) hasOrder() bool {
 	return q.order.fieldName != ""
+}
+
+func (q *Query) hasLimit() bool {
+	return q.limit != 0
+}
+
+func (q *Query) hasOffset() bool {
+	return q.offset != 0
+}
+
+func (q *Query) hasIncludes() bool {
+	return len(q.includes) > 0
+}
+
+func (q *Query) hasExcludes() bool {
+	return len(q.excludes) > 0
+}
+
+func (q *Query) hasError() bool {
+	return q.err != nil
 }
