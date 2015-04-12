@@ -25,6 +25,31 @@ func TestQueryAll(t *testing.T) {
 	testQuery(t, q, ms)
 }
 
+func TestQueryOrder(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// create models which we will try to sort
+	models, err := createAndSaveIndexedTestModels(10)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+
+	// Test both ascending and descending order for all the fields
+	for _, fieldName := range []string{"Int", "String", "Bool"} {
+		if fieldName == "String" {
+			// Skip string indexes for now
+			// TODO: implement and test orders on string indexes
+			continue
+		}
+		ascendingQuery := indexedTestModels.NewQuery().Order(fieldName)
+		testQuery(t, ascendingQuery, models)
+		descendingQuery := indexedTestModels.NewQuery().Order("-" + fieldName)
+		testQuery(t, descendingQuery, models)
+	}
+}
+
 // There's a huge amount of test cases to cover above.
 // Below is some code that makes it easier, but needs to be
 // tested itself. Testing for correctness using a brute force

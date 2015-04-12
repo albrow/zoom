@@ -387,6 +387,21 @@ func (q *Query) Run(models interface{}) error {
 	case !q.hasFilters() && !q.hasOrder():
 		// Just return the models whose ids are in the all index
 		t.findModelsBySetIds(q.modelSpec.allIndexKey(), q.modelSpec.name, newScanModelsHandler(q.modelSpec, models))
+	case q.hasOrder() && !q.hasFilters():
+		// Just return the models in the field index that we should order by
+		fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
+		if err != nil {
+			return fmt.Errorf("zoom: Error in Query.Run: %s", err.Error())
+		}
+		if q.modelSpec.fieldsByName[q.order.fieldName].indexKind == stringIndex {
+			return fmt.Errorf("orders on string indexes not yet implemented")
+		}
+		switch q.order.kind {
+		case ascendingOrder:
+			t.findModelsBySortedSetIds(fieldIndexKey, q.modelSpec.name, newScanModelsHandler(q.modelSpec, models))
+		case descendingOrder:
+			t.findModelsByReverseSortedSetIds(fieldIndexKey, q.modelSpec.name, newScanModelsHandler(q.modelSpec, models))
+		}
 	}
 	return t.Exec()
 }
@@ -404,7 +419,7 @@ func (q *Query) RunOne(model Model) error {
 // Otherwise, the second return value will be nil.
 func (q *Query) Count() (int, error) {
 	switch {
-	case !q.hasFilters() && !q.hasOrder():
+	case !q.hasFilters():
 		// Just return the number of ids in the all index set
 		conn := GetConn()
 		defer conn.Close()
@@ -423,6 +438,23 @@ func (q *Query) Ids() ([]string, error) {
 		conn := GetConn()
 		defer conn.Close()
 		return redis.Strings(conn.Do("SMEMBERS", q.modelSpec.allIndexKey()))
+	case q.hasOrder() && !q.hasFilters():
+		// Just return the ids in the sorted set for the field index
+		fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
+		if err != nil {
+			return nil, fmt.Errorf("zoom: Error in Query.Run: %s", err.Error())
+		}
+		if q.modelSpec.fieldsByName[q.order.fieldName].indexKind == stringIndex {
+			return nil, fmt.Errorf("orders on string indexes not yet implemented")
+		}
+		conn := GetConn()
+		defer conn.Close()
+		switch q.order.kind {
+		case ascendingOrder:
+			return redis.Strings(conn.Do("ZRANGE", fieldIndexKey, 0, -1))
+		case descendingOrder:
+			return redis.Strings(conn.Do("ZREVRANGE", fieldIndexKey, 0, -1))
+		}
 	}
 	return nil, nil
 }
