@@ -16,9 +16,11 @@ import (
 )
 
 var (
-	findModelsBySetIdsScript   *redis.Script
-	deleteModelsBySetIdsScript *redis.Script
-	deleteStringIndexScript    *redis.Script
+	findModelsBySetIdsScript              *redis.Script
+	deleteModelsBySetIdsScript            *redis.Script
+	deleteStringIndexScript               *redis.Script
+	findModelsBySortedSetIdsScript        *redis.Script
+	findModelsByReverseSortedSetIdsScript *redis.Script
 )
 
 var (
@@ -46,6 +48,16 @@ func init() {
 			script:   &deleteStringIndexScript,
 			filename: "delete_string_index.lua",
 			keyCount: 0,
+		},
+		{
+			script:   &findModelsBySortedSetIdsScript,
+			filename: "find_models_by_sorted_set_ids.lua",
+			keyCount: 1,
+		},
+		{
+			script:   &findModelsByReverseSortedSetIdsScript,
+			filename: "find_models_by_reverse_sorted_set_ids.lua",
+			keyCount: 1,
 		},
 	}
 	for _, s := range scriptsToParse {
@@ -81,4 +93,22 @@ func (t *Transaction) deleteModelsBySetIds(setKey string, modelName string, hand
 // The script will atomically remove the existing index, if any, on the given field name.
 func (t *Transaction) deleteStringIndex(modelName, modelId, fieldName string) {
 	t.Script(deleteStringIndexScript, redis.Args{modelName, modelId, fieldName}, nil)
+}
+
+// findModelsBySortedSetIds is a small function wrapper around findModelsBySortedSetIdsScript.
+// It offers some type safety and helps make sure the arguments you pass through to the are correct.
+// The script will return all the fields for models (in order) which are identified by ids in the
+// given sorted set.
+// You can use the handler to scan the models into a slice of models.
+func (t *Transaction) findModelsBySortedSetIds(setKey string, modelName string, handler ReplyHandler) {
+	t.Script(findModelsBySortedSetIdsScript, redis.Args{setKey, modelName}, handler)
+}
+
+// findModelsByReverseSortedSetIds is a small function wrapper around findModelsByReverseSortedSetIdsScript.
+// It offers some type safety and helps make sure the arguments you pass through to the are correct.
+// The script will return all the fields for models (in *reverse* order) which are identified by ids in the
+// given sorted set.
+// You can use the handler to scan the models into a slice of models.
+func (t *Transaction) findModelsByReverseSortedSetIds(setKey string, modelName string, handler ReplyHandler) {
+	t.Script(findModelsByReverseSortedSetIdsScript, redis.Args{setKey, modelName}, handler)
 }
