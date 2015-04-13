@@ -164,7 +164,7 @@ func TestFindModelsBySortedSetIdsScript(t *testing.T) {
 		tx := NewTransaction()
 		var gotReply interface{}
 		fieldIndexKey, _ := indexedTestModels.FieldIndexKey("Int")
-		tx.findModelsBySortedSetIds(fieldIndexKey, indexedTestModels.Name(), func(reply interface{}) error {
+		tx.findModelsBySortedSetIds(fieldIndexKey, indexedTestModels.Name(), ascendingOrder, func(reply interface{}) error {
 			gotReply = reply
 			return nil
 		})
@@ -174,28 +174,12 @@ func TestFindModelsBySortedSetIdsScript(t *testing.T) {
 		return gotReply
 	}
 	testFindByIdsScript(t, replyFunc, models, true)
-}
 
-func TestFindModelsByReverseSortedSetIdsScript(t *testing.T) {
-	testingSetUp()
-	defer testingTearDown()
-
-	// Create and save some test models with increasing Int values
-	models := createIndexedTestModels(5)
-	tx := NewTransaction()
-	for i, model := range models {
-		model.Int = i
-		tx.Save(indexedTestModels, model)
-	}
-	if err := tx.Exec(); err != nil {
-		t.Errorf("Unexpected error saving models in tx.Exec: %s", err.Error())
-	}
-
-	replyFunc := func() interface{} {
+	reverseReplyFunc := func() interface{} {
 		tx := NewTransaction()
 		var gotReply interface{}
 		fieldIndexKey, _ := indexedTestModels.FieldIndexKey("Int")
-		tx.findModelsByReverseSortedSetIds(fieldIndexKey, indexedTestModels.Name(), func(reply interface{}) error {
+		tx.findModelsBySortedSetIds(fieldIndexKey, indexedTestModels.Name(), descendingOrder, func(reply interface{}) error {
 			gotReply = reply
 			return nil
 		})
@@ -204,7 +188,7 @@ func TestFindModelsByReverseSortedSetIdsScript(t *testing.T) {
 		}
 		return gotReply
 	}
-	testFindByIdsScript(t, replyFunc, reverseModels(models), true)
+	testFindByIdsScript(t, reverseReplyFunc, reverseModels(models), true)
 }
 
 func testFindByIdsScript(t *testing.T, replyFunc func() interface{}, expectedModels []*indexedTestModel, orderMatters bool) {

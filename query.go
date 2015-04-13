@@ -396,12 +396,7 @@ func (q *Query) Run(models interface{}) error {
 		if q.modelSpec.fieldsByName[q.order.fieldName].indexKind == stringIndex {
 			return fmt.Errorf("orders on string indexes not yet implemented")
 		}
-		switch q.order.kind {
-		case ascendingOrder:
-			t.findModelsBySortedSetIds(fieldIndexKey, q.modelSpec.name, newScanModelsHandler(q.modelSpec, models))
-		case descendingOrder:
-			t.findModelsByReverseSortedSetIds(fieldIndexKey, q.modelSpec.name, newScanModelsHandler(q.modelSpec, models))
-		}
+		t.findModelsBySortedSetIds(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, models))
 	}
 	return t.Exec()
 }

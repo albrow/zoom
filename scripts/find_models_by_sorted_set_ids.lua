@@ -5,10 +5,10 @@
 -- find_models_by_sorted_set_ids is a lua script that takes the following arguments:
 -- 	1) The key of a sorted set of model ids
 --		2) The name of a registered model
--- The script then gets all the data for the models corresponding to the ids
--- from their respective hashes in the database, and keeps everything in the
--- order of the sorted set. It returns an array of arrays where each array
--- contains the fields for a particular model.
+--		3) The order (must be either "ascending" or "descending")
+-- The script first gets all ids from the sorted set in the given order. Then, for
+-- each id it gets all the fields for the corresponding model hash. It returns an
+-- array of arrays where each array contains the fields for a particular model.
 -- Here's an example response:
 -- [
 -- 	[
@@ -26,8 +26,14 @@
 -- Assign keys to variables for easy access
 local setKey = KEYS[1]
 local modelName = ARGV[1]
+local order = ARGV[2]
 -- Get all the ids from the set name
-local ids = redis.call('ZRANGE', setKey, 0, -1)
+local ids = {}
+if order == 'ascending' then
+	ids = redis.call('ZRANGE', setKey, 0, -1)
+else
+	ids = redis.call('ZREVRANGE', setKey, 0, -1)
+end
 local models = {}
 if #ids > 0 then
 	-- Iterate over the ids and find each job
