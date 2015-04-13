@@ -382,11 +382,11 @@ func (q *Query) filterById(operator string, value interface{}) *Query {
 // (if any). It will also return an error if models is the wrong type.
 func (q *Query) Run(models interface{}) error {
 	// TODO: type-checking
-	t := NewTransaction()
+	q.tx = NewTransaction()
 	switch {
 	case !q.hasFilters() && !q.hasOrder():
 		// Just return the models whose ids are in the all index
-		t.findModelsBySetIds(q.modelSpec.allIndexKey(), q.modelSpec.name, newScanModelsHandler(q.modelSpec, models))
+		q.tx.findModelsBySetIds(q.modelSpec.allIndexKey(), q.modelSpec.name, newScanModelsHandler(q.modelSpec, models))
 	case q.hasOrder() && !q.hasFilters():
 		// Just return the models in the field index that we should order by
 		fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
@@ -394,12 +394,12 @@ func (q *Query) Run(models interface{}) error {
 			return fmt.Errorf("zoom: Error in Query.Run: %s", err.Error())
 		}
 		if q.modelSpec.fieldsByName[q.order.fieldName].indexKind == stringIndex {
-			t.findModelsByStringIndex(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, models))
+			q.tx.findModelsByStringIndex(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, models))
 		} else {
-			t.findModelsBySortedSetIds(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, models))
+			q.tx.findModelsBySortedSetIds(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, models))
 		}
 	}
-	return t.Exec()
+	return q.tx.Exec()
 }
 
 // RunOne is exactly like Run but finds only the first model that fits the
