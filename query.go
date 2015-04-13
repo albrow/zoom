@@ -394,9 +394,10 @@ func (q *Query) Run(models interface{}) error {
 			return fmt.Errorf("zoom: Error in Query.Run: %s", err.Error())
 		}
 		if q.modelSpec.fieldsByName[q.order.fieldName].indexKind == stringIndex {
-			return fmt.Errorf("orders on string indexes not yet implemented")
+			t.findModelsByStringIndex(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, models))
+		} else {
+			t.findModelsBySortedSetIds(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, models))
 		}
-		t.findModelsBySortedSetIds(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, models))
 	}
 	return t.Exec()
 }
@@ -440,15 +441,22 @@ func (q *Query) Ids() ([]string, error) {
 			return nil, fmt.Errorf("zoom: Error in Query.Run: %s", err.Error())
 		}
 		if q.modelSpec.fieldsByName[q.order.fieldName].indexKind == stringIndex {
-			return nil, fmt.Errorf("orders on string indexes not yet implemented")
-		}
-		conn := GetConn()
-		defer conn.Close()
-		switch q.order.kind {
-		case ascendingOrder:
-			return redis.Strings(conn.Do("ZRANGE", fieldIndexKey, 0, -1))
-		case descendingOrder:
-			return redis.Strings(conn.Do("ZREVRANGE", fieldIndexKey, 0, -1))
+			ids := []string{}
+			q.tx = NewTransaction()
+			q.tx.extractIdsFromStringIndex(fieldIndexKey, q.order.kind, newScanStringsHandler(&ids))
+			if err := q.tx.Exec(); err != nil {
+				return nil, err
+			}
+			return ids, nil
+		} else {
+			conn := GetConn()
+			defer conn.Close()
+			switch q.order.kind {
+			case ascendingOrder:
+				return redis.Strings(conn.Do("ZRANGE", fieldIndexKey, 0, -1))
+			case descendingOrder:
+				return redis.Strings(conn.Do("ZREVRANGE", fieldIndexKey, 0, -1))
+			}
 		}
 	}
 	return nil, nil

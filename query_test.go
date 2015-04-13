@@ -38,11 +38,6 @@ func TestQueryOrder(t *testing.T) {
 
 	// Test both ascending and descending order for all the fields
 	for _, fieldName := range []string{"Int", "String", "Bool"} {
-		if fieldName == "String" {
-			// Skip string indexes for now
-			// TODO: implement and test orders on string indexes
-			continue
-		}
 		ascendingQuery := indexedTestModels.NewQuery().Order(fieldName)
 		testQuery(t, ascendingQuery, models)
 		descendingQuery := indexedTestModels.NewQuery().Order("-" + fieldName)
