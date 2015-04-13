@@ -36,7 +36,7 @@ else
 end
 local models = {}
 if #ids > 0 then
-	-- Iterate over the ids and find each job
+	-- Iterate over the ids and get the fields for the corresponding models
 	for i, id in ipairs(ids) do
 		local key = modelName .. ':' .. id
 		local fields = redis.call('HGETALL', key)

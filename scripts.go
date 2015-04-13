@@ -20,6 +20,7 @@ var (
 	deleteModelsBySetIdsScript     *redis.Script
 	deleteStringIndexScript        *redis.Script
 	findModelsBySortedSetIdsScript *redis.Script
+	findModelsByStringIndexScript  *redis.Script
 )
 
 var (
@@ -51,6 +52,11 @@ func init() {
 		{
 			script:   &findModelsBySortedSetIdsScript,
 			filename: "find_models_by_sorted_set_ids.lua",
+			keyCount: 1,
+		},
+		{
+			script:   &findModelsByStringIndexScript,
+			filename: "find_models_by_string_index.lua",
 			keyCount: 1,
 		},
 	}
@@ -96,4 +102,13 @@ func (t *Transaction) deleteStringIndex(modelName, modelId, fieldName string) {
 // You can use the handler to scan the models into a slice of models.
 func (t *Transaction) findModelsBySortedSetIds(setKey string, modelName string, orderKind orderKind, handler ReplyHandler) {
 	t.Script(findModelsBySortedSetIdsScript, redis.Args{setKey, modelName, orderKind.String()}, handler)
+}
+
+// findModelsByStringIndex is a small function wrapper around findModelsByStringIndexScript.
+// It offers some type safety and helps make sure the arguments you pass through to the are correct.
+// The script will return all the fields for models (in the specified order) which are identified by
+// ids in the given string index.
+// You can use the handler to scan the models into a slice of models.
+func (t *Transaction) findModelsByStringIndex(setKey string, modelName string, orderKind orderKind, handler ReplyHandler) {
+	t.Script(findModelsByStringIndexScript, redis.Args{setKey, modelName, orderKind.String()}, handler)
 }

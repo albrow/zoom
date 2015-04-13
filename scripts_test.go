@@ -3,6 +3,7 @@ package zoom
 import (
 	"github.com/garyburd/redigo/redis"
 	"reflect"
+	"strconv"
 	"testing"
 )
 
@@ -160,35 +161,67 @@ func TestFindModelsBySortedSetIdsScript(t *testing.T) {
 		t.Errorf("Unexpected error saving models in tx.Exec: %s", err.Error())
 	}
 
-	replyFunc := func() interface{} {
-		tx := NewTransaction()
-		var gotReply interface{}
-		fieldIndexKey, _ := indexedTestModels.FieldIndexKey("Int")
-		tx.findModelsBySortedSetIds(fieldIndexKey, indexedTestModels.Name(), ascendingOrder, func(reply interface{}) error {
-			gotReply = reply
-			return nil
-		})
-		if err := tx.Exec(); err != nil {
-			t.Fatalf("Unexpected error executing transaction in replyFunc: %s", err.Error())
+	// Test in both ascending and descending order
+	for _, order := range []orderKind{ascendingOrder, descendingOrder} {
+		replyFunc := func() interface{} {
+			tx := NewTransaction()
+			var gotReply interface{}
+			fieldIndexKey, _ := indexedTestModels.FieldIndexKey("Int")
+			tx.findModelsBySortedSetIds(fieldIndexKey, indexedTestModels.Name(), order, func(reply interface{}) error {
+				gotReply = reply
+				return nil
+			})
+			if err := tx.Exec(); err != nil {
+				t.Fatalf("Unexpected error executing transaction in replyFunc: %s", err.Error())
+			}
+			return gotReply
 		}
-		return gotReply
+		switch order {
+		case ascendingOrder:
+			testFindByIdsScript(t, replyFunc, models, true)
+		case descendingOrder:
+			testFindByIdsScript(t, replyFunc, reverseModels(models), true)
+		}
 	}
-	testFindByIdsScript(t, replyFunc, models, true)
+}
 
-	reverseReplyFunc := func() interface{} {
-		tx := NewTransaction()
-		var gotReply interface{}
-		fieldIndexKey, _ := indexedTestModels.FieldIndexKey("Int")
-		tx.findModelsBySortedSetIds(fieldIndexKey, indexedTestModels.Name(), descendingOrder, func(reply interface{}) error {
-			gotReply = reply
-			return nil
-		})
-		if err := tx.Exec(); err != nil {
-			t.Fatalf("Unexpected error executing transaction in replyFunc: %s", err.Error())
-		}
-		return gotReply
+func TestFindModelsByStringIndexScript(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Create and save some test models with increasing String values
+	models := createIndexedTestModels(5)
+	tx := NewTransaction()
+	for i, model := range models {
+		model.String = strconv.Itoa(i)
+		tx.Save(indexedTestModels, model)
 	}
-	testFindByIdsScript(t, reverseReplyFunc, reverseModels(models), true)
+	if err := tx.Exec(); err != nil {
+		t.Errorf("Unexpected error saving models in tx.Exec: %s", err.Error())
+	}
+
+	// Test in both ascending and descending order
+	for _, order := range []orderKind{ascendingOrder, descendingOrder} {
+		replyFunc := func() interface{} {
+			tx := NewTransaction()
+			var gotReply interface{}
+			fieldIndexKey, _ := indexedTestModels.FieldIndexKey("String")
+			tx.findModelsByStringIndex(fieldIndexKey, indexedTestModels.Name(), order, func(reply interface{}) error {
+				gotReply = reply
+				return nil
+			})
+			if err := tx.Exec(); err != nil {
+				t.Fatalf("Unexpected error executing transaction in replyFunc: %s", err.Error())
+			}
+			return gotReply
+		}
+		switch order {
+		case ascendingOrder:
+			testFindByIdsScript(t, replyFunc, models, true)
+		case descendingOrder:
+			testFindByIdsScript(t, replyFunc, reverseModels(models), true)
+		}
+	}
 }
 
 func testFindByIdsScript(t *testing.T, replyFunc func() interface{}, expectedModels []*indexedTestModel, orderMatters bool) {
