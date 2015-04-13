@@ -202,6 +202,21 @@ func newScanStringHandler(s *string) ReplyHandler {
 	}
 }
 
+// newScanStringsHandler returns a reply handler which will scan all the replies
+// in reply into strings. strings should be a pointer to a slice of some strings.
+// The returned replyHandler will grow or shrink strings as needed.
+func newScanStringsHandler(strings interface{}) ReplyHandler {
+	return func(reply interface{}) error {
+		replyStrings, err := redis.Strings(reply, nil)
+		if err != nil {
+			return err
+		}
+		stringsVal := reflect.ValueOf(strings).Elem()
+		stringsVal.Set(reflect.ValueOf(replyStrings))
+		return nil
+	}
+}
+
 // newScanModelHandler returns a ReplyHandler which will scan all the fields in
 // reply into the fields of mr.model.
 func newScanModelHandler(mr *modelRef) ReplyHandler {

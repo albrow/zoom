@@ -295,3 +295,40 @@ func testFindByIdsScript(t *testing.T, replyFunc func() interface{}, expectedMod
 		}
 	}
 }
+
+func TestExtractIdsFromStringIndexScript(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Create and save some test models with increasing String values
+	models := createIndexedTestModels(5)
+	tx := NewTransaction()
+	for i, model := range models {
+		model.String = strconv.Itoa(i)
+		tx.Save(indexedTestModels, model)
+	}
+	if err := tx.Exec(); err != nil {
+		t.Errorf("Unexpected error saving models in tx.Exec: %s", err.Error())
+	}
+
+	// Test in both ascending and descending order
+	for _, order := range []orderKind{ascendingOrder, descendingOrder} {
+		expectedIds := []string{}
+		switch order {
+		case ascendingOrder:
+			expectedIds = modelIds(Models(models))
+		case descendingOrder:
+			expectedIds = modelIds(Models(reverseModels(models)))
+		}
+		gotIds := []string{}
+		tx := NewTransaction()
+		fieldIndexKey, _ := indexedTestModels.FieldIndexKey("String")
+		tx.extractIdsFromStringIndex(fieldIndexKey, order, newScanStringsHandler(&gotIds))
+		if err := tx.Exec(); err != nil {
+			t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
+		}
+		if !reflect.DeepEqual(gotIds, expectedIds) {
+			t.Errorf("Script results were incorrect.\nExpected: %v\nGot:  %v", expectedIds, gotIds)
+		}
+	}
+}

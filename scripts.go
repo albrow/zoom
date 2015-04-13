@@ -16,11 +16,12 @@ import (
 )
 
 var (
-	findModelsBySetIdsScript       *redis.Script
-	deleteModelsBySetIdsScript     *redis.Script
-	deleteStringIndexScript        *redis.Script
-	findModelsBySortedSetIdsScript *redis.Script
-	findModelsByStringIndexScript  *redis.Script
+	findModelsBySetIdsScript        *redis.Script
+	deleteModelsBySetIdsScript      *redis.Script
+	deleteStringIndexScript         *redis.Script
+	findModelsBySortedSetIdsScript  *redis.Script
+	findModelsByStringIndexScript   *redis.Script
+	extractIdsFromStringIndexScript *redis.Script
 )
 
 var (
@@ -57,6 +58,11 @@ func init() {
 		{
 			script:   &findModelsByStringIndexScript,
 			filename: "find_models_by_string_index.lua",
+			keyCount: 1,
+		},
+		{
+			script:   &extractIdsFromStringIndexScript,
+			filename: "extract_ids_from_string_index.lua",
 			keyCount: 1,
 		},
 	}
@@ -111,4 +117,12 @@ func (t *Transaction) findModelsBySortedSetIds(setKey string, modelName string, 
 // You can use the handler to scan the models into a slice of models.
 func (t *Transaction) findModelsByStringIndex(setKey string, modelName string, orderKind orderKind, handler ReplyHandler) {
 	t.Script(findModelsByStringIndexScript, redis.Args{setKey, modelName, orderKind.String()}, handler)
+}
+
+// extractIdsFromStringIndex is a small function wrapper around extractIdsFromStringIndexScript.
+// It offers some type safety and helps make sure the arguments you pass through to the are correct.
+// The script will extract and return the ids in the given string index. You can use the handler to
+// scan the ids into a slice of strings.
+func (t *Transaction) extractIdsFromStringIndex(setKey string, orderKind orderKind, handler ReplyHandler) {
+	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, orderKind.String()}, handler)
 }
