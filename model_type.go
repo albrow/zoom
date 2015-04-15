@@ -70,11 +70,12 @@ func getDefaultName(typ reflect.Type) string {
 func RegisterName(name string, model Model) (*ModelType, error) {
 	// Make sure the name and type have not been previously registered
 	typ := reflect.TypeOf(model)
-	if _, found := modelTypeToSpec[typ]; found {
+	switch {
+	case typeIsRegistered(typ):
 		return nil, TypeAlreadyRegisteredError{Typ: typ}
-	} else if _, found := modelNameToSpec[name]; found {
+	case nameIsRegistered(name):
 		return nil, NameAlreadyRegisteredError{Name: name}
-	} else if !typeIsPointerToStruct(typ) {
+	case !typeIsPointerToStruct(typ):
 		return nil, fmt.Errorf("zoom: Register and RegisterName require a pointer to a struct as an argument. Got type %T", model)
 	}
 
@@ -91,8 +92,13 @@ func RegisterName(name string, model Model) (*ModelType, error) {
 	return &ModelType{spec}, nil
 }
 
-func typeIsRegistered(model Model) bool {
-	_, found := modelTypeToSpec[reflect.TypeOf(model)]
+func typeIsRegistered(typ reflect.Type) bool {
+	_, found := modelTypeToSpec[typ]
+	return found
+}
+
+func nameIsRegistered(name string) bool {
+	_, found := modelNameToSpec[name]
 	return found
 }
 
@@ -436,13 +442,14 @@ func (modelType *ModelType) checkModelsType(models interface{}) error {
 	}
 	modelsVal := reflect.ValueOf(models).Elem()
 	elemType := modelsVal.Type().Elem()
-	if !typeIsSliceOrArray(modelsVal.Type()) {
+	switch {
+	case !typeIsSliceOrArray(modelsVal.Type()):
 		return fmt.Errorf("models should be a pointer to a slice or array of models")
-	} else if !typeIsPointerToStruct(elemType) {
+	case !typeIsPointerToStruct(elemType):
 		return fmt.Errorf("the elements in models should be pointers to structs")
-	} else if _, found := modelTypeToSpec[elemType]; !found {
+	case !typeIsRegistered(elemType):
 		return fmt.Errorf("the elements in models should be of a registered type\nType %s has not been registered.", elemType.String())
-	} else if elemType != modelType.spec.typ {
+	case elemType != modelType.spec.typ:
 		return fmt.Errorf("models were the wrong type. Expected slice or array of %s but got %T", modelType.spec.typ.String(), models)
 	}
 	return nil

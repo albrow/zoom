@@ -62,10 +62,10 @@ func testRegisteredModelType(t *testing.T, modelType *ModelType, expectedName st
 	}
 
 	// Check that the model type was added to the appropriate maps
-	if _, found := modelNameToSpec[expectedName]; !found {
+	if !nameIsRegistered(expectedName) {
 		t.Error("Registered spec was not added to the modelNameToSpec map")
 	}
-	if _, found := modelTypeToSpec[expectedType]; !found {
+	if !typeIsRegistered(expectedType) {
 		t.Error("Registered spec was not added to the modelTypeToSpec map")
 	}
 
