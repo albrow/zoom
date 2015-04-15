@@ -242,8 +242,8 @@ func newScanModelHandler(mr *modelRef) ReplyHandler {
 }
 
 // newScanModelsHandler returns a reply handler which will scan all the replies
-// in reply into a model in models. models should be a pointer to a slice of some
-// model type. The returned replyHandler will grow or shrink models as needed.
+// in reply into models. models should be a pointer to a slice of some registered model
+// type. The returned replyHandler will grow or shrink models as needed.
 func newScanModelsHandler(spec *modelSpec, models interface{}) ReplyHandler {
 	return func(reply interface{}) error {
 		modelsFields, err := redis.Values(reply, nil)
@@ -277,6 +277,12 @@ func newScanModelsHandler(spec *modelSpec, models interface{}) ReplyHandler {
 			if err := scanModel(fields, mr); err != nil {
 				return err
 			}
+		}
+		// Trim the slice if it is longer than the number of models we scanned
+		// in.
+		if len(modelsFields) < modelsVal.Len() {
+			modelsVal.SetLen(len(modelsFields))
+			modelsVal.SetCap(len(modelsFields))
 		}
 		return nil
 	}
