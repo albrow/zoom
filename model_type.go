@@ -91,6 +91,11 @@ func RegisterName(name string, model Model) (*ModelType, error) {
 	return &ModelType{spec}, nil
 }
 
+func typeIsRegistered(model Model) bool {
+	_, found := modelTypeToSpec[reflect.TypeOf(model)]
+	return found
+}
+
 // ModelKey returns the key that identifies a hash in the database
 // which contains all the fields of the given model. It returns an error
 // iff the model does not have an id.
@@ -117,6 +122,9 @@ func (mt *ModelType) FieldIndexKey(fieldName string) (string, error) {
 // setting the Id. To make a struct satisfy the Model interface, you can embed
 // zoom.DefaultData.
 func (mt *ModelType) Save(model Model) error {
+	if err := mt.checkModelType(model); err != nil {
+		return fmt.Errorf("zoom: Error in Save: %s", err.Error())
+	}
 	t := NewTransaction()
 	t.Save(mt, model)
 	if err := t.Exec(); err != nil {
@@ -134,6 +142,11 @@ func (mt *ModelType) Save(model Model) error {
 // will be added to the transaction and returned as an error when the transaction is
 // executed.
 func (t *Transaction) Save(mt *ModelType, model Model) {
+	if err := mt.checkModelType(model); err != nil {
+		t.setError(fmt.Errorf("zoom: Error in Transaction.Save: %s", err.Error()))
+		return
+	}
+
 	// Generate id if needed
 	if model.GetId() == "" {
 		model.SetId(generateRandomId())
@@ -241,6 +254,9 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 // with the given id does not exist, if the given model was the wrong type, or
 // if there was a problem connecting to the database.
 func (mt *ModelType) Find(id string, model Model) error {
+	if err := mt.checkModelType(model); err != nil {
+		return fmt.Errorf("zoom: Error in Find: %s", err.Error())
+	}
 	t := NewTransaction()
 	t.Find(mt, id, model)
 	if err := t.Exec(); err != nil {
@@ -256,6 +272,11 @@ func (mt *ModelType) Find(id string, model Model) error {
 // will be added to the transaction and returned as an error when the transaction is
 // executed.
 func (t *Transaction) Find(mt *ModelType, id string, model Model) {
+	if err := mt.checkModelType(model); err != nil {
+		t.setError(fmt.Errorf("zoom: Error in Transaction.Find: %s", err.Error()))
+		return
+	}
+
 	model.SetId(id)
 
 	// Create a modelRef and start a transaction
@@ -278,7 +299,7 @@ func (t *Transaction) Find(mt *ModelType, id string, model Model) {
 func (mt *ModelType) FindAll(models interface{}) error {
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
-	if err := checkModelsType(mt, models); err != nil {
+	if err := mt.checkModelsType(models); err != nil {
 		return fmt.Errorf("zoom: Error in FindAll: %s", err.Error())
 	}
 
@@ -301,8 +322,8 @@ func (t *Transaction) FindAll(mt *ModelType, models interface{}) {
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
 	// TODO: any way to avoid checking the type twice?
-	if err := checkModelsType(mt, models); err != nil {
-		t.setError(err)
+	if err := mt.checkModelsType(models); err != nil {
+		t.setError(fmt.Errorf("zoom: Error in Transaction.FindAll: %s", err.Error()))
 		return
 	}
 	t.findModelsBySetIds(mt.AllIndexKey(), mt.Name(), newScanModelsHandler(mt.spec, models))
@@ -408,22 +429,30 @@ func (t *Transaction) DeleteAll(mt *ModelType, count *int) {
 }
 
 // checkModelsType returns an error iff models is not a pointer to a slice of models of the
-// same type as mt.
-func checkModelsType(mt *ModelType, models interface{}) error {
+// registered type that corresponds to modelType.
+func (modelType *ModelType) checkModelsType(models interface{}) error {
 	if reflect.TypeOf(models).Kind() != reflect.Ptr {
 		return fmt.Errorf("models should be a pointer to a slice or array of models")
 	}
 	modelsVal := reflect.ValueOf(models).Elem()
-	modelType := modelsVal.Type().Elem()
+	elemType := modelsVal.Type().Elem()
 	if !typeIsSliceOrArray(modelsVal.Type()) {
 		return fmt.Errorf("models should be a pointer to a slice or array of models")
-	} else if !typeIsPointerToStruct(modelType) {
+	} else if !typeIsPointerToStruct(elemType) {
 		return fmt.Errorf("the elements in models should be pointers to structs")
-	} else if _, found := modelTypeToSpec[modelType]; !found {
-		return fmt.Errorf("the elements in models should be of a registered type\nType %s has not been registered.", modelType.String())
-	} else if modelType != mt.spec.typ {
-		return fmt.Errorf("models were the wrong type. Expected %s but got %s", mt.spec.typ.String(), modelType.String())
+	} else if _, found := modelTypeToSpec[elemType]; !found {
+		return fmt.Errorf("the elements in models should be of a registered type\nType %s has not been registered.", elemType.String())
+	} else if elemType != modelType.spec.typ {
+		return fmt.Errorf("models were the wrong type. Expected slice or array of %s but got %T", modelType.spec.typ.String(), models)
 	}
+	return nil
+}
 
+// checkModelType returns an error iff model is not of the registered type that
+// corresponds to mt.
+func (modelType *ModelType) checkModelType(model Model) error {
+	if reflect.TypeOf(model) != modelType.spec.typ {
+		return fmt.Errorf("model was the wrong type. Expected %s but got %T", modelType.spec.typ.String(), model)
+	}
 	return nil
 }
