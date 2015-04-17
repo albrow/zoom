@@ -15,15 +15,13 @@ import (
 func TestConvertPrimatives(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
-	model := createIndexedPrimativesModel()
-	testConvertType(t, indexedPrimativesModels, model)
+	testConvertType(t, indexedPrimativesModels, createIndexedPrimativesModel())
 }
 
 func TestConvertPointers(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
-	model := createIndexedPointersModel()
-	testConvertType(t, indexedPointersModels, model)
+	testConvertType(t, indexedPointersModels, createIndexedPointersModel())
 }
 
 func TestConvertInconvertibles(t *testing.T) {
@@ -100,13 +98,13 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 	testConvertType(t, embededPointerToStructModels, model)
 }
 
-// a general test that uses reflection
+// testConvertType is a general test that uses reflection. It saves model to the databse then finds it. If
+// the found copy does not exactly match the original, it reports an error via t.Error or t.Errorf
 func testConvertType(t *testing.T, modelType *ModelType, model Model) {
 	// Make sure we can save the model without errors
 	if err := modelType.Save(model); err != nil {
 		t.Errorf("Unexpected error in Save: %s", err.Error())
 	}
-
 	// Find the model from the database and scan it into a new copy
 	modelCopy, ok := reflect.New(modelType.spec.typ.Elem()).Interface().(Model)
 	if !ok {
@@ -115,12 +113,10 @@ func testConvertType(t *testing.T, modelType *ModelType, model Model) {
 	if err := modelType.Find(model.GetId(), modelCopy); err != nil {
 		t.Errorf("Unexpected error in Find: %s", err.Error())
 	}
-
 	// Make sure the copy equals the original
 	if !reflect.DeepEqual(model, modelCopy) {
-		t.Errorf("Model of type %s was not saved/retrieved correctly.\nExpected: %+v\nGot:  %+v", model, modelCopy)
+		t.Errorf("Model of type %T was not saved/retrieved correctly.\nExpected: %+v\nGot:      %+v", model, model, modelCopy)
 	}
-
 	// Make sure we can save a model with all nil fields. This should
 	// not cause an error.
 	emptyModel, ok := reflect.New(modelType.spec.typ.Elem()).Interface().(Model)

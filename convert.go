@@ -16,17 +16,20 @@ import (
 
 // scanModel iterates through replies, converts each field value, and scans the
 // value into the fields of mr.model. It expects replies to be the output from an
-// HGETALL command from redis.
+// HGETALL command from redis. That is, replies should consist of alternating fieldName
+// fieldValue pairs.
 func scanModel(replies []interface{}, mr *modelRef) error {
 	if len(replies)%2 != 0 {
 		return fmt.Errorf("zoom: Error in scanModel: Expected len(replies) to be even, but got %d", len(replies))
 	}
 	ms := mr.spec
 	for i := 0; i < len(replies); i += 2 {
+		// The even values should be field names
 		fieldName, err := redis.String(replies[i], nil)
 		if err != nil {
 			return err
 		}
+		// The odd values should be field values
 		replyBytes, err := redis.Bytes(replies[i+1], nil)
 		if err != nil {
 			return err
@@ -40,7 +43,6 @@ func scanModel(replies []interface{}, mr *modelRef) error {
 		if !found {
 			return fmt.Errorf("zoom: Error in scanModel: Could not find field %s in %T", fieldName, mr.model)
 		}
-
 		fieldVal := mr.fieldValue(fieldName)
 		switch fs.kind {
 		case primativeField:
