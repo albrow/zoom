@@ -54,12 +54,18 @@ func TestConvertInconvertibles(t *testing.T) {
 	testConvertType(t, inconvertiblesModels, model)
 }
 
+type embeddable struct {
+	Int    int
+	String string
+	Bool   bool
+}
+
 func TestConvertEmbeddedStruct(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
 	type embeddedStructModel struct {
-		testModel
+		embeddable
 		DefaultData
 	}
 	embededStructModels, err := Register(&embeddedStructModel{})
@@ -67,7 +73,7 @@ func TestConvertEmbeddedStruct(t *testing.T) {
 		t.Errorf("Unexpected error in Register: %s", err.Error())
 	}
 	model := &embeddedStructModel{
-		testModel: testModel{
+		embeddable: embeddable{
 			Int:    randomInt(),
 			String: randomString(),
 			Bool:   randomBool(),
@@ -81,7 +87,7 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 	defer testingTearDown()
 
 	type embeddedPointerToStructModel struct {
-		*testModel
+		*embeddable
 		DefaultData
 	}
 	embededPointerToStructModels, err := Register(&embeddedPointerToStructModel{})
@@ -89,7 +95,7 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 		t.Errorf("Unexpected error in Register: %s", err.Error())
 	}
 	model := &embeddedPointerToStructModel{
-		testModel: &testModel{
+		embeddable: &embeddable{
 			Int:    randomInt(),
 			String: randomString(),
 			Bool:   randomBool(),
@@ -110,7 +116,7 @@ func testConvertType(t *testing.T, modelType *ModelType, model Model) {
 	if !ok {
 		t.Fatalf("Unexpected error: Could not convert type %s to Model", modelType.spec.typ.String())
 	}
-	if err := modelType.Find(model.GetId(), modelCopy); err != nil {
+	if err := modelType.Find(model.Id(), modelCopy); err != nil {
 		t.Errorf("Unexpected error in Find: %s", err.Error())
 	}
 	// Make sure the copy equals the original

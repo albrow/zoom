@@ -39,5 +39,5 @@ type ModelNotFoundError struct {
 }
 
 func (e ModelNotFoundError) Error() string {
-	return "zoom: ModelNotFoundError: %s" + e.Msg
+	return "zoom: ModelNotFoundError: " + e.Msg
 }

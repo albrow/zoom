@@ -17,26 +17,26 @@ import (
 // DefaultData should be embedded in any struct you wish to save.
 // It includes important fields and required methods to implement Model.
 type DefaultData struct {
-	Id string `redis:"-"`
+	id string
 }
 
 // Model is an interface encapsulating anything that can be saved.
 // Any struct which includes an embedded DefaultData field satisfies
 // the Model interface.
 type Model interface {
-	GetId() string
+	Id() string
 	SetId(string)
 	// TODO: add getters and setters for other default fields?
 }
 
-// GetId returns the id of the model, satisfying the Model interface
-func (d DefaultData) GetId() string {
-	return d.Id
+// Id returns the id of the model, satisfying the Model interface
+func (d DefaultData) Id() string {
+	return d.id
 }
 
 // SetId sets the id of the model, satisfying the Model interface
 func (d *DefaultData) SetId(id string) {
-	d.Id = id
+	d.id = id
 }
 
 // modelSpec contains parsed information about a particular type of model
@@ -172,10 +172,10 @@ func (ms *modelSpec) allIndexKey() string {
 // which contains all the fields of the given model. It returns an error
 // iff the model does not have an id.
 func (ms *modelSpec) modelKey(model Model) (string, error) {
-	if model.GetId() == "" {
+	if model.Id() == "" {
 		return "", fmt.Errorf("zoom: Error in modelKey: model does not have an id and therefore cannot have a valid key")
 	}
-	return ms.name + ":" + model.GetId(), nil
+	return ms.name + ":" + model.Id(), nil
 }
 
 // fieldNames returns all the field names for the given modelSpec
@@ -235,7 +235,7 @@ func (mr *modelRef) fieldValue(name string) reflect.Value {
 
 // key returns a key which is used in redis to store the model
 func (mr *modelRef) key() string {
-	return mr.spec.name + ":" + mr.model.GetId()
+	return mr.spec.name + ":" + mr.model.Id()
 }
 
 // mainHashArgs returns the args for the main hash for this model. Typically

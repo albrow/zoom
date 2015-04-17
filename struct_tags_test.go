@@ -162,7 +162,7 @@ func TestDeleteIndexedPrimativesModel(t *testing.T) {
 	if err := indexedPrimativesModels.Save(model); err != nil {
 		t.Fatalf("Unexpected error in Save: %s", err.Error())
 	}
-	if _, err := indexedPrimativesModels.Delete(model.Id); err != nil {
+	if _, err := indexedPrimativesModels.Delete(model.Id()); err != nil {
 		t.Fatalf("Unexpected error in Delete: %s", err.Error())
 	}
 
@@ -188,7 +188,7 @@ func TestDeleteIndexedPointersModel(t *testing.T) {
 	if err := indexedPointersModels.Save(model); err != nil {
 		t.Fatalf("Unexpected error in Save: %s", err.Error())
 	}
-	if _, err := indexedPointersModels.Delete(model.Id); err != nil {
+	if _, err := indexedPointersModels.Delete(model.Id()); err != nil {
 		t.Fatalf("Unexpected error in Delete: %s", err.Error())
 	}
 

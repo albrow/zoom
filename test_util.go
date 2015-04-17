@@ -376,7 +376,7 @@ func expectModelExists(t *testing.T, mt *ModelType, model Model) {
 		t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 	}
 	expectKeyExists(t, modelKey)
-	expectSetContains(t, mt.AllIndexKey(), model.GetId())
+	expectSetContains(t, mt.AllIndexKey(), model.Id())
 }
 
 // expectModelDoesNotExist sets an error via t.Errorf if model exists in the database.
@@ -388,7 +388,7 @@ func expectModelDoesNotExist(t *testing.T, mt *ModelType, model Model) {
 		t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 	}
 	expectKeyDoesNotExist(t, modelKey)
-	expectSetDoesNotContain(t, mt.AllIndexKey(), model.GetId())
+	expectSetDoesNotContain(t, mt.AllIndexKey(), model.Id())
 }
 
 // expectModelsExist sets an error via t.Errorf for each model in models that
@@ -401,7 +401,7 @@ func expectModelsExist(t *testing.T, mt *ModelType, models []Model) {
 			t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyExists(t, modelKey)
-		expectSetContains(t, mt.AllIndexKey(), model.GetId())
+		expectSetContains(t, mt.AllIndexKey(), model.Id())
 	}
 }
 
@@ -415,7 +415,7 @@ func expectModelsDoNotExist(t *testing.T, mt *ModelType, models []Model) {
 			t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, mt.AllIndexKey(), model.GetId())
+		expectSetDoesNotContain(t, mt.AllIndexKey(), model.Id())
 	}
 }
 
@@ -486,7 +486,7 @@ func numericIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 	if err != nil {
 		return false, fmt.Errorf("Error in ZRANGEBYSCORE: %s", err.Error())
 	}
-	return stringSliceContains(gotIds, model.GetId()), nil
+	return stringSliceContains(gotIds, model.Id()), nil
 }
 
 // stringIndexExists returns true iff a string index on the given type and field exists. It
@@ -501,7 +501,7 @@ func stringIndexExists(modelType *ModelType, model Model, fieldName string) (boo
 	for fieldValue.Kind() == reflect.Ptr {
 		fieldValue = fieldValue.Elem()
 	}
-	memberKey := fieldValue.String() + " " + model.GetId()
+	memberKey := fieldValue.String() + " " + model.Id()
 	conn := GetConn()
 	defer conn.Close()
 	reply, err := conn.Do("ZRANK", indexKey, memberKey)
@@ -528,7 +528,7 @@ func booleanIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 	if err != nil {
 		return false, fmt.Errorf("Error in ZRANGEBYSCORE: %s", err.Error())
 	}
-	return stringSliceContains(gotIds, model.GetId()), nil
+	return stringSliceContains(gotIds, model.Id()), nil
 }
 
 // ById is a utility type for quickly sorting by id
@@ -536,7 +536,7 @@ type ById []*indexedTestModel
 
 func (ms ById) Len() int           { return len(ms) }
 func (ms ById) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
-func (ms ById) Less(i, j int) bool { return ms[i].Id < ms[j].Id }
+func (ms ById) Less(i, j int) bool { return ms[i].Id() < ms[j].Id() }
 
 // expectModelsToBeEqual returns an error if the two slices do not contain the exact
 // same models.

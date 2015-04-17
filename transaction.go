@@ -227,8 +227,8 @@ func newScanModelHandler(mr *modelRef) ReplyHandler {
 		}
 		if len(replies) == 0 {
 			var msg string
-			if mr.model.GetId() != "" {
-				msg = fmt.Sprintf("Could not find %s with id = %s", mr.spec.name, mr.model.GetId())
+			if mr.model.Id() != "" {
+				msg = fmt.Sprintf("Could not find %s with id = %s", mr.spec.name, mr.model.Id())
 			} else {
 				msg = fmt.Sprintf("Could not find %s with the given criteria", mr.spec.name)
 			}

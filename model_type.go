@@ -154,7 +154,7 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 	}
 
 	// Generate id if needed
-	if model.GetId() == "" {
+	if model.Id() == "" {
 		model.SetId(generateRandomId())
 	}
 
@@ -183,7 +183,7 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 	}
 
 	// Add the model id to the set of all models of this type
-	t.Command("SADD", redis.Args{mt.AllIndexKey(), model.GetId()}, nil)
+	t.Command("SADD", redis.Args{mt.AllIndexKey(), model.Id()}, nil)
 }
 
 // saveFieldIndexes adds commands to the transaction for saving the indexes
@@ -215,7 +215,7 @@ func (t *Transaction) saveNumericIndex(mr *modelRef, fs *fieldSpec) {
 	if err != nil {
 		t.setError(err)
 	}
-	t.Command("ZADD", redis.Args{indexKey, score, mr.model.GetId()}, nil)
+	t.Command("ZADD", redis.Args{indexKey, score, mr.model.Id()}, nil)
 }
 
 // saveBooleanIndex adds commands to the transaction for saving a boolean
@@ -230,14 +230,14 @@ func (t *Transaction) saveBooleanIndex(mr *modelRef, fs *fieldSpec) {
 	if err != nil {
 		t.setError(err)
 	}
-	t.Command("ZADD", redis.Args{indexKey, score, mr.model.GetId()}, nil)
+	t.Command("ZADD", redis.Args{indexKey, score, mr.model.Id()}, nil)
 }
 
 // saveStringIndex adds commands to the transaction for saving a string
 // index on the given field. This includes removing the old index (if any).
 func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 	// Remove the old index (if any)
-	t.deleteStringIndex(mr.spec.name, mr.model.GetId(), fs.redisName)
+	t.deleteStringIndex(mr.spec.name, mr.model.Id(), fs.redisName)
 	fieldValue := mr.fieldValue(fs.name)
 	for fieldValue.Kind() == reflect.Ptr {
 		if fieldValue.IsNil() {
@@ -245,7 +245,7 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 		}
 		fieldValue = fieldValue.Elem()
 	}
-	member := fieldValue.String() + " " + mr.model.GetId()
+	member := fieldValue.String() + " " + mr.model.Id()
 	indexKey, err := mr.spec.fieldIndexKey(fs.name)
 	if err != nil {
 		t.setError(err)

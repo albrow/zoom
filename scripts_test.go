@@ -20,7 +20,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 	// The set of ids will contain three valid ids and two invalid ones
 	ids := []string{}
 	for _, model := range models[:3] {
-		ids = append(ids, model.Id)
+		ids = append(ids, model.Id())
 	}
 	ids = append(ids, "foo", "bar")
 	tempSetKey := "testModelIds"
@@ -52,7 +52,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 			t.Errorf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, testModels.AllIndexKey(), model.Id)
+		expectSetDoesNotContain(t, testModels.AllIndexKey(), model.Id())
 	}
 	// Make sure the last two models were not deleted
 	for _, model := range models[3:] {
@@ -61,7 +61,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 			t.Errorf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyExists(t, modelKey)
-		expectSetContains(t, testModels.AllIndexKey(), model.Id)
+		expectSetContains(t, testModels.AllIndexKey(), model.Id())
 	}
 }
 
@@ -83,11 +83,11 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	model := &stringIndexModel{
 		String: "foo",
 	}
-	model.Id = "testId"
+	model.SetId("testId")
 
 	// Run the script before saving the hash, to make sure it does not cause an error
 	tx := NewTransaction()
-	tx.deleteStringIndex(stringIndexModels.Name(), model.Id, "String")
+	tx.deleteStringIndex(stringIndexModels.Name(), model.Id(), "String")
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
@@ -105,14 +105,14 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error in FieldIndexKey: %s", err.Error())
 	}
-	member := model.String + " " + model.Id
+	member := model.String + " " + model.Id()
 	if _, err := conn.Do("ZADD", fieldIndexKey, 0, member); err != nil {
 		t.Fatalf("Unexpected error in ZADD: %s", err.Error())
 	}
 
 	// Run the script again. This time we expect the index to be removed
 	tx = NewTransaction()
-	tx.deleteStringIndex(stringIndexModels.Name(), model.Id, "String")
+	tx.deleteStringIndex(stringIndexModels.Name(), model.Id(), "String")
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
@@ -228,7 +228,7 @@ func testFindByIdsScript(t *testing.T, replyFunc func() interface{}, expectedMod
 	modelsById := map[string]*indexedTestModel{}
 	if !orderMatters {
 		for _, model := range expectedModels {
-			modelsById[model.Id] = model
+			modelsById[model.Id()] = model
 		}
 	}
 
