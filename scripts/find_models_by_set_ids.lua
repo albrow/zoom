@@ -34,10 +34,10 @@ if #ids > 0 then
 		local key = modelName .. ':' .. id
 		local fields = redis.call('HGETALL', key)
 		-- Add the id itself to the fields
-		fields[#fields+1] = 'Id'
-		fields[#fields+1] = id
+		table.insert(fields, 'Id')
+		table.insert(fields, id)
 		-- Add the field values to models
-		models[#models+1] = fields
+		table.insert(models, fields)
 	end
 end
 return models
