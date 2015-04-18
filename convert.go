@@ -34,7 +34,7 @@ func scanModel(replies []interface{}, mr *modelRef) error {
 		if err != nil {
 			return err
 		}
-		if fieldName == "Id" {
+		if fieldName == "-" {
 			// Special case for the Id field
 			mr.model.SetId(string(replyBytes))
 			continue

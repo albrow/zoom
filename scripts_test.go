@@ -254,10 +254,10 @@ func testFindByIdsScript(t *testing.T, replyFunc func() interface{}, expectedMod
 			fieldValue := replies[i+1]
 			gotFields[fieldName] = fieldValue
 		}
-		if _, found := gotFields["Id"]; !found {
-			t.Errorf("reply %d did not have an Id field", i)
+		if _, found := gotFields["-"]; !found {
+			t.Errorf(`reply %d did not have an Id field idendified by "-"`, i)
 		}
-		id := string(gotFields["Id"].([]byte))
+		id := string(gotFields["-"].([]byte))
 		var expectedModel *indexedTestModel
 		if !orderMatters {
 			var found bool
@@ -273,7 +273,7 @@ func testFindByIdsScript(t *testing.T, replyFunc func() interface{}, expectedMod
 			var convertedVal interface{}
 			var err error
 			switch fieldName {
-			case "Id":
+			case "-":
 				continue // We already checked the id field
 			case "Int":
 				convertedVal, err = redis.Int(gotVal, nil)
