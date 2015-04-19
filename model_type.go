@@ -128,9 +128,6 @@ func (mt *ModelType) FieldIndexKey(fieldName string) (string, error) {
 // setting the Id. To make a struct satisfy the Model interface, you can embed
 // zoom.DefaultData.
 func (mt *ModelType) Save(model Model) error {
-	if err := mt.checkModelType(model); err != nil {
-		return fmt.Errorf("zoom: Error in Save: %s", err.Error())
-	}
 	t := NewTransaction()
 	t.Save(mt, model)
 	if err := t.Exec(); err != nil {
@@ -149,7 +146,7 @@ func (mt *ModelType) Save(model Model) error {
 // executed.
 func (t *Transaction) Save(mt *ModelType, model Model) {
 	if err := mt.checkModelType(model); err != nil {
-		t.setError(fmt.Errorf("zoom: Error in Transaction.Save: %s", err.Error()))
+		t.setError(fmt.Errorf("zoom: Error in Save or Transaction.Save: %s", err.Error()))
 		return
 	}
 	// Generate id if needed
@@ -255,9 +252,6 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 // with the given id does not exist, if the given model was the wrong type, or
 // if there was a problem connecting to the database.
 func (mt *ModelType) Find(id string, model Model) error {
-	if err := mt.checkModelType(model); err != nil {
-		return fmt.Errorf("zoom: Error in Find: %s", err.Error())
-	}
 	t := NewTransaction()
 	t.Find(mt, id, model)
 	if err := t.Exec(); err != nil {
@@ -274,7 +268,7 @@ func (mt *ModelType) Find(id string, model Model) error {
 // executed.
 func (t *Transaction) Find(mt *ModelType, id string, model Model) {
 	if err := mt.checkModelType(model); err != nil {
-		t.setError(fmt.Errorf("zoom: Error in Transaction.Find: %s", err.Error()))
+		t.setError(fmt.Errorf("zoom: Error in Find or Transaction.Find: %s", err.Error()))
 		return
 	}
 	model.SetId(id)
@@ -296,9 +290,6 @@ func (t *Transaction) Find(mt *ModelType, id string, model Model) {
 func (mt *ModelType) FindAll(models interface{}) error {
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
-	if err := mt.checkModelsType(models); err != nil {
-		return fmt.Errorf("zoom: Error in FindAll: %s", err.Error())
-	}
 	t := NewTransaction()
 	t.FindAll(mt, models)
 	if err := t.Exec(); err != nil {
@@ -317,9 +308,8 @@ func (mt *ModelType) FindAll(models interface{}) error {
 func (t *Transaction) FindAll(mt *ModelType, models interface{}) {
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
-	// TODO: any way to avoid checking the type twice?
 	if err := mt.checkModelsType(models); err != nil {
-		t.setError(fmt.Errorf("zoom: Error in Transaction.FindAll: %s", err.Error()))
+		t.setError(fmt.Errorf("zoom: Error in FindAll or Transaction.FindAll: %s", err.Error()))
 		return
 	}
 	t.findModelsBySetIds(mt.AllIndexKey(), mt.Name(), newScanModelsHandler(mt.spec, models))
