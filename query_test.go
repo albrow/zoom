@@ -139,27 +139,25 @@ func expectedResultsForQuery(q *Query, models []*indexedTestModel) []*indexedTes
 
 // applyFilter returns only the models which pass the filter criteria.
 func applyFilter(models []*indexedTestModel, filter filter) []*indexedTestModel {
-
 	var filterFunc func(m *indexedTestModel) bool
 
-	switch filter.indexKind {
-
+	switch filter.fieldSpec.indexKind {
 	case numericIndex:
 		filterFunc = func(m *indexedTestModel) bool {
-			fieldVal := reflect.ValueOf(m).Elem().FieldByName(filter.fieldName).Convert(reflect.TypeOf(0.0)).Float()
+			fieldVal := reflect.ValueOf(m).Elem().FieldByName(filter.fieldSpec.name).Convert(reflect.TypeOf(0.0)).Float()
 			filterVal := numericScore(filter.value)
-			switch filter.kind {
-			case equalFilter:
+			switch filter.op {
+			case equalOp:
 				return fieldVal == filterVal
-			case notEqualFilter:
+			case notEqualOp:
 				return fieldVal != filterVal
-			case greaterFilter:
+			case greaterOp:
 				return fieldVal > filterVal
-			case lessFilter:
+			case lessOp:
 				return fieldVal < filterVal
-			case greaterOrEqualFilter:
+			case greaterOrEqualOp:
 				return fieldVal >= filterVal
-			case lessOrEqualFilter:
+			case lessOrEqualOp:
 				return fieldVal <= filterVal
 			}
 			return false
@@ -167,20 +165,20 @@ func applyFilter(models []*indexedTestModel, filter filter) []*indexedTestModel 
 
 	case booleanIndex:
 		filterFunc = func(m *indexedTestModel) bool {
-			fieldVal := reflect.ValueOf(m).Elem().FieldByName(filter.fieldName)
+			fieldVal := reflect.ValueOf(m).Elem().FieldByName(filter.fieldSpec.name)
 			filterVal := filter.value
-			switch filter.kind {
-			case equalFilter:
+			switch filter.op {
+			case equalOp:
 				return fieldVal.Bool() == filterVal.Bool()
-			case notEqualFilter:
+			case notEqualOp:
 				return fieldVal.Bool() != filterVal.Bool()
-			case greaterFilter:
+			case greaterOp:
 				return boolScore(fieldVal) > boolScore(filterVal)
-			case lessFilter:
+			case lessOp:
 				return boolScore(fieldVal) < boolScore(filterVal)
-			case greaterOrEqualFilter:
+			case greaterOrEqualOp:
 				return boolScore(fieldVal) >= boolScore(filterVal)
-			case lessOrEqualFilter:
+			case lessOrEqualOp:
 				return boolScore(fieldVal) <= boolScore(filterVal)
 			}
 			return false
@@ -188,20 +186,20 @@ func applyFilter(models []*indexedTestModel, filter filter) []*indexedTestModel 
 
 	case stringIndex:
 		filterFunc = func(m *indexedTestModel) bool {
-			fieldVal := reflect.ValueOf(m).Elem().FieldByName(filter.fieldName).String()
+			fieldVal := reflect.ValueOf(m).Elem().FieldByName(filter.fieldSpec.name).String()
 			filterVal := filter.value.String()
-			switch filter.kind {
-			case equalFilter:
+			switch filter.op {
+			case equalOp:
 				return fieldVal == filterVal
-			case notEqualFilter:
+			case notEqualOp:
 				return fieldVal != filterVal
-			case greaterFilter:
+			case greaterOp:
 				return fieldVal > filterVal
-			case lessFilter:
+			case lessOp:
 				return fieldVal < filterVal
-			case greaterOrEqualFilter:
+			case greaterOrEqualOp:
 				return fieldVal >= filterVal
-			case lessOrEqualFilter:
+			case lessOrEqualOp:
 				return fieldVal <= filterVal
 			}
 			return false
@@ -255,89 +253,88 @@ func TestApplyFilterNumeric(t *testing.T) {
 	models[4].Int = 3
 
 	testCases := []struct {
-		filterKind filterKind
-		filterVal  interface{}
-		expected   []*indexedTestModel
+		filterOp  filterOp
+		filterVal interface{}
+		expected  []*indexedTestModel
 	}{
 		{
-			equalFilter,
+			equalOp,
 			1,
 			models[1:3],
 		},
 		{
-			notEqualFilter,
+			notEqualOp,
 			3,
 			models[0:4],
 		},
 		{
-			lessFilter,
+			lessOp,
 			-4,
 			[]*indexedTestModel{},
 		},
 		{
-			lessFilter,
+			lessOp,
 			2,
 			models[0:3],
 		},
 		{
-			lessFilter,
+			lessOp,
 			4,
 			models,
 		},
 		{
-			greaterFilter,
+			greaterOp,
 			4,
 			[]*indexedTestModel{},
 		},
 		{
-			greaterFilter,
+			greaterOp,
 			1,
 			models[3:5],
 		},
 		{
-			greaterFilter,
+			greaterOp,
 			-5,
 			models,
 		},
 		{
-			lessOrEqualFilter,
+			lessOrEqualOp,
 			-5,
 			[]*indexedTestModel{},
 		},
 		{
-			lessOrEqualFilter,
+			lessOrEqualOp,
 			1,
 			models[0:3],
 		},
 		{
-			lessOrEqualFilter,
+			lessOrEqualOp,
 			3,
 			models,
 		},
 		{
-			greaterOrEqualFilter,
+			greaterOrEqualOp,
 			4,
 			[]*indexedTestModel{},
 		},
 		{
-			greaterOrEqualFilter,
+			greaterOrEqualOp,
 			2,
 			models[3:5],
 		},
 		{
-			greaterOrEqualFilter,
+			greaterOrEqualOp,
 			-4,
 			models,
 		},
 	}
 
 	for i, tc := range testCases {
+		fieldSpec, _ := indexedTestModels.spec.fieldsByName["Int"]
 		filter := filter{
-			fieldName: "Int",
-			redisName: "Int",
-			kind:      tc.filterKind,
+			fieldSpec: fieldSpec,
+			op:        tc.filterOp,
 			value:     reflect.ValueOf(tc.filterVal),
-			indexKind: numericIndex,
 		}
 		got := applyFilter(models, filter)
 		if !reflect.DeepEqual(tc.expected, got) {
@@ -357,69 +354,68 @@ func TestApplyFilterBool(t *testing.T) {
 	models[1].Bool = true
 
 	testCases := []struct {
-		filterKind filterKind
-		filterVal  interface{}
-		expected   []*indexedTestModel
+		filterOp  filterOp
+		filterVal interface{}
+		expected  []*indexedTestModel
 	}{
 		{
-			equalFilter,
+			equalOp,
 			true,
 			models[1:2],
 		},
 		{
-			notEqualFilter,
+			notEqualOp,
 			true,
 			models[0:1],
 		},
 		{
-			lessFilter,
+			lessOp,
 			false,
 			[]*indexedTestModel{},
 		},
 		{
-			lessFilter,
+			lessOp,
 			true,
 			models[0:1],
 		},
 		{
-			greaterFilter,
+			greaterOp,
 			true,
 			[]*indexedTestModel{},
 		},
 		{
-			greaterFilter,
+			greaterOp,
 			false,
 			models[1:2],
 		},
 		{
-			lessOrEqualFilter,
+			lessOrEqualOp,
 			false,
 			models[0:1],
 		},
 		{
-			lessOrEqualFilter,
+			lessOrEqualOp,
 			true,
 			models,
 		},
 		{
-			greaterOrEqualFilter,
+			greaterOrEqualOp,
 			true,
 			models[1:2],
 		},
 		{
-			greaterOrEqualFilter,
+			greaterOrEqualOp,
 			false,
 			models,
 		},
 	}
 
 	for i, tc := range testCases {
+		fieldSpec, _ := indexedTestModels.spec.fieldsByName["Bool"]
 		filter := filter{
-			fieldName: "Bool",
-			redisName: "Bool",
-			kind:      tc.filterKind,
+			fieldSpec: fieldSpec,
+			op:        tc.filterOp,
 			value:     reflect.ValueOf(tc.filterVal),
-			indexKind: booleanIndex,
 		}
 		got := applyFilter(models, filter)
 		if !reflect.DeepEqual(tc.expected, got) {
@@ -442,89 +438,88 @@ func TestApplyFilterString(t *testing.T) {
 	models[4].String = "e"
 
 	testCases := []struct {
-		filterKind filterKind
-		filterVal  interface{}
-		expected   []*indexedTestModel
+		filterOp  filterOp
+		filterVal interface{}
+		expected  []*indexedTestModel
 	}{
 		{
-			equalFilter,
+			equalOp,
 			"c",
 			models[1:3],
 		},
 		{
-			notEqualFilter,
+			notEqualOp,
 			"e",
 			models[0:4],
 		},
 		{
-			lessFilter,
+			lessOp,
 			"b",
 			[]*indexedTestModel{},
 		},
 		{
-			lessFilter,
+			lessOp,
 			"d",
 			models[0:3],
 		},
 		{
-			lessFilter,
+			lessOp,
 			"f",
 			models,
 		},
 		{
-			greaterFilter,
+			greaterOp,
 			"e",
 			[]*indexedTestModel{},
 		},
 		{
-			greaterFilter,
+			greaterOp,
 			"c",
 			models[3:5],
 		},
 		{
-			greaterFilter,
+			greaterOp,
 			"a",
 			models,
 		},
 		{
-			lessOrEqualFilter,
+			lessOrEqualOp,
 			"a",
 			[]*indexedTestModel{},
 		},
 		{
-			lessOrEqualFilter,
+			lessOrEqualOp,
 			"c",
 			models[0:3],
 		},
 		{
-			lessOrEqualFilter,
+			lessOrEqualOp,
 			"e",
 			models,
 		},
 		{
-			greaterOrEqualFilter,
+			greaterOrEqualOp,
 			"f",
 			[]*indexedTestModel{},
 		},
 		{
-			greaterOrEqualFilter,
+			greaterOrEqualOp,
 			"d",
 			models[3:5],
 		},
 		{
-			greaterOrEqualFilter,
+			greaterOrEqualOp,
 			"b",
 			models,
 		},
 	}
 
 	for i, tc := range testCases {
+		fieldSpec, _ := indexedTestModels.spec.fieldsByName["String"]
 		filter := filter{
-			fieldName: "String",
-			redisName: "String",
-			kind:      tc.filterKind,
+			fieldSpec: fieldSpec,
+			op:        tc.filterOp,
 			value:     reflect.ValueOf(tc.filterVal),
-			indexKind: stringIndex,
 		}
 		got := applyFilter(models, filter)
 		if !reflect.DeepEqual(tc.expected, got) {

@@ -84,57 +84,55 @@ func (ok orderKind) String() string {
 }
 
 type filter struct {
-	fieldName string
-	redisName string
-	kind      filterKind
+	fieldSpec *fieldSpec
+	op        filterOp
 	value     reflect.Value
-	indexKind indexKind
 }
 
 func (f filter) String() string {
 	if f.value.Kind() == reflect.String {
-		return fmt.Sprintf(`Filter("%s %s", "%s")`, f.fieldName, f.kind, f.value.String())
+		return fmt.Sprintf(`Filter("%s %s", "%s")`, f.fieldSpec.name, f.op, f.value.String())
 	} else {
-		return fmt.Sprintf(`Filter("%s %s", %v)`, f.fieldName, f.kind, f.value.Interface())
+		return fmt.Sprintf(`Filter("%s %s", %v)`, f.fieldSpec.name, f.op, f.value.Interface())
 	}
 }
 
-type filterKind int
+type filterOp int
 
 const (
-	equalFilter filterKind = iota
-	notEqualFilter
-	greaterFilter
-	lessFilter
-	greaterOrEqualFilter
-	lessOrEqualFilter
+	equalOp filterOp = iota
+	notEqualOp
+	greaterOp
+	lessOp
+	greaterOrEqualOp
+	lessOrEqualOp
 )
 
-func (fk filterKind) String() string {
+func (fk filterOp) String() string {
 	switch fk {
-	case equalFilter:
+	case equalOp:
 		return "="
-	case notEqualFilter:
+	case notEqualOp:
 		return "!="
-	case greaterFilter:
+	case greaterOp:
 		return ">"
-	case lessFilter:
+	case lessOp:
 		return "<"
-	case greaterOrEqualFilter:
+	case greaterOrEqualOp:
 		return ">="
-	case lessOrEqualFilter:
+	case lessOrEqualOp:
 		return "<="
 	}
 	return ""
 }
 
-var filterSymbols = map[string]filterKind{
-	"=":  equalFilter,
-	"!=": notEqualFilter,
-	">":  greaterFilter,
-	"<":  lessFilter,
-	">=": greaterOrEqualFilter,
-	"<=": lessOrEqualFilter,
+var filterOps = map[string]filterOp{
+	"=":  equalOp,
+	"!=": notEqualOp,
+	">":  greaterOp,
+	"<":  lessOp,
+	">=": greaterOrEqualOp,
+	"<=": lessOrEqualOp,
 }
 
 // delString is a string consisting of only the the ASCII DEL character. It is
@@ -177,7 +175,6 @@ func (q *Query) Order(fieldName string) *Query {
 		// TODO: allow secondary sort orders?
 		q.setError(errors.New("zoom: error in Query.Order: previous order already specified. Only one order per query is allowed."))
 	}
-
 	// Check for the presence of the "-" prefix
 	var orderKind orderKind
 	if strings.HasPrefix(fieldName, "-") {
@@ -187,7 +184,6 @@ func (q *Query) Order(fieldName string) *Query {
 	} else {
 		orderKind = ascendingOrder
 	}
-
 	// Get the redisName for the given fieldName
 	fs, found := q.modelSpec.fieldsByName[fieldName]
 	if !found {
@@ -290,59 +286,35 @@ func (q *Query) Filter(filterString string, value interface{}) *Query {
 		q.setError(err)
 		return q
 	}
-	if fieldName == "Id" {
-		// Special case for Id
-		return q.filterById(operator, value)
-	}
-	filter := filter{
-		fieldName: fieldName,
-	}
-	// Get the filterKind based on the operator
-	if filterKind, found := filterSymbols[operator]; !found {
-		q.setError(errors.New("zoom: invalid operator in fieldStr. should be one of =, !=, >, <, >=, or <=."))
+	// Parse the filter operator
+	filterOp, found := filterOps[operator]
+	if !found {
+		q.setError(errors.New("zoom: invalid Filter operator in fieldStr. should be one of =, !=, >, <, >=, or <=."))
 		return q
-	} else {
-		filter.kind = filterKind
 	}
-	// Get the redisName and indexKind based on the fieldName
-	fs, found := q.modelSpec.fieldsByName[fieldName]
+	// Get the fieldSpec for the given fieldName
+	fieldSpec, found := q.modelSpec.fieldsByName[fieldName]
 	if !found {
 		err := fmt.Errorf("zoom: error in Query.Order: could not find field %s in type %s", fieldName, q.modelSpec.typ.String())
 		q.setError(err)
 		return q
 	}
-	filter.redisName = fs.redisName
-	if fs.indexKind == noIndex {
+	// Make sure the field is an indexed field
+	if fieldSpec.indexKind == noIndex {
 		err := fmt.Errorf("zoom: filters are only allowed on indexed fields. %s.%s is not indexed. You can index it by adding the `zoom:\"index\"` struct tag.", q.modelSpec.typ.String(), fieldName)
 		q.setError(err)
 		return q
 	}
-	filter.indexKind = fs.indexKind
-	// Get type of the field and make sure it matches type of value arg
-	// Here we iterate through pointer inderections. This is so you can
-	// just pass in a primative instead of a pointer to a primative for
-	// filtering on fields which have pointer values.
-	valueType := reflect.TypeOf(value)
-	valueVal := reflect.ValueOf(value)
-	for valueType.Kind() == reflect.Ptr {
-		valueType = valueType.Elem()
-		valueVal = valueVal.Elem()
-		if !valueVal.IsValid() {
-			q.setError(errors.New("zoom: invalid value arg for Filter. Is it a nil pointer?"))
-			return q
-		}
+	filter := filter{
+		fieldSpec: fieldSpec,
+		op:        filterOp,
 	}
-	// Also dereference the field type to reach the underlying type.
-	fieldType := fs.typ
-	for fieldType.Kind() == reflect.Ptr {
-		fieldType = fieldType.Elem()
-	}
-	if valueType != fs.typ {
-		err := fmt.Errorf("zoom: invalid value arg for Filter. Type of value (%T) does not match type of field (%s).", value, fieldType.String())
+	// Make sure the given value is the correct type
+	if err := filter.checkValType(value); err != nil {
 		q.setError(err)
 		return q
 	}
-	filter.value = valueVal
+	filter.value = reflect.ValueOf(value)
 	q.filters = append(q.filters, filter)
 	return q
 }
@@ -355,25 +327,30 @@ func splitFilterString(filterString string) (fieldName string, operator string, 
 	return tokens[0], tokens[1], nil
 }
 
-func (q *Query) filterById(operator string, value interface{}) *Query {
-	if operator != "=" {
-		q.setError(errors.New("zoom: only the = operator can be used with Filter on Id field."))
-		return q
+// checkValType returns an error if the type of value does not correspond to
+// filter.fieldSpec.
+func (filter filter) checkValType(value interface{}) error {
+	// Here we iterate through pointer inderections. This is so you can
+	// just pass in a primative instead of a pointer to a primative for
+	// filtering on fields which have pointer values.
+	valueType := reflect.TypeOf(value)
+	valueVal := reflect.ValueOf(value)
+	for valueType.Kind() == reflect.Ptr {
+		valueType = valueType.Elem()
+		valueVal = valueVal.Elem()
+		if !valueVal.IsValid() {
+			return errors.New("zoom: invalid value arg for Filter. Is it a nil pointer?")
+		}
 	}
-	idVal := reflect.ValueOf(value)
-	if idVal.Kind() != reflect.String {
-		err := fmt.Errorf("zoom: for a Filter on Id field, value must be a string type. Got type %T", value)
-		q.setError(err)
-		return q
+	// Also dereference the field type to reach the underlying type.
+	fieldType := filter.fieldSpec.typ
+	for fieldType.Kind() == reflect.Ptr {
+		fieldType = fieldType.Elem()
 	}
-	f := filter{
-		fieldName: "Id",
-		redisName: "Id",
-		kind:      equalFilter,
-		value:     idVal,
+	if valueType != fieldType {
+		return fmt.Errorf("zoom: invalid value arg for Filter. Type of value (%T) does not match type of field (%s).", value, fieldType.String())
 	}
-	q.filters = append(q.filters, f)
-	return q
+	return nil
 }
 
 // Run executes the query and scans the results into models. The type of models
@@ -474,21 +451,21 @@ func (q *Query) getStartStop() (int, int) {
 }
 
 func getMinMaxForNumericFilter(f filter) (min interface{}, max interface{}) {
-	switch f.kind {
-	case equalFilter:
+	switch f.op {
+	case equalOp:
 		min, max = f.value.Interface(), f.value.Interface()
-	case lessFilter:
+	case lessOp:
 		min = "-inf"
 		// use "(" for exclusive
 		max = fmt.Sprintf("(%v", f.value.Interface())
-	case greaterFilter:
+	case greaterOp:
 		// use "(" for exclusive
 		min = fmt.Sprintf("(%v", f.value.Interface())
 		max = "+inf"
-	case lessOrEqualFilter:
+	case lessOrEqualOp:
 		min = "-inf"
 		max = f.value.Interface()
-	case greaterOrEqualFilter:
+	case greaterOrEqualOp:
 		min = f.value.Interface()
 		max = "+inf"
 	}
