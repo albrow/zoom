@@ -139,7 +139,7 @@ func (mt *ModelType) Save(model Model) error {
 	return nil
 }
 
-// save writes a model (a struct which satisfies the Model interface) to the redis
+// Save writes a model (a struct which satisfies the Model interface) to the redis
 // database inside an existing transaction. save will set the err property of the
 // transaction if the type of model does not matched the registered ModelType, which
 // will cause exec to fail immediately and return the error. If the Id field of the
@@ -152,23 +152,19 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 		t.setError(fmt.Errorf("zoom: Error in Transaction.Save: %s", err.Error()))
 		return
 	}
-
 	// Generate id if needed
 	if model.Id() == "" {
 		model.SetId(generateRandomId())
 	}
-
 	// Create a modelRef and start a transaction
 	mr := &modelRef{
 		spec:  mt.spec,
 		model: model,
 	}
-
 	// Save indexes
 	// This must happen first, because it relies on reading the old field values
 	// from the hash for string indexes (if any)
 	t.saveFieldIndexes(mr)
-
 	// Save the model fields in a hash in the database
 	hashArgs, err := mr.mainHashArgs()
 	if err != nil {
@@ -181,7 +177,6 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 		// 1.
 		t.Command("HMSET", hashArgs, nil)
 	}
-
 	// Add the model id to the set of all models of this type
 	t.Command("SADD", redis.Args{mt.AllIndexKey(), model.Id()}, nil)
 }
@@ -271,7 +266,7 @@ func (mt *ModelType) Find(id string, model Model) error {
 	return nil
 }
 
-// find retrieves a model with the given id from redis and scans its values
+// Find retrieves a model with the given id from redis and scans its values
 // into model in an existing transaction. model should be a pointer to a struct
 // of a registered type corresponding to the ModelType. find will mutate the struct,
 // filling in its fields and overwriting any previous values. Any errors encountered
@@ -282,15 +277,11 @@ func (t *Transaction) Find(mt *ModelType, id string, model Model) {
 		t.setError(fmt.Errorf("zoom: Error in Transaction.Find: %s", err.Error()))
 		return
 	}
-
 	model.SetId(id)
-
-	// Create a modelRef and start a transaction
 	mr := &modelRef{
 		spec:  mt.spec,
 		model: model,
 	}
-
 	// Get the fields from the main hash for this model
 	t.Command("HGETALL", redis.Args{mr.key()}, newScanModelHandler(mr))
 }
@@ -308,7 +299,6 @@ func (mt *ModelType) FindAll(models interface{}) error {
 	if err := mt.checkModelsType(models); err != nil {
 		return fmt.Errorf("zoom: Error in FindAll: %s", err.Error())
 	}
-
 	t := NewTransaction()
 	t.FindAll(mt, models)
 	if err := t.Exec(); err != nil {
@@ -317,7 +307,7 @@ func (mt *ModelType) FindAll(models interface{}) error {
 	return nil
 }
 
-// findAll finds all the models of the given type and scans the values of the models into
+// FindAll finds all the models of the given type and scans the values of the models into
 // models in an existing transaction. See http://redis.io/topics/transactions.
 // models must be a pointer to a slice of models with a type corresponding to the ModelType.
 // findAll will grow the models slice as needed and if any of the models in the
@@ -347,7 +337,7 @@ func (mt *ModelType) Count() (int, error) {
 	return count, nil
 }
 
-// count counts the number of models of the given type in the database in an existing
+// Count counts the number of models of the given type in the database in an existing
 // transaction. It sets the value of count to the number of models. Any errors
 // encountered will be added to the transaction and returned as an error when the
 // transaction is executed.
@@ -370,7 +360,7 @@ func (mt *ModelType) Delete(id string) (bool, error) {
 	return deleted, nil
 }
 
-// delete removes a model with the given type and id in an existing transaction.
+// Delete removes a model with the given type and id in an existing transaction.
 // deleted will be set to true iff the model was successfully deleted when the
 // transaction is executed. If the no model with the given type and id existed,
 // the value of deleted will be set to false. Any errors encountered will be
@@ -426,12 +416,21 @@ func (mt *ModelType) DeleteAll() (int, error) {
 	return count, nil
 }
 
-// deleteAll delets all models for the given model type in an existing transaction.
+// DeleteAll delets all models for the given model type in an existing transaction.
 // The value of count will be set to the number of models that were successfully deleted
 // when the transaction is executed. Any errors encountered will be added to the transaction
 // and returned as an error when the transaction is executed.
 func (t *Transaction) DeleteAll(mt *ModelType, count *int) {
 	t.deleteModelsBySetIds(mt.AllIndexKey(), mt.Name(), newScanIntHandler(count))
+}
+
+// checkModelType returns an error iff model is not of the registered type that
+// corresponds to mt.
+func (modelType *ModelType) checkModelType(model Model) error {
+	if reflect.TypeOf(model) != modelType.spec.typ {
+		return fmt.Errorf("model was the wrong type. Expected %s but got %T", modelType.spec.typ.String(), model)
+	}
+	return nil
 }
 
 // checkModelsType returns an error iff models is not a pointer to a slice of models of the
@@ -451,15 +450,6 @@ func (modelType *ModelType) checkModelsType(models interface{}) error {
 		return fmt.Errorf("the elements in models should be of a registered type\nType %s has not been registered.", elemType.String())
 	case elemType != modelType.spec.typ:
 		return fmt.Errorf("models were the wrong type. Expected slice or array of %s but got %T", modelType.spec.typ.String(), models)
-	}
-	return nil
-}
-
-// checkModelType returns an error iff model is not of the registered type that
-// corresponds to mt.
-func (modelType *ModelType) checkModelType(model Model) error {
-	if reflect.TypeOf(model) != modelType.spec.typ {
-		return fmt.Errorf("model was the wrong type. Expected %s but got %T", modelType.spec.typ.String(), model)
 	}
 	return nil
 }
