@@ -10,16 +10,22 @@ package zoom
 
 import (
 	"github.com/garyburd/redigo/redis"
-	"net/url"
 	"time"
 )
 
 // Configuration contains various options. It should be created once
 // and passed in to the Init function during application startup.
 type Configuration struct {
-	Address  string // Address to connect to. Default: "localhost:6379"
-	Network  string // Network to use. Default: "tcp"
-	Database int    // Database id to use (using SELECT). Default: 0
+	// Address to connect to. Default: "localhost:6379"
+	Address string
+	// Network to use. Default: "tcp"
+	Network string
+	// Database id to use (using SELECT). Default: 0
+	Database int
+	// Password for a password-protected redis database. If not empty,
+	// every connection will use the AUTH command during initialization
+	// to authenticate with the database. Default: ""
+	Password string
 }
 
 // pool is a pool of redis connections
@@ -32,6 +38,7 @@ var defaultConfiguration = Configuration{
 	Address:  "localhost:6379",
 	Network:  "tcp",
 	Database: 0,
+	Password: "",
 }
 
 // GetConn gets a connection from the connection pool and returns it.
@@ -53,35 +60,19 @@ func Init(passedConfig *Configuration) {
 		MaxActive:   0,
 		IdleTimeout: 240 * time.Second,
 		Dial: func() (redis.Conn, error) {
-
-			u, err := url.Parse(config.Address)
+			// Connect to config.Address using config.Network
+			c, err := redis.Dial(config.Network, config.Address)
 			if err != nil {
 				return nil, err
 			}
-
-			address := config.Address
-
-			if u.Host != "" {
-				address = u.Host
-			}
-
-			c, err := redis.Dial(config.Network, address)
-			if err != nil {
-				return nil, err
-			}
-
-			if u.User != nil {
-				pw, ok := u.User.Password()
-				if !ok {
-					return nil, err
-				}
-				_, err = c.Do("AUTH", pw)
+			// If a password was provided, use the AUTH command to authenticate
+			if config.Password != "" {
+				_, err = c.Do("AUTH", config.Password)
 				if err != nil {
 					return nil, err
 				}
-
 			}
-
+			// Select the database number provided by config.Database
 			if _, err := c.Do("Select", config.Database); err != nil {
 				c.Close()
 				return nil, err
@@ -105,10 +96,8 @@ func getConfiguration(passedConfig *Configuration) Configuration {
 	if passedConfig == nil {
 		return defaultConfiguration
 	}
-
 	// copy the passedConfig
 	newConfig := *passedConfig
-
 	if newConfig.Address == "" {
 		newConfig.Address = defaultConfiguration.Address
 	}
@@ -116,6 +105,6 @@ func getConfiguration(passedConfig *Configuration) Configuration {
 		newConfig.Network = defaultConfiguration.Network
 	}
 	// since the zero value for int is 0, we can skip config.Database
-
+	// since the zero value for string is "", we can skip config.Address
 	return newConfig
 }
