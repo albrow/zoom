@@ -263,7 +263,7 @@ func registerTestingTypes() {
 // checkDatabaseEmpty panics if the database to be used for testing
 // is not empty.
 func checkDatabaseEmpty() {
-	conn := GetConn()
+	conn := Conn()
 	defer conn.Close()
 	n, err := redis.Int(conn.Do("DBSIZE"))
 	if err != nil {
@@ -279,7 +279,7 @@ func checkDatabaseEmpty() {
 // of each test that toches the database, typically by using defer.
 func testingTearDown() {
 	// flush and close the database
-	conn := GetConn()
+	conn := Conn()
 	_, err := conn.Do("flushdb")
 	if err != nil {
 		panic(err)
@@ -289,7 +289,7 @@ func testingTearDown() {
 
 // expectSetContains sets an error via t.Errorf if member is not in the set
 func expectSetContains(t *testing.T, setName string, member interface{}) {
-	conn := GetConn()
+	conn := Conn()
 	defer conn.Close()
 	contains, err := redis.Bool(conn.Do("SISMEMBER", setName, member))
 	if err != nil {
@@ -302,7 +302,7 @@ func expectSetContains(t *testing.T, setName string, member interface{}) {
 
 // expectSetDoesNotContain sets an error via t.Errorf if member is in the set
 func expectSetDoesNotContain(t *testing.T, setName string, member interface{}) {
-	conn := GetConn()
+	conn := Conn()
 	defer conn.Close()
 	contains, err := redis.Bool(conn.Do("SISMEMBER", setName, member))
 	if err != nil {
@@ -316,7 +316,7 @@ func expectSetDoesNotContain(t *testing.T, setName string, member interface{}) {
 // expectFieldEquals sets an error via t.Errorf if the the field identified by fieldName does
 // not equal expected according to the database.
 func expectFieldEquals(t *testing.T, key string, fieldName string, expected interface{}) {
-	conn := GetConn()
+	conn := Conn()
 	defer conn.Close()
 	reply, err := conn.Do("HGET", key, fieldName)
 	if err != nil {
@@ -347,7 +347,7 @@ func expectFieldEquals(t *testing.T, key string, fieldName string, expected inte
 
 // expectKeyExists sets an error via t.Errorf if key does not exist in the database.
 func expectKeyExists(t *testing.T, key string) {
-	conn := GetConn()
+	conn := Conn()
 	defer conn.Close()
 	if exists, err := redis.Bool(conn.Do("EXISTS", key)); err != nil {
 		t.Errorf("Unexpected error in EXISTS: %s", err.Error())
@@ -358,7 +358,7 @@ func expectKeyExists(t *testing.T, key string) {
 
 // expectKeyDoesNotExist sets an error via t.Errorf if key does exist in the database.
 func expectKeyDoesNotExist(t *testing.T, key string) {
-	conn := GetConn()
+	conn := Conn()
 	defer conn.Close()
 	if exists, err := redis.Bool(conn.Do("EXISTS", key)); err != nil {
 		t.Errorf("Unexpected error in EXISTS: %s", err.Error())
@@ -480,7 +480,7 @@ func numericIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 	}
 	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName)
 	score := numericScore(fieldValue)
-	conn := GetConn()
+	conn := Conn()
 	defer conn.Close()
 	gotIds, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
 	if err != nil {
@@ -502,7 +502,7 @@ func stringIndexExists(modelType *ModelType, model Model, fieldName string) (boo
 		fieldValue = fieldValue.Elem()
 	}
 	memberKey := fieldValue.String() + " " + model.Id()
-	conn := GetConn()
+	conn := Conn()
 	defer conn.Close()
 	reply, err := conn.Do("ZRANK", indexKey, memberKey)
 	if err != nil {
@@ -522,7 +522,7 @@ func booleanIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 	}
 	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName)
 	score := boolScore(fieldValue)
-	conn := GetConn()
+	conn := Conn()
 	defer conn.Close()
 	gotIds, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
 	if err != nil {

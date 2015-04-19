@@ -417,7 +417,7 @@ func (q *Query) Count() (int, error) {
 	switch {
 	case !q.hasFilters():
 		// Just return the number of ids in the all index set
-		conn := GetConn()
+		conn := Conn()
 		defer conn.Close()
 		return redis.Int(conn.Do("SCARD", q.modelSpec.allIndexKey()))
 	}
@@ -431,7 +431,7 @@ func (q *Query) Ids() ([]string, error) {
 	switch {
 	case !q.hasFilters() && !q.hasOrder():
 		// Just return the ids in the all index set
-		conn := GetConn()
+		conn := Conn()
 		defer conn.Close()
 		return redis.Strings(conn.Do("SMEMBERS", q.modelSpec.allIndexKey()))
 	case q.hasOrder() && !q.hasFilters():
@@ -449,7 +449,7 @@ func (q *Query) Ids() ([]string, error) {
 			}
 			return ids, nil
 		} else {
-			conn := GetConn()
+			conn := Conn()
 			defer conn.Close()
 			switch q.order.kind {
 			case ascendingOrder:
