@@ -72,9 +72,9 @@ func RegisterName(name string, model Model) (*ModelType, error) {
 	typ := reflect.TypeOf(model)
 	switch {
 	case typeIsRegistered(typ):
-		return nil, TypeAlreadyRegisteredError{Typ: typ}
+		return nil, fmt.Errorf("zoom: Error in Register or RegisterName: The type %T has already been registered.", model)
 	case nameIsRegistered(name):
-		return nil, NameAlreadyRegisteredError{Name: name}
+		return nil, fmt.Errorf("zoom: Error in Register or RegisterName: The name %s has already been registered.", name)
 	case !typeIsPointerToStruct(typ):
 		return nil, fmt.Errorf("zoom: Register and RegisterName require a pointer to a struct as an argument. Got type %T", model)
 	}
