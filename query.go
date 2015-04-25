@@ -396,29 +396,6 @@ func (q *Query) Ids() ([]string, error) {
 		defer conn.Close()
 		return redis.Strings(conn.Do("SMEMBERS", q.modelSpec.allIndexKey()))
 	case q.hasOrder() && !q.hasFilters():
-		// Just return the ids in the sorted set for the field index
-		fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
-		if err != nil {
-			return nil, fmt.Errorf("zoom: Error in Query.Run: %s", err.Error())
-		}
-		if q.modelSpec.fieldsByName[q.order.fieldName].indexKind == stringIndex {
-			ids := []string{}
-			q.tx = NewTransaction()
-			q.tx.extractIdsFromStringIndex(fieldIndexKey, q.order.kind, newScanStringsHandler(&ids))
-			if err := q.tx.Exec(); err != nil {
-				return nil, err
-			}
-			return ids, nil
-		} else {
-			conn := Conn()
-			defer conn.Close()
-			switch q.order.kind {
-			case ascendingOrder:
-				return redis.Strings(conn.Do("ZRANGE", fieldIndexKey, 0, -1))
-			case descendingOrder:
-				return redis.Strings(conn.Do("ZREVRANGE", fieldIndexKey, 0, -1))
-			}
-		}
 	}
 	return nil, nil
 }

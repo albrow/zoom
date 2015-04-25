@@ -45,7 +45,7 @@ func init() {
 		{
 			script:   &extractIdsFromStringIndexScript,
 			filename: "extract_ids_from_string_index.lua",
-			keyCount: 1,
+			keyCount: 2,
 		},
 	}
 	for _, s := range scriptsToParse {
@@ -77,8 +77,7 @@ func (t *Transaction) deleteStringIndex(modelName, modelId, fieldName string) {
 
 // extractIdsFromStringIndex is a small function wrapper around extractIdsFromStringIndexScript.
 // It offers some type safety and helps make sure the arguments you pass through to the are correct.
-// The script will extract and return the ids in the given string index. You can use the handler to
-// scan the ids into a slice of strings.
-func (t *Transaction) extractIdsFromStringIndex(setKey string, orderKind orderKind, handler ReplyHandler) {
-	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, orderKind.String()}, handler)
+// The script will extract the ids from setKey and store them in a sorted set identified by storeKey.
+func (t *Transaction) extractIdsFromStringIndex(setKey, storeKey string) {
+	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, storeKey}, nil)
 }

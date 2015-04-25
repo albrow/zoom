@@ -136,24 +136,18 @@ func TestExtractIdsFromStringIndexScript(t *testing.T) {
 		t.Errorf("Unexpected error saving models in tx.Exec: %s", err.Error())
 	}
 
-	// Test in both ascending and descending order
-	for _, order := range []orderKind{ascendingOrder, descendingOrder} {
-		expectedIds := []string{}
-		switch order {
-		case ascendingOrder:
-			expectedIds = modelIds(Models(models))
-		case descendingOrder:
-			expectedIds = modelIds(Models(reverseModels(models)))
-		}
-		gotIds := []string{}
-		tx := NewTransaction()
-		fieldIndexKey, _ := indexedTestModels.FieldIndexKey("String")
-		tx.extractIdsFromStringIndex(fieldIndexKey, order, newScanStringsHandler(&gotIds))
-		if err := tx.Exec(); err != nil {
-			t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
-		}
-		if !reflect.DeepEqual(gotIds, expectedIds) {
-			t.Errorf("Script results were incorrect.\nExpected: %v\nGot:  %v", expectedIds, gotIds)
-		}
+	// Run the script and check the result
+	expectedIds := modelIds(Models(models))
+	gotIds := []string{}
+	storeKey := "TestExtractIdsFromStringIndexScript"
+	tx = NewTransaction()
+	fieldIndexKey, _ := indexedTestModels.FieldIndexKey("String")
+	tx.extractIdsFromStringIndex(fieldIndexKey, storeKey)
+	tx.Command("ZRANGE", redis.Args{storeKey, 0, -1}, newScanStringsHandler(&gotIds))
+	if err := tx.Exec(); err != nil {
+		t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
+	}
+	if !reflect.DeepEqual(gotIds, expectedIds) {
+		t.Errorf("Script results were incorrect.\nExpected: %v\nGot:      %v", expectedIds, gotIds)
 	}
 }
