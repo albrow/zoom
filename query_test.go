@@ -29,11 +29,10 @@ func TestQueryOrder(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	// create models which we will try to sort
+	// Create models which we will try to sort
 	models, err := createAndSaveIndexedTestModels(10)
 	if err != nil {
-		t.Error(err)
-		t.FailNow()
+		t.Fatal(err)
 	}
 
 	// Test both ascending and descending order for all the fields
@@ -42,6 +41,24 @@ func TestQueryOrder(t *testing.T) {
 		testQuery(t, ascendingQuery, models)
 		descendingQuery := indexedTestModels.NewQuery().Order("-" + fieldName)
 		testQuery(t, descendingQuery, models)
+	}
+}
+
+func TestQueryLimitAndOffset(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createAndSaveIndexedTestModels(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	limits := []uint{0, 1, 9, 10}
+	offsets := []uint{0, 1, 9, 10}
+	for _, l := range limits {
+		for _, o := range offsets {
+			q := indexedTestModels.NewQuery().Order("Int").Limit(l).Offset(o)
+			testQuery(t, q, models)
+		}
 	}
 }
 
@@ -79,7 +96,7 @@ func testQueryRun(t *testing.T, q *Query, expected []*indexedTestModel) {
 }
 
 func testQueryCount(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
-	expected := len(expectedModels)
+	expected := uint(len(expectedModels))
 	if got, err := q.Count(); err != nil {
 		t.Error(err)
 	} else if got != expected {

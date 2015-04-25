@@ -222,7 +222,7 @@ func (ms *modelSpec) fieldIndexKey(fieldName string) (string, error) {
 // be the key of a set or a sorted set which consists of model ids. The arguments
 // use they "BY nosort" option, so if a specific order is required, the setKey should be
 // a sorted set.
-func (ms *modelSpec) sortArgs(setKey string, includeFields []string, limit uint, offset uint, orderKind orderKind) redis.Args {
+func (ms *modelSpec) sortArgs(setKey string, includeFields []string, limit int, offset uint, orderKind orderKind) redis.Args {
 	args := redis.Args{setKey, "BY", "nosort"}
 	for _, fieldName := range includeFields {
 		args = append(args, "GET", ms.name+":*->"+fieldName)

@@ -346,7 +346,13 @@ func (q *Query) Run(models interface{}) error {
 	if err != nil {
 		return err
 	}
-	sortArgs := q.modelSpec.sortArgs(idsKey, q.redisFieldNames(), q.limit, q.offset, q.order.kind)
+	limit := int(q.limit)
+	if limit == 0 {
+		// In our query syntax, a limit of 0 means unlimited
+		// But in redis, -1 means unlimited
+		limit = -1
+	}
+	sortArgs := q.modelSpec.sortArgs(idsKey, q.redisFieldNames(), limit, q.offset, q.order.kind)
 	q.tx.Command("SORT", sortArgs, newScanModelsHandler(q.modelSpec, append(q.fieldNames(), "-"), models))
 	if isTemp {
 		q.tx.Command("DEL", redis.Args{idsKey}, nil)
@@ -368,13 +374,29 @@ func (q *Query) RunOne(model Model) error {
 // actually retreiving the models themselves. Count will also return the first
 // error that occured during the lifetime of the query object (if any).
 // Otherwise, the second return value will be nil.
-func (q *Query) Count() (int, error) {
-	switch {
-	case !q.hasFilters():
+func (q *Query) Count() (uint, error) {
+	if !q.hasFilters() {
 		// Just return the number of ids in the all index set
 		conn := Conn()
 		defer conn.Close()
-		return redis.Int(conn.Do("SCARD", q.modelSpec.allIndexKey()))
+		count64, err := redis.Uint64(conn.Do("SCARD", q.modelSpec.allIndexKey()))
+		if err != nil {
+			return 0, nil
+		}
+		count := uint(count64)
+		// Apply math to take into account limit and offset
+		switch {
+		case !q.hasLimit() && !q.hasOffset():
+			return count, nil
+		default:
+			if q.hasOffset() {
+				count = count - q.offset
+			}
+			if q.hasLimit() && q.limit < count {
+				count = q.limit
+			}
+			return count, nil
+		}
 	}
 	return 0, nil
 }
@@ -388,7 +410,13 @@ func (q *Query) Ids() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	sortArgs := q.modelSpec.sortArgs(idsKey, nil, q.limit, q.offset, q.order.kind)
+	limit := int(q.limit)
+	if limit == 0 {
+		// In our query syntax, a limit of 0 means unlimited
+		// But in redis, -1 means unlimited
+		limit = -1
+	}
+	sortArgs := q.modelSpec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind)
 	ids := []string{}
 	q.tx.Command("SORT", sortArgs, newScanStringsHandler(&ids))
 	if isTemp {
