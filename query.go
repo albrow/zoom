@@ -247,24 +247,6 @@ func (q *Query) Exclude(fields ...string) *Query {
 	return q
 }
 
-// fieldNames parses the includes and excludes properties to return a list of
-// field names which should be included in all find operations. If there are no
-// includes or excludes, it returns all the field names.
-func (q *Query) fieldNames() []string {
-	switch {
-	case q.hasIncludes():
-		return q.includes
-	case q.hasExcludes():
-		results := q.modelSpec.fieldNames()
-		for _, name := range q.excludes {
-			results = removeElementFromStringSlice(results, name)
-		}
-		return results
-	default:
-		return q.modelSpec.fieldNames()
-	}
-}
-
 // Filter applies a filter to the query, which will cause the query to only
 // return models with attributes matching the expression. filterString should be
 // an expression which includes a fieldName, a space, and an operator in that
@@ -362,9 +344,10 @@ func (q *Query) Run(models interface{}) error {
 	q.tx = NewTransaction()
 	switch {
 	case !q.hasFilters() && !q.hasOrder():
-		// Just return the models whose ids are in the all index
-		q.tx.Command("SORT", redis.Args{q.modelSpec.allIndexKey(), "BY", "nosort", "GET", "#"}, newScanModelsHandler(q.modelSpec, []string{"-"}, models))
-		// q.tx.findModelsBySetIds(q.modelSpec.allIndexKey(), q.modelSpec.name, q.limit, q.offset, newScanModelsHandler(q.modelSpec, q.modelSpec.fieldNames(), models))
+		// Just return the models for the ids in the all index
+		sortArgs := q.modelSpec.sortArgs(q.modelSpec.allIndexKey(), q.redisFieldNames(), 0, 0, ascendingOrder)
+		fieldNames := append(q.fieldNames(), "-")
+		q.tx.Command("SORT", sortArgs, newScanModelsHandler(q.modelSpec, fieldNames, models))
 	case q.hasOrder() && !q.hasFilters():
 		// Just return the models in the field index that we should order by
 		// fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
@@ -438,6 +421,36 @@ func (q *Query) Ids() ([]string, error) {
 		}
 	}
 	return nil, nil
+}
+
+// fieldNames parses the includes and excludes properties to return a list of
+// field names which should be included in all find operations. If there are no
+// includes or excludes, it returns all the field names.
+func (q *Query) fieldNames() []string {
+	switch {
+	case q.hasIncludes():
+		return q.includes
+	case q.hasExcludes():
+		results := q.modelSpec.fieldNames()
+		for _, name := range q.excludes {
+			results = removeElementFromStringSlice(results, name)
+		}
+		return results
+	default:
+		return q.modelSpec.fieldNames()
+	}
+}
+
+// redisFieldNames parses the includes and excludes properties to return a list of
+// redis names for each field which should be included in all find operations. If
+// there are no includes or excludes, it returns the redis names for all fields.
+func (q *Query) redisFieldNames() []string {
+	fieldNames := q.fieldNames()
+	redisNames := []string{}
+	for _, fieldName := range fieldNames {
+		redisNames = append(redisNames, q.modelSpec.fieldsByName[fieldName].redisName)
+	}
+	return redisNames
 }
 
 // converts limit and offset to start and stop values for cases where redis
