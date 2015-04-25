@@ -130,20 +130,16 @@ func TestFindModelsBySetIdsScript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error saving test models: %s", err.Error())
 	}
-
-	replyFunc := func() interface{} {
-		tx := NewTransaction()
-		var gotReply interface{}
-		tx.findModelsBySetIds(indexedTestModels.AllIndexKey(), indexedTestModels.Name(), func(reply interface{}) error {
-			gotReply = reply
-			return nil
-		})
-		if err := tx.Exec(); err != nil {
-			t.Fatalf("Unexpected error executing transaction in replyFunc: %s", err.Error())
-		}
-		return gotReply
+	tx := NewTransaction()
+	var gotReply interface{}
+	tx.findModelsBySetIds(indexedTestModels.AllIndexKey(), indexedTestModels.Name(), 0, 0, func(reply interface{}) error {
+		gotReply = reply
+		return nil
+	})
+	if err := tx.Exec(); err != nil {
+		t.Fatalf("Unexpected error executing transaction: %s", err.Error())
 	}
-	testFindByIdsScript(t, replyFunc, models, false)
+	testFindByIdsScript(t, gotReply, models, false)
 }
 
 func TestFindModelsBySortedSetIdsScript(t *testing.T) {
@@ -163,24 +159,21 @@ func TestFindModelsBySortedSetIdsScript(t *testing.T) {
 
 	// Test in both ascending and descending order
 	for _, order := range []orderKind{ascendingOrder, descendingOrder} {
-		replyFunc := func() interface{} {
-			tx := NewTransaction()
-			var gotReply interface{}
-			fieldIndexKey, _ := indexedTestModels.FieldIndexKey("Int")
-			tx.findModelsBySortedSetIds(fieldIndexKey, indexedTestModels.Name(), order, func(reply interface{}) error {
-				gotReply = reply
-				return nil
-			})
-			if err := tx.Exec(); err != nil {
-				t.Fatalf("Unexpected error executing transaction in replyFunc: %s", err.Error())
-			}
-			return gotReply
+		tx := NewTransaction()
+		var gotReply interface{}
+		fieldIndexKey, _ := indexedTestModels.FieldIndexKey("Int")
+		tx.findModelsBySortedSetIds(fieldIndexKey, indexedTestModels.Name(), order, func(reply interface{}) error {
+			gotReply = reply
+			return nil
+		})
+		if err := tx.Exec(); err != nil {
+			t.Fatalf("Unexpected error executing transaction: %s", err.Error())
 		}
 		switch order {
 		case ascendingOrder:
-			testFindByIdsScript(t, replyFunc, models, true)
+			testFindByIdsScript(t, gotReply, models, true)
 		case descendingOrder:
-			testFindByIdsScript(t, replyFunc, reverseModels(models), true)
+			testFindByIdsScript(t, gotReply, reverseModels(models), true)
 		}
 	}
 }
@@ -202,29 +195,26 @@ func TestFindModelsByStringIndexScript(t *testing.T) {
 
 	// Test in both ascending and descending order
 	for _, order := range []orderKind{ascendingOrder, descendingOrder} {
-		replyFunc := func() interface{} {
-			tx := NewTransaction()
-			var gotReply interface{}
-			fieldIndexKey, _ := indexedTestModels.FieldIndexKey("String")
-			tx.findModelsByStringIndex(fieldIndexKey, indexedTestModels.Name(), order, func(reply interface{}) error {
-				gotReply = reply
-				return nil
-			})
-			if err := tx.Exec(); err != nil {
-				t.Fatalf("Unexpected error executing transaction in replyFunc: %s", err.Error())
-			}
-			return gotReply
+		tx := NewTransaction()
+		var gotReply interface{}
+		fieldIndexKey, _ := indexedTestModels.FieldIndexKey("String")
+		tx.findModelsByStringIndex(fieldIndexKey, indexedTestModels.Name(), order, func(reply interface{}) error {
+			gotReply = reply
+			return nil
+		})
+		if err := tx.Exec(); err != nil {
+			t.Fatalf("Unexpected error executing transaction: %s", err.Error())
 		}
 		switch order {
 		case ascendingOrder:
-			testFindByIdsScript(t, replyFunc, models, true)
+			testFindByIdsScript(t, gotReply, models, true)
 		case descendingOrder:
-			testFindByIdsScript(t, replyFunc, reverseModels(models), true)
+			testFindByIdsScript(t, gotReply, reverseModels(models), true)
 		}
 	}
 }
 
-func testFindByIdsScript(t *testing.T, replyFunc func() interface{}, expectedModels []*indexedTestModel, orderMatters bool) {
+func testFindByIdsScript(t *testing.T, reply interface{}, expectedModels []*indexedTestModel, orderMatters bool) {
 	modelsById := map[string]*indexedTestModel{}
 	if !orderMatters {
 		for _, model := range expectedModels {
@@ -232,13 +222,13 @@ func testFindByIdsScript(t *testing.T, replyFunc func() interface{}, expectedMod
 		}
 	}
 
-	// Run replyFunc to execute the script and get a reply
-	gotReply := replyFunc()
-
 	// Check that the return value is correct
-	modelsReplies, err := redis.Values(gotReply, nil)
+	modelsReplies, err := redis.Values(reply, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error in redis.Values: %s", err.Error())
+	}
+	if len(modelsReplies) != len(expectedModels) {
+		t.Errorf("Reply was the wrong length. Expected %d but got %d", len(expectedModels), len(modelsReplies))
 	}
 	for i, reply := range modelsReplies {
 		replies, err := redis.Values(reply, nil)
