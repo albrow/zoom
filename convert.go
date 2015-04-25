@@ -14,28 +14,24 @@ import (
 	"strconv"
 )
 
-// scanModel iterates through replies, converts each field value, and scans the
-// value into the fields of mr.model. It expects replies to be the output from an
-// HGETALL command from redis. That is, replies should consist of alternating fieldName
-// fieldValue pairs.
-func scanModel(replies []interface{}, mr *modelRef) error {
-	if len(replies)%2 != 0 {
-		return fmt.Errorf("zoom: Error in scanModel: Expected len(replies) to be even, but got %d", len(replies))
-	}
+// scanModel iterates through fieldValues, converts each value to the correct type, and
+// scans the value into the fields of mr.model. It expects fieldValues to be the output
+// from an HMGET command from redis, without the field names included. The order of the
+// values in fieldValues must match the order of the corresponding field names. The id
+// field is special and should have the field name "-", which will be set with the SetId
+// method. fieldNames should be the actual field names as they appear in the struct definition,
+// not the redis names which may be custom.
+func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) error {
 	ms := mr.spec
-	for i := 0; i < len(replies); i += 2 {
-		// The even values should be field names
-		fieldName, err := redis.String(replies[i], nil)
-		if err != nil {
-			return err
-		}
-		// The odd values should be field values
-		replyBytes, err := redis.Bytes(replies[i+1], nil)
+	for i, reply := range fieldValues {
+		fieldName := fieldNames[i]
+		replyBytes, err := redis.Bytes(reply, nil)
 		if err != nil {
 			return err
 		}
 		if fieldName == "-" {
-			// Special case for the Id field
+			// The Id signified by the field name "-" since that cannot
+			// possibly collide with other field names.
 			mr.model.SetId(string(replyBytes))
 			continue
 		}

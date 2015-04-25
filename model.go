@@ -189,6 +189,18 @@ func (ms modelSpec) fieldNames() []string {
 	return names
 }
 
+// fieldRedisNames returns all the redis names (which might be custom names specified via
+// the `redis:"custonName"` struct tag) for each field in the given modelSpec
+func (ms modelSpec) fieldRedisNames() []string {
+	names := make([]string, len(ms.fields))
+	count := 0
+	for _, field := range ms.fields {
+		names[count] = field.redisName
+		count++
+	}
+	return names
+}
+
 // fieldIndexKey returns the key for the sorted set used to index the field identified
 // by fieldName. It returns an error if fieldName does not identify a field in the spec
 // or if the field it identifies is not an indexed field.
@@ -200,6 +212,33 @@ func (ms *modelSpec) fieldIndexKey(fieldName string) (string, error) {
 		return "", fmt.Errorf("%s.%s is not an indexed field", ms.typ.Name(), fieldName)
 	}
 	return ms.name + ":" + fs.redisName, nil
+}
+
+// sortArgs returns arguments that can be used to get all the fields in includeFields
+// for all the models which have corresponding ids in setKey. Any fields not in
+// includeFields will not be included in the arguments and will not be retrieved from
+// redis when the command is eventually run. If limit or offset are not 0, the LIMIT
+// option will be added to the arguments with the given limit and offset. setKey must
+// be the key of a set or a sorted set which consists of model ids. The arguments
+// use they "BY nosort" option, so if a specific order is required, the setKey should be
+// a sorted set.
+func (ms *modelSpec) sortArgs(setKey string, includeFields []string, limit uint, offset uint, orderKind orderKind) redis.Args {
+	args := redis.Args{setKey, "BY", "nosort"}
+	for _, fieldName := range includeFields {
+		args = append(args, "GET", ms.name+":*->"+fieldName)
+	}
+	// We always want to get the id
+	args = append(args, "GET", "#")
+	if !(limit == 0 && offset == 0) {
+		args = append(args, "LIMIT", offset, limit)
+	}
+	switch orderKind {
+	case ascendingOrder:
+		args = append(args, "ASC")
+	case descendingOrder:
+		args = append(args, "DESC")
+	}
+	return args
 }
 
 // modelRef represents a reference to a particular model. It consists of the model object

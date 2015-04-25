@@ -82,8 +82,8 @@ func init() {
 // It offers some type safety and helps make sure the arguments you pass through to the are correct.
 // The script will return all the fields for models which are identified by ids in the given set.
 // You can use the handler to scan the models into a slice of models.
-func (t *Transaction) findModelsBySetIds(setKey string, modelName string, handler ReplyHandler) {
-	t.Script(findModelsBySetIdsScript, redis.Args{setKey, modelName}, handler)
+func (t *Transaction) findModelsBySetIds(setKey string, modelName string, limit uint, offset uint, handler ReplyHandler) {
+	t.Script(findModelsBySetIdsScript, redis.Args{setKey, modelName, limit, offset}, handler)
 }
 
 // deleteModelsBySetIds is a small function wrapper around deleteModelsBySetIdsScript.

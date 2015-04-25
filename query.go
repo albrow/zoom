@@ -363,18 +363,19 @@ func (q *Query) Run(models interface{}) error {
 	switch {
 	case !q.hasFilters() && !q.hasOrder():
 		// Just return the models whose ids are in the all index
-		q.tx.findModelsBySetIds(q.modelSpec.allIndexKey(), q.modelSpec.name, newScanModelsHandler(q.modelSpec, models))
+		q.tx.Command("SORT", redis.Args{q.modelSpec.allIndexKey(), "BY", "nosort", "GET", "#"}, newScanModelsHandler(q.modelSpec, []string{"-"}, models))
+		// q.tx.findModelsBySetIds(q.modelSpec.allIndexKey(), q.modelSpec.name, q.limit, q.offset, newScanModelsHandler(q.modelSpec, q.modelSpec.fieldNames(), models))
 	case q.hasOrder() && !q.hasFilters():
 		// Just return the models in the field index that we should order by
-		fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
-		if err != nil {
-			return fmt.Errorf("zoom: Error in Query.Run: %s", err.Error())
-		}
-		if q.modelSpec.fieldsByName[q.order.fieldName].indexKind == stringIndex {
-			q.tx.findModelsByStringIndex(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, models))
-		} else {
-			q.tx.findModelsBySortedSetIds(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, models))
-		}
+		// fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
+		// if err != nil {
+		// 	return fmt.Errorf("zoom: Error in Query.Run: %s", err.Error())
+		// }
+		// if q.modelSpec.fieldsByName[q.order.fieldName].indexKind == stringIndex {
+		// 	// q.tx.findModelsByStringIndex(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, q.modelSpec.fieldNames(), models))
+		// } else {
+		// 	// q.tx.findModelsBySortedSetIds(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, q.modelSpec.fieldNames(), models))
+		// }
 	}
 	return q.tx.Exec()
 }

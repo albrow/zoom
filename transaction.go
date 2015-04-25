@@ -218,14 +218,18 @@ func newScanStringsHandler(strings interface{}) ReplyHandler {
 }
 
 // newScanModelHandler returns a ReplyHandler which will scan all the fields in
-// reply into the fields of mr.model.
-func newScanModelHandler(mr *modelRef) ReplyHandler {
+// in the reply which are also in fieldNames into the fields of mr.model. It expects
+// a reply that looks like the output of an HMGET command, without the field names
+// included. The order of fieldNames must correspond to the order of the values in the
+// reply. fieldNames should be the actual field names as they appear in the struct
+// definition, not the redis names which may be custom.
+func newScanModelHandler(fieldNames []string, mr *modelRef) ReplyHandler {
 	return func(reply interface{}) error {
-		replies, err := redis.Values(reply, nil)
+		fieldValues, err := redis.Values(reply, nil)
 		if err != nil {
 			return err
 		}
-		if len(replies) == 0 {
+		if len(fieldValues) == 0 {
 			var msg string
 			if mr.model.Id() != "" {
 				msg = fmt.Sprintf("Could not find %s with id = %s", mr.spec.name, mr.model.Id())
@@ -234,7 +238,7 @@ func newScanModelHandler(mr *modelRef) ReplyHandler {
 			}
 			return ModelNotFoundError{Msg: msg}
 		}
-		if err := scanModel(replies, mr); err != nil {
+		if err := scanModel(fieldNames, fieldValues, mr); err != nil {
 			return err
 		}
 		return nil
@@ -242,20 +246,39 @@ func newScanModelHandler(mr *modelRef) ReplyHandler {
 }
 
 // newScanModelsHandler returns a reply handler which will scan all the replies
-// in reply into models. models should be a pointer to a slice of some registered model
-// type. The returned replyHandler will grow or shrink models as needed.
-func newScanModelsHandler(spec *modelSpec, models interface{}) ReplyHandler {
+// in reply into models. It only scans the fields which are in fieldNames. models
+// should be a pointer to a slice of some registered model type. The returned
+// replyHandler will grow or shrink models as needed. It expects a reply which is
+// a flat array of field values, with no separation between the fields for each
+// model. The order of fieldNames must correspond to the order of the values in the
+// reply. fieldNames should be the actual field names as they appear in the struct
+// definition, not the redis names which may be custom. It will use the length of
+// fieldNames to determine which fields belong to which models. For example, if
+// fieldNames is ["Int", "String", "-"] and the reply from redis looks like this:
+//
+//   1) "5"
+//   2) "Bob"
+//   3) "b1C7B0yETtXFYuKinndqoa"
+//   4) "7"
+//   5) "Alice"
+//   6) "NmjzzzDyNJpsCpPKnndqoa"
+//
+// newScanModelsHandler will recognize that there are three fields and assign the
+// first three to the first model, the next three to the second model, etc. This
+// is the kind of reply we expect from a SORT command with multiple GET options.
+func newScanModelsHandler(spec *modelSpec, fieldNames []string, models interface{}) ReplyHandler {
 	return func(reply interface{}) error {
-		modelsFields, err := redis.Values(reply, nil)
+		allFields, err := redis.Values(reply, nil)
 		if err != nil {
 			return err
 		}
+		numFields := len(fieldNames)
+		numModels := len(allFields) / numFields
 		modelsVal := reflect.ValueOf(models).Elem()
-		for i, reply := range modelsFields {
-			fields, err := redis.Values(reply, nil)
-			if err != nil {
-				return err
-			}
+		for i := 0; i < numModels; i++ {
+			start := i * numFields
+			stop := i*numFields + numFields
+			fieldValues := allFields[start:stop]
 			var modelVal reflect.Value
 			if modelsVal.Len() > i {
 				// Use the pre-existing value at index i
@@ -274,15 +297,15 @@ func newScanModelsHandler(spec *modelSpec, models interface{}) ReplyHandler {
 				spec:  spec,
 				model: modelVal.Interface().(Model),
 			}
-			if err := scanModel(fields, mr); err != nil {
+			if err := scanModel(fieldNames, fieldValues, mr); err != nil {
 				return err
 			}
 		}
 		// Trim the slice if it is longer than the number of models we scanned
 		// in.
-		if len(modelsFields) < modelsVal.Len() {
-			modelsVal.SetLen(len(modelsFields))
-			modelsVal.SetCap(len(modelsFields))
+		if numModels < modelsVal.Len() {
+			modelsVal.SetLen(numModels)
+			modelsVal.SetCap(numModels)
 		}
 		return nil
 	}

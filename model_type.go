@@ -277,7 +277,11 @@ func (t *Transaction) Find(mt *ModelType, id string, model Model) {
 		model: model,
 	}
 	// Get the fields from the main hash for this model
-	t.Command("HGETALL", redis.Args{mr.key()}, newScanModelHandler(mr))
+	args := redis.Args{mr.key()}
+	for _, fieldName := range mr.spec.fieldRedisNames() {
+		args = append(args, fieldName)
+	}
+	t.Command("HMGET", args, newScanModelHandler(mr.spec.fieldNames(), mr))
 }
 
 // FindAll finds all the models of the given type. It executes the commands needed
@@ -312,7 +316,9 @@ func (t *Transaction) FindAll(mt *ModelType, models interface{}) {
 		t.setError(fmt.Errorf("zoom: Error in FindAll or Transaction.FindAll: %s", err.Error()))
 		return
 	}
-	t.findModelsBySetIds(mt.AllIndexKey(), mt.Name(), newScanModelsHandler(mt.spec, models))
+	sortArgs := mt.spec.sortArgs(mt.spec.allIndexKey(), mt.spec.fieldRedisNames(), 0, 0, ascendingOrder)
+	fieldNames := append(mt.spec.fieldNames(), "-")
+	t.Command("SORT", sortArgs, newScanModelsHandler(mt.spec, fieldNames, models))
 }
 
 // Count returns the number of models of the given type that exist in the database.
