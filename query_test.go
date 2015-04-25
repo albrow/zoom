@@ -62,6 +62,28 @@ func TestQueryLimitAndOffset(t *testing.T) {
 	}
 }
 
+func TestQueryIncludeAndExclude(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createAndSaveIndexedTestModels(2)
+	if err != nil {
+		t.Error(err)
+		t.FailNow()
+	}
+	fields := [][]string{
+		[]string{},
+		[]string{"Int"},
+		[]string{"Int", "Bool", "String"},
+	}
+	for _, fs := range fields {
+		includeQuery := indexedTestModels.NewQuery().Include(fs...)
+		testQuery(t, includeQuery, models)
+		excludeQuery := indexedTestModels.NewQuery().Exclude(fs...)
+		testQuery(t, excludeQuery, models)
+	}
+}
+
 // There's a huge amount of test cases to cover above.
 // Below is some code that makes it easier, but needs to be
 // tested itself. Testing for correctness using a brute force
