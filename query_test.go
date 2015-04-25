@@ -26,7 +26,6 @@ func TestQueryAll(t *testing.T) {
 }
 
 func TestQueryOrder(t *testing.T) {
-	t.Skip("Skipping until queries are reimplemented with new SORT command")
 	testingSetUp()
 	defer testingTearDown()
 

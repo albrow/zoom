@@ -342,25 +342,19 @@ func (filter filter) checkValType(value interface{}) error {
 func (q *Query) Run(models interface{}) error {
 	// TODO: type-checking
 	q.tx = NewTransaction()
-	switch {
-	case !q.hasFilters() && !q.hasOrder():
-		// Just return the models for the ids in the all index
-		sortArgs := q.modelSpec.sortArgs(q.modelSpec.allIndexKey(), q.redisFieldNames(), 0, 0, ascendingOrder)
-		fieldNames := append(q.fieldNames(), "-")
-		q.tx.Command("SORT", sortArgs, newScanModelsHandler(q.modelSpec, fieldNames, models))
-	case q.hasOrder() && !q.hasFilters():
-		// Just return the models in the field index that we should order by
-		// fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
-		// if err != nil {
-		// 	return fmt.Errorf("zoom: Error in Query.Run: %s", err.Error())
-		// }
-		// if q.modelSpec.fieldsByName[q.order.fieldName].indexKind == stringIndex {
-		// 	// q.tx.findModelsByStringIndex(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, q.modelSpec.fieldNames(), models))
-		// } else {
-		// 	// q.tx.findModelsBySortedSetIds(fieldIndexKey, q.modelSpec.name, q.order.kind, newScanModelsHandler(q.modelSpec, q.modelSpec.fieldNames(), models))
-		// }
+	idsKey, isTemp, err := q.generateIdsSet()
+	if err != nil {
+		return err
 	}
-	return q.tx.Exec()
+	sortArgs := q.modelSpec.sortArgs(idsKey, q.redisFieldNames(), q.limit, q.offset, q.order.kind)
+	q.tx.Command("SORT", sortArgs, newScanModelsHandler(q.modelSpec, append(q.fieldNames(), "-"), models))
+	if isTemp {
+		q.tx.Command("DEL", redis.Args{idsKey}, nil)
+	}
+	if err := q.tx.Exec(); err != nil {
+		return err
+	}
+	return nil
 }
 
 // RunOne is exactly like Run but finds only the first model that fits the
@@ -389,15 +383,43 @@ func (q *Query) Count() (int, error) {
 // models themselves. Ids will return the first error that occured
 // during the lifetime of the query object (if any).
 func (q *Query) Ids() ([]string, error) {
-	switch {
-	case !q.hasFilters() && !q.hasOrder():
-		// Just return the ids in the all index set
-		conn := Conn()
-		defer conn.Close()
-		return redis.Strings(conn.Do("SMEMBERS", q.modelSpec.allIndexKey()))
-	case q.hasOrder() && !q.hasFilters():
+	q.tx = NewTransaction()
+	idsKey, isTemp, err := q.generateIdsSet()
+	if err != nil {
+		return nil, err
 	}
-	return nil, nil
+	sortArgs := q.modelSpec.sortArgs(idsKey, nil, q.limit, q.offset, q.order.kind)
+	ids := []string{}
+	q.tx.Command("SORT", sortArgs, newScanStringsHandler(&ids))
+	if isTemp {
+		q.tx.Command("DEL", redis.Args{idsKey}, nil)
+	}
+	if err := q.tx.Exec(); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}
+
+func (q *Query) generateIdsSet() (idsKey string, isTemp bool, err error) {
+	idsKey = q.modelSpec.allIndexKey()
+	isTemp = false
+	if q.hasOrder() && !q.hasFilters() {
+		fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
+		if err != nil {
+			return "", false, err
+		}
+		fieldSpec := q.modelSpec.fieldsByName[q.order.fieldName]
+		if fieldSpec.indexKind == stringIndex {
+			// If the order is a string field, we need to extract the ids before
+			// we use ZRANGE. Set idsKey to a temporary sorted set.
+			idsKey = q.modelSpec.name + ":" + q.order.redisName + ":tmp"
+			isTemp = true
+			q.tx.extractIdsFromStringIndex(fieldIndexKey, idsKey)
+		} else {
+			idsKey = fieldIndexKey
+		}
+	}
+	return idsKey, isTemp, nil
 }
 
 // fieldNames parses the includes and excludes properties to return a list of
@@ -432,9 +454,9 @@ func (q *Query) redisFieldNames() []string {
 
 // converts limit and offset to start and stop values for cases where redis
 // requires them. NOTE start cannot be negative, but stop can be
-func (q *Query) getStartStop() (int, int) {
-	start := int(q.offset)
-	stop := -1
+func (q *Query) getStartStop() (start int, stop int) {
+	start = int(q.offset)
+	stop = -1
 	if q.hasLimit() {
 		stop = int(start) + int(q.limit) - 1
 	}
