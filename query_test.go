@@ -103,26 +103,24 @@ func TestQueryFilterInt(t *testing.T) {
 	}
 }
 
-// func TestQueryFilterBool(t *testing.T) {
-// 	testingSetUp()
-// 	defer testingTearDown()
+func TestQueryFilterBool(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
 
-// 	// create models which we will try to filter
-// 	models, err := createFullModels(10)
-// 	if err != nil {
-// 		t.Error(err)
-// 		t.FailNow()
-// 	}
-
-// 	// create some test queries to filter the models
-// 	operators := []string{"=", "!=", ">", ">=", "<", "<="}
-// 	for _, op := range operators {
-// 		q1 := NewQuery("indexedPrimativesModel").Filter("Bool "+op, true)
-// 		testQuery(t, q1, models)
-// 		q2 := NewQuery("indexedPrimativesModel").Filter("Bool "+op, false)
-// 		testQuery(t, q2, models)
-// 	}
-// }
+	models, err := createAndSaveIndexedTestModels(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Test queries with filters using all possible operators and a
+	// few different filter values.
+	filterValues := []interface{}{true, false}
+	for _, val := range filterValues {
+		for op, _ := range filterOps {
+			q := indexedTestModels.NewQuery().Filter("Bool "+op, val)
+			testQuery(t, q, models)
+		}
+	}
+}
 
 // func TestQueryFilterString(t *testing.T) {
 // 	testingSetUp()
@@ -164,7 +162,7 @@ func TestQueryFilterInt(t *testing.T) {
 // the models which are being queried against.
 func testQuery(t *testing.T, q *Query, models []*indexedTestModel) {
 	expected := expectedResultsForQuery(q, models)
-	// testQueryRun(t, q, expected)
+	testQueryRun(t, q, expected)
 	testQueryIds(t, q, expected)
 	// testQueryCount(t, q, expected)
 }

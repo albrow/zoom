@@ -480,16 +480,16 @@ func (q *Query) intersectFilter(filter filter, origKey string, destKey string) e
 	q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, fieldIndexKey, "WEIGHTS", 0, 1}, nil)
 	switch filter.fieldSpec.indexKind {
 	case numericIndex:
-		return q.intersectNumericFilter(filter, origKey, destKey)
+		q.intersectNumericFilter(filter, origKey, destKey)
 	case booleanIndex:
-		return q.intersectBoolFilter(filter, origKey, destKey)
+		q.intersectBoolFilter(filter, origKey, destKey)
 	case stringIndex:
-		return q.intersectStringFilter(filter, origKey, destKey)
+		q.intersectStringFilter(filter, origKey, destKey)
 	}
 	return nil
 }
 
-func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey string) error {
+func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey string) {
 	if filter.op == equalOp {
 		// Special case for equal. We need to do two remove operations.
 		// NOTE: is there a more effecient way to do this? Currently we're removing almost everything.
@@ -519,11 +519,60 @@ func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey st
 		}
 		q.tx.Command("ZREMRANGEBYSCORE", redis.Args{destKey, min, max}, nil)
 	}
-	return nil
 }
 
-func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey string) error {
-	return fmt.Errorf("intersectBoolFilter not yet implemented")
+func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey string) {
+	var min, max interface{}
+	switch filter.op {
+	case equalOp:
+		if filter.value.Bool() {
+			min, max = 0, 0
+		} else {
+			min, max = 1, 1
+		}
+	case lessOp:
+		if filter.value.Bool() {
+			// false < true, so remove all true
+			min, max = 1, 1
+		} else {
+			// No models can be less than false.
+			min, max = 0, 1
+		}
+	case greaterOp:
+		if filter.value.Bool() {
+			// No models can be greater than true.
+			min, max = 0, 1
+		} else {
+			// true > false, so remove all false
+			min, max = 0, 0
+		}
+	case lessOrEqualOp:
+		if filter.value.Bool() {
+			// Both true and false are <= true.
+			// All models fit this criteria, so we remove none
+			return
+		} else {
+			// Only false <= false, so remove all true
+			min, max = 1, 1
+		}
+	case greaterOrEqualOp:
+		if filter.value.Bool() {
+			// Only true >= true, so remove all false
+			min, max = 0, 0
+		} else {
+			// Both true and false are => true.
+			// All models fit this criteria, so we remove none
+			return
+		}
+	case notEqualOp:
+		if filter.value.Bool() {
+			min, max = 1, 1
+		} else {
+			min, max = 0, 0
+		}
+	}
+	q.tx.Command("ZREMRANGEBYSCORE", redis.Args{destKey, min, max}, nil)
+	return
 }
 
 func (q *Query) intersectStringFilter(filter filter, origKey string, destKey string) error {
