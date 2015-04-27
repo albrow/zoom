@@ -342,7 +342,7 @@ func (filter filter) checkValType(value interface{}) error {
 func (q *Query) Run(models interface{}) error {
 	// TODO: type-checking
 	q.tx = NewTransaction()
-	idsKey, isTemp, err := q.generateIdsSet()
+	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {
 		return err
 	}
@@ -354,8 +354,8 @@ func (q *Query) Run(models interface{}) error {
 	}
 	sortArgs := q.modelSpec.sortArgs(idsKey, q.redisFieldNames(), limit, q.offset, q.order.kind)
 	q.tx.Command("SORT", sortArgs, newScanModelsHandler(q.modelSpec, append(q.fieldNames(), "-"), models))
-	if isTemp {
-		q.tx.Command("DEL", redis.Args{idsKey}, nil)
+	if len(tmpKeys) > 0 {
+		q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
 	}
 	if err := q.tx.Exec(); err != nil {
 		return err
@@ -406,7 +406,7 @@ func (q *Query) Count() (uint, error) {
 // during the lifetime of the query object (if any).
 func (q *Query) Ids() ([]string, error) {
 	q.tx = NewTransaction()
-	idsKey, isTemp, err := q.generateIdsSet()
+	idsKey, _, err := q.generateIdsSet()
 	if err != nil {
 		return nil, err
 	}
@@ -419,35 +419,115 @@ func (q *Query) Ids() ([]string, error) {
 	sortArgs := q.modelSpec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind)
 	ids := []string{}
 	q.tx.Command("SORT", sortArgs, newScanStringsHandler(&ids))
-	if isTemp {
-		q.tx.Command("DEL", redis.Args{idsKey}, nil)
-	}
+	// if len(tmpKeys) > 0 {
+	// 	q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
+	// }
 	if err := q.tx.Exec(); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
-func (q *Query) generateIdsSet() (idsKey string, isTemp bool, err error) {
+func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err error) {
 	idsKey = q.modelSpec.allIndexKey()
-	isTemp = false
-	if q.hasOrder() && !q.hasFilters() {
+	tmpKeys = []interface{}{}
+	if q.hasOrder() {
 		fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
 		if err != nil {
-			return "", false, err
+			return "", nil, err
 		}
 		fieldSpec := q.modelSpec.fieldsByName[q.order.fieldName]
 		if fieldSpec.indexKind == stringIndex {
 			// If the order is a string field, we need to extract the ids before
-			// we use ZRANGE. Set idsKey to a temporary sorted set.
-			idsKey = q.modelSpec.name + ":" + q.order.redisName + ":tmp"
-			isTemp = true
-			q.tx.extractIdsFromStringIndex(fieldIndexKey, idsKey)
+			// we use ZRANGE. Create a temporary set to store the ordered ids
+			orderedIdsKey := "tmp:" + q.modelSpec.name + ":" + q.order.redisName + ":orderIds"
+			tmpKeys = append(tmpKeys, orderedIdsKey)
+			idsKey = orderedIdsKey
+			// TODO: if there is a filter on the same field, pass the start and stop
+			// parameters to the script
+			q.tx.extractIdsFromStringIndex(fieldIndexKey, orderedIdsKey)
 		} else {
 			idsKey = fieldIndexKey
 		}
 	}
-	return idsKey, isTemp, nil
+	if q.hasFilters() {
+		filteredIdsKey := "tmp:" + q.modelSpec.name + ":filterIds"
+		tmpKeys = append(tmpKeys, filteredIdsKey)
+		for i, filter := range q.filters {
+			if filter.fieldSpec.name == q.order.fieldName {
+				// If there is a filter on the same field that the query is ordered by,
+				// it was already covered in the case above
+				continue
+			}
+			if i == 0 {
+				// The first time, we should intersect with the ids key from above
+				q.intersectFilter(filter, idsKey, filteredIdsKey)
+			} else {
+				// All other times, we should intersect with the filteredIdsKey itself
+				q.intersectFilter(filter, filteredIdsKey, filteredIdsKey)
+			}
+		}
+		idsKey = filteredIdsKey
+	}
+	return idsKey, tmpKeys, nil
+}
+
+func (q *Query) intersectFilter(filter filter, origKey string, destKey string) error {
+	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
+	if err != nil {
+		return err
+	}
+	q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, fieldIndexKey, "WEIGHTS", 0, 1}, nil)
+	switch filter.fieldSpec.indexKind {
+	case numericIndex:
+		return q.intersectNumericFilter(filter, origKey, destKey)
+	case booleanIndex:
+		return q.intersectBoolFilter(filter, origKey, destKey)
+	case stringIndex:
+		return q.intersectStringFilter(filter, origKey, destKey)
+	}
+	return nil
+}
+
+func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey string) error {
+	if filter.op == equalOp {
+		// Special case for equal. We need to do two remove operations.
+		// NOTE: is there a more effecient way to do this? Currently we're removing almost everything.
+		// 1) Remove everying between -inf and filter.value (exclusive)
+		valueExclusive := fmt.Sprintf("(%v", filter.value.Interface())
+		q.tx.Command("ZREMRANGEBYSCORE", redis.Args{destKey, "-inf", valueExclusive}, nil)
+		// 2) Remove everything between filter.value (exclusive) and +inf
+		q.tx.Command("ZREMRANGEBYSCORE", redis.Args{destKey, valueExclusive, "+inf"}, nil)
+	} else {
+		var min, max interface{}
+		switch filter.op {
+		case lessOp:
+			min = filter.value.Interface()
+			max = "+inf"
+		case greaterOp:
+			min = "-inf"
+			max = filter.value.Interface()
+		case lessOrEqualOp:
+			min = fmt.Sprintf("(%v", filter.value.Interface())
+			max = "+inf"
+		case greaterOrEqualOp:
+			min = "-inf"
+			// use "(" for exclusive
+			max = fmt.Sprintf("(%v", filter.value.Interface())
+		case notEqualOp:
+			min, max = filter.value.Interface(), filter.value.Interface()
+		}
+		q.tx.Command("ZREMRANGEBYSCORE", redis.Args{destKey, min, max}, nil)
+	}
+	return nil
+}
+
+func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey string) error {
+	return fmt.Errorf("intersectBoolFilter not yet implemented")
+}
+
+func (q *Query) intersectStringFilter(filter filter, origKey string, destKey string) error {
+	return fmt.Errorf("intersectStringFilter not yet implemented")
 }
 
 // fieldNames parses the includes and excludes properties to return a list of
@@ -489,28 +569,6 @@ func (q *Query) getStartStop() (start int, stop int) {
 		stop = int(start) + int(q.limit) - 1
 	}
 	return start, stop
-}
-
-func getMinMaxForNumericFilter(f filter) (min interface{}, max interface{}) {
-	switch f.op {
-	case equalOp:
-		min, max = f.value.Interface(), f.value.Interface()
-	case lessOp:
-		min = "-inf"
-		// use "(" for exclusive
-		max = fmt.Sprintf("(%v", f.value.Interface())
-	case greaterOp:
-		// use "(" for exclusive
-		min = fmt.Sprintf("(%v", f.value.Interface())
-		max = "+inf"
-	case lessOrEqualOp:
-		min = "-inf"
-		max = f.value.Interface()
-	case greaterOrEqualOp:
-		min = f.value.Interface()
-		max = "+inf"
-	}
-	return min, max
 }
 
 func (q *Query) hasFilters() bool {
