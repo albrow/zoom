@@ -144,6 +144,38 @@ func TestQueryFilterBool(t *testing.T) {
 // 	}
 // }
 
+func TestQueryDoubleFilters(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createAndSaveIndexedTestModels(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// create some test queries to filter the models
+	// fieldNames := []string{"Int", "Bool", "String"}
+	fieldNames := []string{"Int", "Bool"}
+	filterValues := []interface{}{models[0].Int, true}
+	operators := []string{"=", "!=", ">", ">=", "<", "<="}
+	for i, f1 := range fieldNames {
+		v1 := filterValues[i]
+		for j, f2 := range fieldNames {
+			v2 := filterValues[j]
+			for _, o1 := range operators {
+				for _, o2 := range operators {
+					if f1 == f2 && o1 == o2 {
+						// no sense in doing the same filter twice
+						continue
+					}
+					q := indexedTestModels.NewQuery().Filter(f1+" "+o1, v1).Filter(f2+" "+o2, v2)
+					testQuery(t, q, models)
+				}
+			}
+		}
+	}
+}
+
 // There's a huge amount of test cases to cover above.
 // Below is some code that makes it easier, but needs to be
 // tested itself. Testing for correctness using a brute force
