@@ -406,7 +406,7 @@ func (q *Query) Count() (uint, error) {
 // during the lifetime of the query object (if any).
 func (q *Query) Ids() ([]string, error) {
 	q.tx = NewTransaction()
-	idsKey, _, err := q.generateIdsSet()
+	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {
 		return nil, err
 	}
@@ -419,9 +419,9 @@ func (q *Query) Ids() ([]string, error) {
 	sortArgs := q.modelSpec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind)
 	ids := []string{}
 	q.tx.Command("SORT", sortArgs, newScanStringsHandler(&ids))
-	// if len(tmpKeys) > 0 {
-	// 	q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
-	// }
+	if len(tmpKeys) > 0 {
+		q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
+	}
 	if err := q.tx.Exec(); err != nil {
 		return nil, err
 	}
