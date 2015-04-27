@@ -164,7 +164,7 @@ func testQuery(t *testing.T, q *Query, models []*indexedTestModel) {
 	expected := expectedResultsForQuery(q, models)
 	testQueryRun(t, q, expected)
 	testQueryIds(t, q, expected)
-	// testQueryCount(t, q, expected)
+	testQueryCount(t, q, expected)
 }
 
 func testQueryRun(t *testing.T, q *Query, expected []*indexedTestModel) {

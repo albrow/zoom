@@ -397,8 +397,13 @@ func (q *Query) Count() (uint, error) {
 			}
 			return count, nil
 		}
+	} else {
+		ids, err := q.Ids()
+		if err != nil {
+			return 0, err
+		}
+		return uint(len(ids)), nil
 	}
-	return 0, nil
 }
 
 // Ids returns only the ids of the models without actually retreiving the
