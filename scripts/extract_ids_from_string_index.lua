@@ -3,17 +3,21 @@
 -- license, which can be found in the LICENSE file.
 
 -- exctract_ids_from_string_index is a lua script that takes the following arguments:
--- 	1) The key of a sorted set for a string index, where each member is of the
+-- 	1) setKey: The key of a sorted set for a string index, where each member is of the
 --			form: value + " " + id
---		2) The key of a sorted set where the resulting ids will be stored
--- The script then extracts the ids from the string index and store them
--- in the given key with the appropriate scores in ascending order.
+--		2) storeKey: The key of a sorted set where the resulting ids will be stored
+-- 	3) min: The min argument for the ZRANGEBYLEX command
+-- 	4) max: The end argument for the ZRANGEBYLEX command
+-- The script then extracts the ids from setKey using the given min and max arguments,
+-- and then stores them storeKey with the appropriate scores in ascending order.
 
 -- Assign keys to variables for easy access
 local setKey = KEYS[1]
 local storeKey = KEYS[2]
+local min = ARGV[1]
+local max = ARGV[2]
 -- Get all the members (value+id pairs) from the sorted set
-local members = redis.call('ZRANGE', setKey, 0, -1)
+local members = redis.call('ZRANGEBYLEX', setKey, min, max)
 if #members > 0 then
 	-- Iterate over the members and extract the ids
 	for i, member in ipairs(members) do

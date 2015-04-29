@@ -191,18 +191,43 @@ func TestExtractIdsFromStringIndexScript(t *testing.T) {
 		t.Errorf("Unexpected error saving models in tx.Exec: %s", err.Error())
 	}
 
-	// Run the script and check the result
-	expectedIds := modelIds(Models(models))
-	gotIds := []string{}
-	storeKey := "TestExtractIdsFromStringIndexScript"
-	tx = NewTransaction()
-	fieldIndexKey, _ := indexedTestModels.FieldIndexKey("String")
-	tx.extractIdsFromStringIndex(fieldIndexKey, storeKey)
-	tx.Command("ZRANGE", redis.Args{storeKey, 0, -1}, newScanStringsHandler(&gotIds))
-	if err := tx.Exec(); err != nil {
-		t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
+	// Create a few test cases
+	var delString string = string([]byte{byte(127)})
+	testCases := []struct {
+		min         string
+		max         string
+		expectedIds []string
+	}{
+		{
+			min:         "-",
+			max:         "+",
+			expectedIds: modelIds(Models(models)),
+		},
+		{
+			min:         "[2",
+			max:         "+",
+			expectedIds: modelIds(Models(models[2:])),
+		},
+		{
+			min:         "(2" + delString,
+			max:         "+",
+			expectedIds: modelIds(Models(models[3:])),
+		},
 	}
-	if !reflect.DeepEqual(gotIds, expectedIds) {
-		t.Errorf("Script results were incorrect.\nExpected: %v\nGot:      %v", expectedIds, gotIds)
+
+	// Run the script for each test case and check the result
+	fieldIndexKey, _ := indexedTestModels.FieldIndexKey("String")
+	for i, tc := range testCases {
+		gotIds := []string{}
+		storeKey := "ExtractIdsFromStringIndexScript:" + strconv.Itoa(i)
+		tx = NewTransaction()
+		tx.extractIdsFromStringIndex(fieldIndexKey, storeKey, tc.min, tc.max)
+		tx.Command("ZRANGE", redis.Args{storeKey, 0, -1}, newScanStringsHandler(&gotIds))
+		if err := tx.Exec(); err != nil {
+			t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
+		}
+		if !reflect.DeepEqual(gotIds, tc.expectedIds) {
+			t.Errorf("Script results for test case %d were incorrect.\nExpected: %v\nGot:      %v", i, tc.expectedIds, gotIds)
+		}
 	}
 }

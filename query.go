@@ -450,7 +450,7 @@ func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err erro
 			idsKey = orderedIdsKey
 			// TODO: if there is a filter on the same field, pass the start and stop
 			// parameters to the script
-			q.tx.extractIdsFromStringIndex(fieldIndexKey, orderedIdsKey)
+			q.tx.extractIdsFromStringIndex(fieldIndexKey, orderedIdsKey, "-", "+")
 		} else {
 			idsKey = fieldIndexKey
 		}

@@ -91,7 +91,8 @@ func (t *Transaction) extractIdsFromFieldIndex(setKey string, storeKey string, m
 
 // extractIdsFromStringIndex is a small function wrapper around extractIdsFromStringIndexScript.
 // It offers some type safety and helps make sure the arguments you pass through to the are correct.
-// The script will extract the ids from setKey and store them in a sorted set identified by storeKey.
-func (t *Transaction) extractIdsFromStringIndex(setKey, storeKey string) {
-	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, storeKey}, nil)
+// The script will extract the ids from setKey using ZRANGEBYLEX with the given min and max, and then
+// store them in a sorted set identified by storeKey.
+func (t *Transaction) extractIdsFromStringIndex(setKey, storeKey, min, max string) {
+	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, storeKey, min, max}, nil)
 }
