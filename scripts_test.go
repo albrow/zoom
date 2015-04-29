@@ -121,6 +121,61 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	expectIndexDoesNotExist(t, stringIndexModels, model, "String")
 }
 
+func TestExtractIdsFromFieldIndexScript(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Create and save some test models with increasing Int values
+	models := createIndexedTestModels(5)
+	tx := NewTransaction()
+	for i, model := range models {
+		model.Int = i
+		tx.Save(indexedTestModels, model)
+	}
+	if err := tx.Exec(); err != nil {
+		t.Errorf("Unexpected error saving models in tx.Exec: %s", err.Error())
+	}
+
+	// Create a few test cases
+	testCases := []struct {
+		min         interface{}
+		max         interface{}
+		expectedIds []string
+	}{
+		{
+			min:         "-inf",
+			max:         "+inf",
+			expectedIds: modelIds(Models(models)),
+		},
+		{
+			min:         "2",
+			max:         "+inf",
+			expectedIds: modelIds(Models(models[2:])),
+		},
+		{
+			min:         "(2",
+			max:         "+inf",
+			expectedIds: modelIds(Models(models[3:])),
+		},
+	}
+
+	// Run the script for each test case and check the result
+	fieldIndexKey, _ := indexedTestModels.FieldIndexKey("Int")
+	for i, tc := range testCases {
+		gotIds := []string{}
+		storeKey := "TestExtractIdsFromFieldIndexScript:" + strconv.Itoa(i)
+		tx = NewTransaction()
+		tx.extractIdsFromFieldIndex(fieldIndexKey, storeKey, tc.min, tc.max)
+		tx.Command("ZRANGE", redis.Args{storeKey, 0, -1}, newScanStringsHandler(&gotIds))
+		if err := tx.Exec(); err != nil {
+			t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
+		}
+		if !reflect.DeepEqual(gotIds, tc.expectedIds) {
+			t.Errorf("Script results were incorrect.\nExpected: %v\nGot:      %v", tc.expectedIds, gotIds)
+		}
+	}
+}
+
 func TestExtractIdsFromStringIndexScript(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()

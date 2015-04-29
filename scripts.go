@@ -18,6 +18,7 @@ import (
 var (
 	deleteModelsBySetIdsScript      *redis.Script
 	deleteStringIndexScript         *redis.Script
+	extractIdsFromFieldIndexScript  *redis.Script
 	extractIdsFromStringIndexScript *redis.Script
 )
 
@@ -41,6 +42,11 @@ func init() {
 			script:   &deleteStringIndexScript,
 			filename: "delete_string_index.lua",
 			keyCount: 0,
+		},
+		{
+			script:   &extractIdsFromFieldIndexScript,
+			filename: "extract_ids_from_field_index.lua",
+			keyCount: 2,
 		},
 		{
 			script:   &extractIdsFromStringIndexScript,
@@ -73,6 +79,14 @@ func (t *Transaction) deleteModelsBySetIds(setKey string, modelName string, hand
 // The script will atomically remove the existing index, if any, on the given field name.
 func (t *Transaction) deleteStringIndex(modelName, modelId, fieldName string) {
 	t.Script(deleteStringIndexScript, redis.Args{modelName, modelId, fieldName}, nil)
+}
+
+// extractIdsFromFieldIndex is a small function wrapper around extractIdsFromFieldIndexScript.
+// It offers some type safety and helps make sure the arguments you pass through to the are correct.
+// The script will get all the ids from setKey using ZRANGEBYSCORE with the given min and max, and then
+// store them in a sorted set identified by storeKey.
+func (t *Transaction) extractIdsFromFieldIndex(setKey string, storeKey string, min interface{}, max interface{}) {
+	t.Script(extractIdsFromFieldIndexScript, redis.Args{setKey, storeKey, min, max}, nil)
 }
 
 // extractIdsFromStringIndex is a small function wrapper around extractIdsFromStringIndexScript.
