@@ -445,7 +445,7 @@ func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err erro
 		if fieldSpec.indexKind == stringIndex {
 			// If the order is a string field, we need to extract the ids before
 			// we use ZRANGE. Create a temporary set to store the ordered ids
-			orderedIdsKey := "tmp:" + q.modelSpec.name + ":" + q.order.redisName + ":orderIds"
+			orderedIdsKey := generateRandomKey("order:" + q.order.fieldName)
 			tmpKeys = append(tmpKeys, orderedIdsKey)
 			idsKey = orderedIdsKey
 			// TODO: if there is a filter on the same field, pass the start and stop
@@ -456,14 +456,9 @@ func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err erro
 		}
 	}
 	if q.hasFilters() {
-		filteredIdsKey := "tmp:" + q.modelSpec.name + ":filterIds"
+		filteredIdsKey := generateRandomKey("filter:all")
 		tmpKeys = append(tmpKeys, filteredIdsKey)
 		for i, filter := range q.filters {
-			if filter.fieldSpec.name == q.order.fieldName {
-				// If there is a filter on the same field that the query is ordered by,
-				// it was already covered in the case above
-				continue
-			}
 			if i == 0 {
 				// The first time, we should intersect with the ids key from above
 				q.intersectFilter(filter, idsKey, filteredIdsKey)
@@ -478,106 +473,126 @@ func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err erro
 }
 
 func (q *Query) intersectFilter(filter filter, origKey string, destKey string) error {
-	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
-	if err != nil {
-		return err
-	}
-	q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, fieldIndexKey, "WEIGHTS", 0, 1}, nil)
 	switch filter.fieldSpec.indexKind {
 	case numericIndex:
-		q.intersectNumericFilter(filter, origKey, destKey)
+		return q.intersectNumericFilter(filter, origKey, destKey)
 	case booleanIndex:
-		q.intersectBoolFilter(filter, origKey, destKey)
+		return q.intersectBoolFilter(filter, origKey, destKey)
 	case stringIndex:
-		q.intersectStringFilter(filter, origKey, destKey)
+		return q.intersectStringFilter(filter, origKey, destKey)
 	}
 	return nil
 }
 
-func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey string) {
-	if filter.op == equalOp {
-		// Special case for equal. We need to do two remove operations.
-		// NOTE: is there a more effecient way to do this? Currently we're removing almost everything.
-		// 1) Remove everying between -inf and filter.value (exclusive)
+func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey string) error {
+	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
+	if err != nil {
+		return err
+	}
+	if filter.op == notEqualOp {
+		// Special case for not equal. We need to use two separate commands
 		valueExclusive := fmt.Sprintf("(%v", filter.value.Interface())
-		q.tx.Command("ZREMRANGEBYSCORE", redis.Args{destKey, "-inf", valueExclusive}, nil)
-		// 2) Remove everything between filter.value (exclusive) and +inf
-		q.tx.Command("ZREMRANGEBYSCORE", redis.Args{destKey, valueExclusive, "+inf"}, nil)
+		filterKey := generateRandomKey("filter:" + fieldIndexKey)
+		// ZADD all ids greater than filter.value
+		q.tx.extractIdsFromFieldIndex(fieldIndexKey, filterKey, valueExclusive, "+inf")
+		// ZADD all ids less than filter.value
+		q.tx.extractIdsFromFieldIndex(fieldIndexKey, filterKey, "-inf", valueExclusive)
+		// Intersect filterKey with origKey and store result in destKey
+		q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
+		// Delete the temporary key
+		q.tx.Command("DEL", redis.Args{filterKey}, nil)
 	} else {
 		var min, max interface{}
 		switch filter.op {
+		case equalOp:
+			min, max = filter.value.Interface(), filter.value.Interface()
 		case lessOp:
-			min = filter.value.Interface()
-			max = "+inf"
-		case greaterOp:
-			min = "-inf"
-			max = filter.value.Interface()
-		case lessOrEqualOp:
-			min = fmt.Sprintf("(%v", filter.value.Interface())
-			max = "+inf"
-		case greaterOrEqualOp:
 			min = "-inf"
 			// use "(" for exclusive
 			max = fmt.Sprintf("(%v", filter.value.Interface())
-		case notEqualOp:
-			min, max = filter.value.Interface(), filter.value.Interface()
+		case greaterOp:
+			min = fmt.Sprintf("(%v", filter.value.Interface())
+			max = "+inf"
+		case lessOrEqualOp:
+			min = "-inf"
+			max = filter.value.Interface()
+		case greaterOrEqualOp:
+			min = filter.value.Interface()
+			max = "+inf"
 		}
-		q.tx.Command("ZREMRANGEBYSCORE", redis.Args{destKey, min, max}, nil)
+		// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
+		filterKey := generateRandomKey("filter:" + fieldIndexKey)
+		q.tx.extractIdsFromFieldIndex(fieldIndexKey, filterKey, min, max)
+		// Intersect filterKey with origKey and store result in destKey
+		q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
+		// Delete the temporary key
+		q.tx.Command("DEL", redis.Args{filterKey}, nil)
 	}
+	return nil
 }
 
-func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey string) {
+func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey string) error {
+	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
+	if err != nil {
+		return err
+	}
 	var min, max interface{}
 	switch filter.op {
 	case equalOp:
 		if filter.value.Bool() {
-			min, max = 0, 0
-		} else {
 			min, max = 1, 1
+		} else {
+			min, max = 0, 0
 		}
 	case lessOp:
 		if filter.value.Bool() {
-			// false < true, so remove all true
-			min, max = 1, 1
+			// Only false is less than true
+			min, max = 0, 0
 		} else {
-			// No models can be less than false.
-			min, max = 0, 1
+			// No models are less than false,
+			// so we should eliminate all models
+			min, max = -1, -1
 		}
 	case greaterOp:
 		if filter.value.Bool() {
-			// No models can be greater than true.
-			min, max = 0, 1
+			// No models are greater than true,
+			// so we should eliminate all models
+			min, max = -1, -1
 		} else {
-			// true > false, so remove all false
-			min, max = 0, 0
+			// Only true is greater than false
+			min, max = 1, 1
 		}
 	case lessOrEqualOp:
 		if filter.value.Bool() {
-			// Both true and false are <= true.
-			// All models fit this criteria, so we remove none
-			return
+			// All models are <= true
+			min, max = 0, 1
 		} else {
-			// Only false <= false, so remove all true
-			min, max = 1, 1
+			// Only false is <= false
+			min, max = 0, 0
 		}
 	case greaterOrEqualOp:
 		if filter.value.Bool() {
-			// Only true >= true, so remove all false
-			min, max = 0, 0
+			// Only true is >= true
+			min, max = 1, 1
 		} else {
-			// Both true and false are => true.
-			// All models fit this criteria, so we remove none
-			return
+			// All models are >= false
+			min, max = 0, 1
 		}
 	case notEqualOp:
 		if filter.value.Bool() {
-			min, max = 1, 1
-		} else {
 			min, max = 0, 0
+		} else {
+			min, max = 1, 1
 		}
 	}
-	q.tx.Command("ZREMRANGEBYSCORE", redis.Args{destKey, min, max}, nil)
-	return
+	// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
+	filterKey := generateRandomKey("filter:" + fieldIndexKey)
+	q.tx.extractIdsFromFieldIndex(fieldIndexKey, filterKey, min, max)
+	// Intersect filterKey with origKey and store result in destKey
+	q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
+	// Delete the temporary key
+	q.tx.Command("DEL", redis.Args{filterKey}, nil)
+	return nil
 }
 
 func (q *Query) intersectStringFilter(filter filter, origKey string, destKey string) error {
@@ -651,4 +666,11 @@ func (q *Query) hasExcludes() bool {
 
 func (q *Query) hasError() bool {
 	return q.err != nil
+}
+
+// generateRandomKey generates a random string that is more or less
+// garunteed to be unique and then prepends the given prefix. It is
+// used to generate keys for temporary sorted sets in queries.
+func generateRandomKey(prefix string) string {
+	return prefix + ":" + generateRandomId()
 }
