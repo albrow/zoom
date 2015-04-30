@@ -4,7 +4,8 @@
 
 -- exctract_ids_from_string_index is a lua script that takes the following arguments:
 -- 	1) setKey: The key of a sorted set for a string index, where each member is of the
---			form: value + " " + id
+--			form: value + NULL + id, where NULL is the ASCII NULL character which has a codepoint
+--			value of 0.
 --		2) storeKey: The key of a sorted set where the resulting ids will be stored
 -- 	3) min: The min argument for the ZRANGEBYLEX command
 -- 	4) max: The end argument for the ZRANGEBYLEX command
@@ -23,7 +24,7 @@ if #members > 0 then
 	for i, member in ipairs(members) do
 		-- The id is everything after the last space
 		-- Find the index of the last space
-		local idStart = string.find(member, ' [^ ]*$')
+		local idStart = string.find(member, '%z[^%z]*$')
 		local id = string.sub(member, idStart+1)
 		redis.call('ZADD', storeKey, i, id)
 	end

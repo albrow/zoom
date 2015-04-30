@@ -237,7 +237,7 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 		}
 		fieldValue = fieldValue.Elem()
 	}
-	member := fieldValue.String() + " " + mr.model.Id()
+	member := fieldValue.String() + nullString + mr.model.Id()
 	indexKey, err := mr.spec.fieldIndexKey(fs.name)
 	if err != nil {
 		t.setError(err)

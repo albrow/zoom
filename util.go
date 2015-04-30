@@ -17,6 +17,17 @@ import (
 	"time"
 )
 
+var (
+	// delString is used as a suffix for string index tricks. This is a string which equals the ASCII
+	// DEL character and is the highest possible value (in terms of codepoint, which is also
+	// how redis sorts strings) for an ASCII character.
+	delString = string([]byte{byte(127)})
+	// nullString is used as a suffix for string index tricks. This is a string which equals the ASCII
+	// NULL character and is the lowest possible value (in terms of codepoint, which is also
+	// how redis sorts strings) for an ASCII character.
+	nullString = string([]byte{byte(0)})
+)
+
 // Models converts an interface to a slice of Model. It is typically
 // used to convert a return value of a Query. Will panic if the type
 // is invalid.
@@ -318,4 +329,22 @@ func randomFloat() float64 {
 // randomComplex returns a random complex128
 func randomComplex() complex128 {
 	return cmplx.Rect(randomFloat(), randomFloat())
+}
+
+// decrementString subtracts 1 to the last codepoint in s and returns the new string
+// E.g. if the input string is "abc" the return will be "abb" because the codepoint
+// for 'c' is 99, 99-1 = 98, and the codepoint 98 corresponds to 'b'.
+func decrementString(s string) string {
+	codepoints := []uint8(s)
+	codepoints[len(codepoints)-1] = codepoints[len(codepoints)-1] + 1
+	return string(codepoints)
+}
+
+// incrementString adds 1 to the last codepoint in s and returns the new string
+// E.g. if the input string is "abc" the return will be "abd" because the codepoint
+// for 'c' is 99, 99+1 = 100, and the codepoint 100 corresponds to 'd'.
+func incrementString(s string) string {
+	codepoints := []uint8(s)
+	codepoints[len(codepoints)-1] = codepoints[len(codepoints)-1] + 1
+	return string(codepoints)
 }

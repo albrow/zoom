@@ -501,7 +501,7 @@ func stringIndexExists(modelType *ModelType, model Model, fieldName string) (boo
 	for fieldValue.Kind() == reflect.Ptr {
 		fieldValue = fieldValue.Elem()
 	}
-	memberKey := fieldValue.String() + " " + model.Id()
+	memberKey := fieldValue.String() + nullString + model.Id()
 	conn := Conn()
 	defer conn.Close()
 	reply, err := conn.Do("ZRANK", indexKey, memberKey)

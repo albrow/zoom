@@ -135,10 +135,6 @@ var filterOps = map[string]filterOp{
 	"<=": lessOrEqualOp,
 }
 
-// delString is a string consisting of only the the ASCII DEL character. It is
-// used as a prefix for queries on string indexes.
-var delString string = string([]byte{byte(127)})
-
 // NewQuery is used to construct a query. The query returned can be chained
 // together with one or more query modifiers, and then executed using the Run
 // Scan, Count, or Ids methods. If no query modifiers are used, running the query
@@ -596,7 +592,52 @@ func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey strin
 }
 
 func (q *Query) intersectStringFilter(filter filter, origKey string, destKey string) error {
-	return fmt.Errorf("intersectStringFilter not yet implemented")
+	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
+	if err != nil {
+		return err
+	}
+	valString := filter.value.String()
+	if filter.op == notEqualOp {
+		// Special case for not equal. We need to use two separate commands
+		filterKey := generateRandomKey("filter:" + fieldIndexKey)
+		// ZADD all ids greater than filter.value
+		min := "(" + valString + nullString + delString
+		q.tx.extractIdsFromStringIndex(fieldIndexKey, filterKey, min, "+")
+		// ZADD all ids less than filter.value
+		max := "(" + valString
+		q.tx.extractIdsFromStringIndex(fieldIndexKey, filterKey, "-", max)
+		// Intersect filterKey with origKey and store result in destKey
+		q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
+		// Delete the temporary key
+		q.tx.Command("DEL", redis.Args{filterKey}, nil)
+	} else {
+		var min, max string
+		switch filter.op {
+		case equalOp:
+			min = "[" + valString
+			max = "(" + valString + nullString + delString
+		case lessOp:
+			min = "-"
+			max = "(" + valString
+		case greaterOp:
+			min = "(" + valString + nullString + delString
+			max = "+"
+		case lessOrEqualOp:
+			min = "-"
+			max = "(" + valString + nullString + delString
+		case greaterOrEqualOp:
+			min = "[" + valString
+			max = "+"
+		}
+		// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
+		filterKey := generateRandomKey("filter:" + fieldIndexKey)
+		q.tx.extractIdsFromStringIndex(fieldIndexKey, filterKey, min, max)
+		// Intersect filterKey with origKey and store result in destKey
+		q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
+		// Delete the temporary key
+		q.tx.Command("DEL", redis.Args{filterKey}, nil)
+	}
+	return nil
 }
 
 // fieldNames parses the includes and excludes properties to return a list of

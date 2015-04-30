@@ -20,6 +20,6 @@ local oldValue = redis.call("HGET", modelKey, fieldName)
 local indexKey = modelName .. ":" .. fieldName
 if oldValue ~= false then
 	-- Remove the model from the field index
-	local oldMember = oldValue .. " " .. modelId
+	local oldMember = oldValue .. "\0" .. modelId
 	redis.call("ZREM", indexKey, oldMember)
 end

@@ -122,27 +122,31 @@ func TestQueryFilterBool(t *testing.T) {
 	}
 }
 
-// func TestQueryFilterString(t *testing.T) {
-// 	testingSetUp()
-// 	defer testingTearDown()
+func TestQueryFilterString(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
 
-// 	// create models which we will try to filter
-// 	// we create two with each letter of the alphabet so
-// 	// we can test what happens when there are multiple models
-// 	// with the same letter (the same String value)
-// 	models, err := createFullModels(26 * 2)
-// 	if err != nil {
-// 		t.Error(err)
-// 		t.FailNow()
-// 	}
+	// Create some models with tricky String values
+	models := createIndexedTestModels(10)
+	models[1].String = models[0].String + " "
+	tx := NewTransaction()
+	for _, model := range models {
+		tx.Save(indexedTestModels, model)
+	}
+	if err := tx.Exec(); err != nil {
+		t.Fatal("Error executing transaction: %s", err.Error())
+	}
 
-// 	// create some test queries to filter the models
-// 	operators := []string{"=", "!=", ">", ">=", "<", "<="}
-// 	for _, op := range operators {
-// 		q := NewQuery("indexedPrimativesModel").Filter("String "+op, "k")
-// 		testQuery(t, q, models)
-// 	}
-// }
+	// Test queries with filters using all possible operators and a
+	// few different filter values.
+	filterValues := []interface{}{"a", "AbCdE", models[0].String, incrementString(models[0].String), decrementString(models[0].String), models[0].String + " "}
+	for _, val := range filterValues {
+		for op, _ := range filterOps {
+			q := indexedTestModels.NewQuery().Filter("String "+op, val)
+			testQuery(t, q, models)
+		}
+	}
+}
 
 func TestQueryDoubleFilters(t *testing.T) {
 	testingSetUp()
@@ -157,19 +161,51 @@ func TestQueryDoubleFilters(t *testing.T) {
 	// fieldNames := []string{"Int", "Bool", "String"}
 	fieldNames := []string{"Int", "Bool"}
 	filterValues := []interface{}{models[0].Int, true}
-	operators := []string{"=", "!=", ">", ">=", "<", "<="}
 	for i, f1 := range fieldNames {
 		v1 := filterValues[i]
 		for j, f2 := range fieldNames {
 			v2 := filterValues[j]
-			for _, o1 := range operators {
-				for _, o2 := range operators {
+			for o1, _ := range filterOps {
+				for o2, _ := range filterOps {
 					if f1 == f2 && o1 == o2 {
 						// no sense in doing the same filter twice
 						continue
 					}
 					q := indexedTestModels.NewQuery().Filter(f1+" "+o1, v1).Filter(f2+" "+o2, v2)
 					testQuery(t, q, models)
+				}
+			}
+		}
+	}
+}
+
+func TestQueryCombos(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models, err := createAndSaveIndexedTestModels(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Iterate over many different combinations of filters and orders to create
+	// and test different queries
+	fieldNames := []string{"Int", "Bool", "String"}
+	filterValues := []interface{}{models[0].Int, true, models[0].String}
+	limits := []uint{0, 1, 5, 9, 10}
+	offsets := []uint{0, 1, 5, 9, 10}
+	for i, filterField := range fieldNames {
+		filterVal := filterValues[i]
+		for filterOp, _ := range filterOps {
+			for _, orderField := range fieldNames {
+				for _, orderPrefix := range []string{"", "-"} {
+					for _, offset := range offsets {
+						for _, limit := range limits {
+							q := indexedTestModels.NewQuery()
+							q.Filter(filterField+" "+filterOp, filterVal).Order(orderPrefix + orderField).Limit(limit).Offset(offset)
+							testQuery(t, q, models)
+						}
+					}
 				}
 			}
 		}
