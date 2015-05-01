@@ -16,8 +16,8 @@ import (
 
 // Query represents a query which will retrieve some models from
 // the database. A Query may consist of one or more query modifiers
-// and can be run in several different ways with different query
-// finishers.
+// (e.g. Filter or Order) and executed with a query finisher (e.g. Run
+// or Ids).
 type Query struct {
 	modelSpec *modelSpec
 	tx        *Transaction
@@ -30,6 +30,8 @@ type Query struct {
 	err       error
 }
 
+// String satisfies fmt.Stringer and prints out the query in a format that
+// matches the go code used to declare it.
 func (q *Query) String() string {
 	result := fmt.Sprintf("%s.NewQuery()", q.modelSpec.name)
 	for _, filter := range q.filters {
@@ -137,33 +139,34 @@ var filterOps = map[string]filterOp{
 
 // NewQuery is used to construct a query. The query returned can be chained
 // together with one or more query modifiers, and then executed using the Run
-// Scan, Count, or Ids methods. If no query modifiers are used, running the query
-// will return all models of the given type in uspecified order.
+// RunOne, Count, and Ids methods. If no query modifiers are used, running the
+// query will return all models of the given type in uspecified order. Queries
+// use delated execution, so nothing touches the database until you execute it.
 func (modelType *ModelType) NewQuery() *Query {
 	return &Query{
 		modelSpec: modelType.spec,
 	}
 }
 
+// setError sets the err property of q only if it has not already been set
 func (q *Query) setError(e error) {
 	if !q.hasError() {
 		q.err = e
 	}
 }
 
-// Order specifies a field by which to sort the records and the order in which
-// records should be sorted. fieldName should be a field in the struct type
-// specified by the modelName argument in the query constructor. By default, the
-// records are sorted by ascending order. To sort by descending order, put a
-// negative sign before the field name. Zoom can only sort by fields which have
-// been indexed, i.e. those which have the `zoom:"index"` struct tag. However,
-// in the future this may change. Only one order may be specified per query.
-// However in the future, secondary orders may be allowed, and will take effect
-// when two or more models have the same value for the primary order field.
-// Order will set an error on the query if the fieldName is invalid, if another
-// order has already been applied to the query, or if the fieldName specified
+// Order specifies a field by which to sort the models. fieldName should be
+// a field in the struct type corresponding to the ModelType used in the query
+// constructor. By default, the records are sorted by ascending order by the given
+// field. To sort by descending order, put a negative sign before the field name.
+// Zoom can only sort by fields which have been indexed, i.e. those which have the
+// `zoom:"index"` struct tag. However, in the future this may change. Only one
+// order may be specified per query. However in the future, secondary orders may be
+// allowed, and will take effect when two or more models have the same value for the
+// primary order field. Order will set an error on the query if the fieldName is invalid,
+// if another order has already been applied to the query, or if the fieldName specified
 // does not correspond to an indexed field. The error, same as any other error
-// that occurs during the lifetime of the query, is not returned until the Query
+// that occurs during the lifetime of the query, is not returned until the query
 // is executed. When the query is executed the first error that occured during
 // the lifetime of the query object (if any) will be returned.
 func (q *Query) Order(fieldName string) *Query {
@@ -214,7 +217,7 @@ func (q *Query) Offset(amount uint) *Query {
 // only use one of Include or Exclude, not both on the same query. Include will
 // set an error if you try to use it with Exclude on the same query. The error,
 // same as any other error that occurs during the lifetime of the query, is not
-// returned until the Query is executed. When the query is executed the first
+// returned until the query is executed. When the query is executed the first
 // error that occured during the lifetime of the query object (if any) will be
 // returned.
 func (q *Query) Include(fields ...string) *Query {
@@ -231,7 +234,7 @@ func (q *Query) Include(fields ...string) *Query {
 // resulting models when the query is run. You can only use one of Include or
 // Exclude, not both on the same query. Exclude will set an error if you try to
 // use it with Include on the same query. The error, same as any other error
-// that occurs during the lifetime of the query, is not returned until the Query
+// that occurs during the lifetime of the query, is not returned until the query
 // is executed. When the query is executed the first error that occured during
 // the lifetime of the query object (if any) will be returned.
 func (q *Query) Exclude(fields ...string) *Query {
@@ -255,7 +258,7 @@ func (q *Query) Exclude(fields ...string) *Query {
 // arguments are improperly formated, if the field you are attempting to filter
 // is not indexed, or if the type of value does not match the type of the field.
 // The error, same as any other error that occurs during the lifetime of the
-// query, is not returned until the Query is executed. When the query is
+// query, is not returned until the query is executed. When the query is
 // executed the first error that occured during the lifetime of the query object
 // (if any) will be returned.
 func (q *Query) Filter(filterString string, value interface{}) *Query {
@@ -394,6 +397,9 @@ func (q *Query) Count() (uint, error) {
 			return count, nil
 		}
 	} else {
+		// If the query has filters, it is difficult to do any optimizations.
+		// Instead we'll just count the number of ids that match the query
+		// criteria.
 		ids, err := q.Ids()
 		if err != nil {
 			return 0, err
@@ -429,6 +435,10 @@ func (q *Query) Ids() ([]string, error) {
 	return ids, nil
 }
 
+// generateIdsSet will return the key of a set or sorted set that contains all the ids
+// which match the query criteria. It may also return some temporary keys which were created
+// during the process of creating the set of ids. Note that tmpKeys may contain idsKey itself,
+// so the temporary keys should not be deleted until after the ids have been read from idsKey.
 func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err error) {
 	idsKey = q.modelSpec.allIndexKey()
 	tmpKeys = []interface{}{}
@@ -468,6 +478,11 @@ func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err erro
 	return idsKey, tmpKeys, nil
 }
 
+// intersectFilter adds commands to the query transacation which, when run, will create a
+// temporary set which contains all the ids that fit the given filter criteria. Then it will
+// intersect them with origKey and stores the result in destKey. The function will automatically
+// delete any temporary sets created since, in this case, they are gauranteed to not be needed
+// by any other transaction commands.
 func (q *Query) intersectFilter(filter filter, origKey string, destKey string) error {
 	switch filter.fieldSpec.indexKind {
 	case numericIndex:
@@ -480,6 +495,10 @@ func (q *Query) intersectFilter(filter filter, origKey string, destKey string) e
 	return nil
 }
 
+// intersectNumericFilter adds commands to the query transaction which, when run, will
+// create a temporary set which contains all the ids of models which match the given
+// numeric filter criteria, then intersect those ids with origKey and store the result
+// in destKey.
 func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey string) error {
 	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
 	if err != nil {
@@ -527,6 +546,10 @@ func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey st
 	return nil
 }
 
+// intersectBoolFilter adds commands to the query transaction which, when run, will
+// create a temporary set which contains all the ids of models which match the given
+// bool filter criteria, then intersect those ids with origKey and store the result
+// in destKey.
 func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey string) error {
 	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
 	if err != nil {
@@ -591,6 +614,10 @@ func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey strin
 	return nil
 }
 
+// intersectStringFilter adds commands to the query transaction which, when run, will
+// create a temporary set which contains all the ids of models which match the given
+// string filter criteria, then intersect those ids with origKey and store the result
+// in destKey.
 func (q *Query) intersectStringFilter(filter filter, origKey string, destKey string) error {
 	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
 	if err != nil {
