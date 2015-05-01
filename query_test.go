@@ -129,6 +129,7 @@ func TestQueryFilterString(t *testing.T) {
 	// Create some models with tricky String values
 	models := createIndexedTestModels(10)
 	models[1].String = models[0].String + " "
+	models[2].String = models[0].String[:len(models[0].String)-1]
 	tx := NewTransaction()
 	for _, model := range models {
 		tx.Save(indexedTestModels, model)
@@ -139,7 +140,7 @@ func TestQueryFilterString(t *testing.T) {
 
 	// Test queries with filters using all possible operators and a
 	// few different filter values.
-	filterValues := []interface{}{"a", "AbCdE", models[0].String, incrementString(models[0].String), decrementString(models[0].String), models[0].String + " "}
+	filterValues := []interface{}{"a", "AbCdE", models[0].String, incrementString(models[0].String), decrementString(models[0].String), models[0].String + " ", models[0].String[:len(models[0].String)-1]}
 	for _, val := range filterValues {
 		for op, _ := range filterOps {
 			q := indexedTestModels.NewQuery().Filter("String "+op, val)
