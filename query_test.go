@@ -159,9 +159,8 @@ func TestQueryDoubleFilters(t *testing.T) {
 	}
 
 	// create some test queries to filter the models
-	// fieldNames := []string{"Int", "Bool", "String"}
-	fieldNames := []string{"Int", "Bool"}
-	filterValues := []interface{}{models[0].Int, true}
+	fieldNames := []string{"Int", "Bool", "String"}
+	filterValues := []interface{}{models[0].Int, true, models[0].String}
 	for i, f1 := range fieldNames {
 		v1 := filterValues[i]
 		for j, f2 := range fieldNames {
