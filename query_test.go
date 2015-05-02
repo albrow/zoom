@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"reflect"
 	"sort"
+	"strconv"
 	"testing"
 )
 
@@ -207,6 +208,65 @@ func TestQueryCombos(t *testing.T) {
 						}
 					}
 				}
+			}
+		}
+	}
+}
+
+func TestQueryRunOne(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	models := []*indexedTestModel{}
+	tx := NewTransaction()
+	for i := 0; i < 5; i++ {
+		model := &indexedTestModel{
+			Int:    i,
+			String: strconv.Itoa(i),
+		}
+		models = append(models, model)
+		tx.Save(indexedTestModels, model)
+	}
+	if err := tx.Exec(); err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		query         *Query
+		expectedModel *indexedTestModel
+		shouldErr     bool
+	}{
+		{
+			query:         indexedTestModels.NewQuery().Filter("String =", models[0].String),
+			expectedModel: models[0],
+			shouldErr:     false,
+		},
+		{
+			query:         indexedTestModels.NewQuery().Filter("Int =", models[1].Int),
+			expectedModel: models[1],
+			shouldErr:     false,
+		},
+		{
+			query:         indexedTestModels.NewQuery().Filter("String =", models[0].String).Filter("Int =", models[1].Int),
+			expectedModel: nil,
+			shouldErr:     true,
+		},
+	}
+
+	for i, tc := range testCases {
+		gotModel := &indexedTestModel{}
+		err := tc.query.RunOne(gotModel)
+		switch tc.shouldErr {
+		case true:
+			if err == nil {
+				t.Errorf("Error in test case %d: Expected an error but got none.", i)
+			}
+		case false:
+			if err != nil {
+				t.Errorf("Unexpected error in test case %d: %s", i, err.Error())
+			}
+			if !reflect.DeepEqual(gotModel, tc.expectedModel) {
+				t.Errorf("Error in test case %d: model was incorrect.\nExpected: %v\n     Got: %v", i, tc.expectedModel, gotModel)
 			}
 		}
 	}

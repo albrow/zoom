@@ -339,7 +339,7 @@ func (filter filter) checkValType(value interface{}) error {
 // return the first error that occured during the lifetime of the query object
 // (if any). It will also return an error if models is the wrong type.
 func (q *Query) Run(models interface{}) error {
-	// TODO: type-checking
+	// TODO: type checking
 	q.tx = NewTransaction()
 	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {
@@ -366,6 +366,18 @@ func (q *Query) Run(models interface{}) error {
 // query criteria and scans the values into model. If no model fits the criteria,
 // an error will be returned.
 func (q *Query) RunOne(model Model) error {
+	// TODO: type check model to make sure it matches q.modelSpec
+	models := reflect.New(reflect.SliceOf(reflect.TypeOf(model)))
+	if err := q.Run(models.Interface()); err != nil {
+		return err
+	}
+	if models.Elem().Len() == 0 {
+		msg := fmt.Sprintf("Could not find a model with the given query criteria: %s", q)
+		return ModelNotFoundError{Msg: msg}
+	} else {
+		modelVal := models.Elem().Index(0)
+		reflect.ValueOf(model).Elem().Set(modelVal.Elem())
+	}
 	return nil
 }
 
