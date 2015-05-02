@@ -169,13 +169,13 @@ func (ms *modelSpec) allIndexKey() string {
 }
 
 // modelKey returns the key that identifies a hash in the database
-// which contains all the fields of the given model. It returns an error
-// iff the model does not have an id.
-func (ms *modelSpec) modelKey(model Model) (string, error) {
-	if model.Id() == "" {
-		return "", fmt.Errorf("zoom: Error in modelKey: model does not have an id and therefore cannot have a valid key")
+// which contains all the fields of the model corresponding to the given
+// id. It returns an error iff id is empty.
+func (ms *modelSpec) modelKey(id string) (string, error) {
+	if id == "" {
+		return "", fmt.Errorf("zoom: Error in modelKey: id was empty")
 	}
-	return ms.name + ":" + model.Id(), nil
+	return ms.name + ":" + id, nil
 }
 
 // fieldNames returns all the field names for the given modelSpec

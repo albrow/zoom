@@ -103,10 +103,10 @@ func nameIsRegistered(name string) bool {
 }
 
 // ModelKey returns the key that identifies a hash in the database
-// which contains all the fields of the given model. It returns an error
-// iff the model does not have an id.
-func (mt *ModelType) ModelKey(model Model) (string, error) {
-	return mt.spec.modelKey(model)
+// which contains all the fields of the model corresponding to the given
+// id. It returns an error iff id is empty.
+func (mt *ModelType) ModelKey(id string) (string, error) {
+	return mt.spec.modelKey(id)
 }
 
 // AllIndexKey returns the key that identifies a set in the database that
