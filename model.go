@@ -241,6 +241,36 @@ func (ms *modelSpec) sortArgs(setKey string, includeFields []string, limit int, 
 	return args
 }
 
+// checkModelType returns an error iff model is not of the registered type that
+// corresponds to modelSpec.
+func (spec *modelSpec) checkModelType(model Model) error {
+	if reflect.TypeOf(model) != spec.typ {
+		return fmt.Errorf("model was the wrong type. Expected %s but got %T", spec.typ.String(), model)
+	}
+	return nil
+}
+
+// checkModelsType returns an error iff models is not a pointer to a slice of models of the
+// registered type that corresponds to modelSpec.
+func (spec *modelSpec) checkModelsType(models interface{}) error {
+	if reflect.TypeOf(models).Kind() != reflect.Ptr {
+		return fmt.Errorf("models should be a pointer to a slice or array of models")
+	}
+	modelsVal := reflect.ValueOf(models).Elem()
+	elemType := modelsVal.Type().Elem()
+	switch {
+	case !typeIsSliceOrArray(modelsVal.Type()):
+		return fmt.Errorf("models should be a pointer to a slice or array of models")
+	case !typeIsPointerToStruct(elemType):
+		return fmt.Errorf("the elements in models should be pointers to structs")
+	case !typeIsRegistered(elemType):
+		return fmt.Errorf("the elements in models should be of a registered type\nType %s has not been registered.", elemType.String())
+	case elemType != spec.typ:
+		return fmt.Errorf("models were the wrong type. Expected slice or array of %s but got %T", spec.typ.String(), models)
+	}
+	return nil
+}
+
 // modelRef represents a reference to a particular model. It consists of the model object
 // itself and a pointer to the corresponding spec. This allows us to avoid constant lookups
 // in the modelTypeToSpec map.
