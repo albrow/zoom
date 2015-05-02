@@ -392,7 +392,7 @@ func (q *Query) RunOne(model Model) error {
 func (q *Query) Count() (uint, error) {
 	if !q.hasFilters() {
 		// Just return the number of ids in the all index set
-		conn := Conn()
+		conn := NewConn()
 		defer conn.Close()
 		count64, err := redis.Uint64(conn.Do("SCARD", q.modelSpec.allIndexKey()))
 		if err != nil {

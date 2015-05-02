@@ -41,11 +41,11 @@ var defaultConfiguration = Configuration{
 	Password: "",
 }
 
-// Conn gets a connection from the connection pool and returns it.
+// NewConn gets a connection from the connection pool and returns it.
 // It can be used for directly interacting with the database. See
 // http://godoc.org/github.com/garyburd/redigo/redis for full documentation
 // on the redis.Conn type.
-func Conn() redis.Conn {
+func NewConn() redis.Conn {
 	return pool.Get()
 }
 

@@ -24,7 +24,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 	}
 	ids = append(ids, "foo", "bar")
 	tempSetKey := "testModelIds"
-	conn := Conn()
+	conn := NewConn()
 	defer conn.Close()
 	saddArgs := redis.Args{tempSetKey}
 	saddArgs = saddArgs.Add(Interfaces(ids)...)
@@ -93,7 +93,7 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	}
 
 	// Set the field value in the main hash
-	conn := Conn()
+	conn := NewConn()
 	defer conn.Close()
 	modelKey, _ := stringIndexModels.ModelKey(model)
 	if _, err := conn.Do("HSET", modelKey, "String", model.String); err != nil {

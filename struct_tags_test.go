@@ -45,7 +45,7 @@ func TestRedisIgnoreOption(t *testing.T) {
 	}
 
 	// Check the database to make sure the field is not there
-	conn := Conn()
+	conn := NewConn()
 	defer conn.Close()
 	key, _ := ignoredFieldModels.ModelKey(model)
 	gotAttr, err := redis.String(conn.Do("HGET", key, "Attr"))

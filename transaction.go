@@ -49,7 +49,7 @@ type ReplyHandler func(interface{}) error
 // NewTransaction instantiates and returns a new transaction.
 func NewTransaction() *Transaction {
 	t := &Transaction{
-		conn: Conn(),
+		conn: NewConn(),
 	}
 	return t
 }
