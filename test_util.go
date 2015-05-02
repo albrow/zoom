@@ -531,12 +531,12 @@ func booleanIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 	return stringSliceContains(gotIds, model.Id()), nil
 }
 
-// ById is a utility type for quickly sorting by id
-type ById []*indexedTestModel
+// byId is a utility type for quickly sorting by id
+type byId []*indexedTestModel
 
-func (ms ById) Len() int           { return len(ms) }
-func (ms ById) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
-func (ms ById) Less(i, j int) bool { return ms[i].Id() < ms[j].Id() }
+func (ms byId) Len() int           { return len(ms) }
+func (ms byId) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
+func (ms byId) Less(i, j int) bool { return ms[i].Id() < ms[j].Id() }
 
 // expectModelsToBeEqual returns an error if the two slices do not contain the exact
 // same models.
@@ -550,13 +550,13 @@ func expectModelsToBeEqual(expected []*indexedTestModel, got []*indexedTestModel
 	if !orderMatters {
 		// if order doesn't matter, first sort by Id, which is unique.
 		// this way we can do a straightforward comparison
-		sort.Sort(ById(eCopy))
-		sort.Sort(ById(gCopy))
+		sort.Sort(byId(eCopy))
+		sort.Sort(byId(gCopy))
 	}
 	for i, e := range eCopy {
 		g := gCopy[i]
 		if !reflect.DeepEqual(e, g) {
-			return fmt.Errorf("Inequality detected at iteration %d.Expected: %+v\nGot:  %+v", *e, *g)
+			return fmt.Errorf("Inequality detected at iteration %d.Expected: %+v\nGot:  %+v", i, *e, *g)
 		}
 	}
 	return nil

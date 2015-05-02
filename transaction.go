@@ -42,8 +42,7 @@ const (
 )
 
 // ReplyHandler is a function which does something with the reply from a redis
-// command or script. Each ReplyHandler is executed immediately after its
-// corresponding script or command is run.
+// command or script.
 type ReplyHandler func(interface{}) error
 
 // NewTransaction instantiates and returns a new transaction.

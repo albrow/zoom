@@ -136,7 +136,7 @@ func TestQueryFilterString(t *testing.T) {
 		tx.Save(indexedTestModels, model)
 	}
 	if err := tx.Exec(); err != nil {
-		t.Fatal("Error executing transaction: %s", err.Error())
+		t.Fatalf("Error executing transaction: %s", err.Error())
 	}
 
 	// Test queries with filters using all possible operators and a
@@ -1150,7 +1150,6 @@ func applyLimitAndOffset(models []*indexedTestModel, limit, offset uint) []*inde
 	} else {
 		return expected[start:end]
 	}
-	return expected
 }
 
 func TestApplyLimitAndOffset(t *testing.T) {

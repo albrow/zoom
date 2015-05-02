@@ -28,9 +28,8 @@ var (
 	nullString = string([]byte{byte(0)})
 )
 
-// Models converts an interface to a slice of Model. It is typically
-// used to convert a return value of a Query. Will panic if the type
-// is invalid.
+// Models converts in to []Model. It will panic if the underlying type
+// of in is not a slice of some concrete type which implements Model.
 func Models(in interface{}) []Model {
 	typ := reflect.TypeOf(in)
 	if !typeIsSliceOrArray(typ) {
@@ -61,8 +60,8 @@ func Models(in interface{}) []Model {
 	return results
 }
 
-// Interfaces converts in to []interface{}. It will panic if the type
-// of in is not a slice or array.
+// Interfaces converts in to []interface{}. It will panic if the underlying type
+// of in is not a slice.
 func Interfaces(in interface{}) []interface{} {
 	val := reflect.ValueOf(in)
 	length := val.Len()
@@ -72,15 +71,6 @@ func Interfaces(in interface{}) []interface{} {
 		results[i] = elemVal.Interface()
 	}
 	return results
-}
-
-// reverseString returns s reversed
-func reverseString(s string) string {
-	runes := []rune(s)
-	for i, j := 0, len(runes)-1; i < j; i, j = i+1, j-1 {
-		runes[i], runes[j] = runes[j], runes[i]
-	}
-	return string(runes)
 }
 
 // indexOfStringSlice returns the index of s in strings, or
@@ -94,35 +84,9 @@ func indexOfStringSlice(strings []string, s string) int {
 	return -1
 }
 
-// indexOfSlice returns the index of a in list, or
-// -1 if a is not found in list. list should have an underlying
-// type of a slice or array
-func indexOfSlice(a interface{}, list interface{}) int {
-	lVal := reflect.ValueOf(list)
-	size := lVal.Len()
-	for i := 0; i < size; i++ {
-		elem := lVal.Index(i)
-		if reflect.DeepEqual(a, elem.Interface()) {
-			return i
-		}
-	}
-	return -1
-}
-
 // stringSliceContains returns true iff strings contains s
 func stringSliceContains(strings []string, s string) bool {
 	return indexOfStringSlice(strings, s) != -1
-}
-
-// sliceContains returns true iff list contains a
-func sliceContains(a interface{}, list interface{}) bool {
-	return indexOfSlice(a, list) != -1
-}
-
-// removeFromStringSlice removes the element at index i from list and
-// returns the new slice.
-func removeFromStringSlice(list []string, i int) []string {
-	return append(list[:i], list[i+1:]...)
 }
 
 // removeElementFromStringSlice removes elem from list and returns
@@ -159,42 +123,6 @@ func compareAsStringSet(expecteds, gots []string) (bool, string) {
 		}
 	}
 
-	return true, "ok"
-}
-
-// compareAsSet compares expecteds and gots as if they were sets, i.e.,
-// it checks if they contain the same values, regardless of order. It returns true
-// and an empty string if expecteds and gots contain all the same values and false
-// and a detailed message if they do not.
-func compareAsSet(expecteds, gots interface{}) (bool, string) {
-	eVal := reflect.ValueOf(expecteds)
-	gVal := reflect.ValueOf(gots)
-
-	if !eVal.IsValid() {
-		return false, "expecteds was nil"
-	} else if !gVal.IsValid() {
-		return false, "gots was nil"
-	}
-
-	// make sure everything in expecteds is also in gots
-	for i := 0; i < eVal.Len(); i++ {
-		expected := eVal.Index(i).Interface()
-		index := indexOfSlice(expected, gots)
-		if index == -1 {
-			msg := fmt.Sprintf("Missing expected element: %v", expected)
-			return false, msg
-		}
-	}
-
-	// make sure everything in gots is also in expecteds
-	for i := 0; i < gVal.Len(); i++ {
-		got := gVal.Index(i).Interface()
-		index := indexOfSlice(got, expecteds)
-		if index == -1 {
-			msg := fmt.Sprintf("Found unexpected element: %v", got)
-			return false, msg
-		}
-	}
 	return true, "ok"
 }
 

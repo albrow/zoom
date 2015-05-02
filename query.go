@@ -16,8 +16,8 @@ import (
 
 // Query represents a query which will retrieve some models from
 // the database. A Query may consist of one or more query modifiers
-// (e.g. Filter or Order) and executed with a query finisher (e.g. Run
-// or Ids).
+// (e.g. Filter or Order) and may be executed with a query finisher
+// (e.g. Run or Ids).
 type Query struct {
 	modelSpec *modelSpec
 	tx        *Transaction
@@ -138,10 +138,11 @@ var filterOps = map[string]filterOp{
 }
 
 // NewQuery is used to construct a query. The query returned can be chained
-// together with one or more query modifiers, and then executed using the Run
-// RunOne, Count, and Ids methods. If no query modifiers are used, running the
-// query will return all models of the given type in uspecified order. Queries
-// use delated execution, so nothing touches the database until you execute it.
+// together with one or more query modifiers (e.g. Filter or Order), and then
+// executed using the Run, RunOne, Count, or Ids methods. If no query modifiers
+// are used, running the query will return all models of the given type in uspecified
+// order. Queries use delated execution, so nothing touches the database until you
+// execute it.
 func (modelType *ModelType) NewQuery() *Query {
 	return &Query{
 		modelSpec: modelType.spec,
@@ -345,6 +346,9 @@ func (q *Query) Run(models interface{}) error {
 	q.tx = NewTransaction()
 	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {
+		if len(tmpKeys) > 0 {
+			q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
+		}
 		return err
 	}
 	limit := int(q.limit)
@@ -431,6 +435,9 @@ func (q *Query) Ids() ([]string, error) {
 	q.tx = NewTransaction()
 	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {
+		if len(tmpKeys) > 0 {
+			q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
+		}
 		return nil, err
 	}
 	limit := int(q.limit)
@@ -483,10 +490,14 @@ func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err erro
 		for i, filter := range q.filters {
 			if i == 0 {
 				// The first time, we should intersect with the ids key from above
-				q.intersectFilter(filter, idsKey, filteredIdsKey)
+				if err := q.intersectFilter(filter, idsKey, filteredIdsKey); err != nil {
+					return "", tmpKeys, err
+				}
 			} else {
 				// All other times, we should intersect with the filteredIdsKey itself
-				q.intersectFilter(filter, filteredIdsKey, filteredIdsKey)
+				if err := q.intersectFilter(filter, filteredIdsKey, filteredIdsKey); err != nil {
+					return "", tmpKeys, err
+				}
 			}
 		}
 		idsKey = filteredIdsKey

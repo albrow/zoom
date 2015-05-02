@@ -39,7 +39,7 @@ func (mt *ModelType) Name() string {
 // Register adds a model type to the list of registered types. Any model
 // you wish to save must be registered first. The type of model must be
 // unique, i.e., not already registered, and must be a pointer to a struct.
-// Each registered model gets a name, a unique string identifier, which is
+// Each registered model gets a name, which is a unique string identifier
 // used as a prefix when storing this type of model in the database. By
 // default the name is just its type without the package prefix or dereference
 // operators. So for example, the default name corresponding to *models.User
@@ -287,7 +287,7 @@ func (t *Transaction) Find(mt *ModelType, id string, model Model) {
 // FindAll finds all the models of the given type. It executes the commands needed
 // to retrieve the models in a single transaction. See http://redis.io/topics/transactions.
 // models must be a pointer to a slice of models with a type corresponding to the ModelType.
-// FindAll will grow the models slice as needed and if any of the models in the
+// FindAll will grow or shrink the models slice as needed and if any of the models in the
 // models slice are nil, FindAll will use reflection to allocate memory for them.
 // FindAll returns an error if models is the wrong type or if there was a problem connecting
 // to the database.
