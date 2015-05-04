@@ -3,7 +3,7 @@ Zoom
 
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
-Version: X.X.X
+Version: 0.9.0
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
@@ -17,7 +17,7 @@ Table of Contents
 -----------------
 
 - [Development Status](#development-status)
-- [When is Zoom a Good Fit?](#when-is-zoom-a-good-fit-)
+- [When is Zoom a Good Fit?](#when-is-zoom-a-good-fit)
 - [Installation](#installation)
 - [Initialization](#initialization)
 - [Models](#models)
@@ -547,7 +547,7 @@ BenchmarkComplexQuery          10000      142476 ns/op
 ```
 
 The results of these benchmarks can vary widely from system to system, and so the benchmarks
-here are really only useful for comparing accross versions of Zoom, and for identifying possible
+here are really only useful for comparing across versions of Zoom, and for identifying possible
 performance regressions during development. You should run your own benchmarks that are closer to
 your use case to get a real sense of how Zoom will perform for you. High performance is one of the
 top priorities for this project, because without that you are better off using an ORM designed for
