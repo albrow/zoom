@@ -6,15 +6,15 @@
 -- 	1) setKey: The key of a sorted set for a string index, where each member is of the
 --			form: value + NULL + id, where NULL is the ASCII NULL character which has a codepoint
 --			value of 0.
---		2) storeKey: The key of a sorted set where the resulting ids will be stored
+--		2) destKey: The key of a sorted set where the resulting ids will be stored
 -- 	3) min: The min argument for the ZRANGEBYLEX command
 -- 	4) max: The end argument for the ZRANGEBYLEX command
 -- The script then extracts the ids from setKey using the given min and max arguments,
--- and then stores them storeKey with the appropriate scores in ascending order.
+-- and then stores them destKey with the appropriate scores in ascending order.
 
 -- Assign keys to variables for easy access
 local setKey = KEYS[1]
-local storeKey = KEYS[2]
+local destKey = KEYS[2]
 local min = ARGV[1]
 local max = ARGV[2]
 -- Get all the members (value+id pairs) from the sorted set
@@ -26,6 +26,6 @@ if #members > 0 then
 		-- Find the index of the last space
 		local idStart = string.find(member, '%z[^%z]*$')
 		local id = string.sub(member, idStart+1)
-		redis.call('ZADD', storeKey, i, id)
+		redis.call('ZADD', destKey, i, id)
 	end
 end

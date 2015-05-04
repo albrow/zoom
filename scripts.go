@@ -84,15 +84,15 @@ func (t *Transaction) deleteStringIndex(modelName, modelId, fieldName string) {
 // extractIdsFromFieldIndex is a small function wrapper around extractIdsFromFieldIndexScript.
 // It offers some type safety and helps make sure the arguments you pass through to the are correct.
 // The script will get all the ids from setKey using ZRANGEBYSCORE with the given min and max, and then
-// store them in a sorted set identified by storeKey.
-func (t *Transaction) extractIdsFromFieldIndex(setKey string, storeKey string, min interface{}, max interface{}) {
-	t.Script(extractIdsFromFieldIndexScript, redis.Args{setKey, storeKey, min, max}, nil)
+// store them in a sorted set identified by destKey.
+func (t *Transaction) extractIdsFromFieldIndex(setKey string, destKey string, min interface{}, max interface{}) {
+	t.Script(extractIdsFromFieldIndexScript, redis.Args{setKey, destKey, min, max}, nil)
 }
 
 // extractIdsFromStringIndex is a small function wrapper around extractIdsFromStringIndexScript.
 // It offers some type safety and helps make sure the arguments you pass through to the are correct.
 // The script will extract the ids from setKey using ZRANGEBYLEX with the given min and max, and then
-// store them in a sorted set identified by storeKey.
-func (t *Transaction) extractIdsFromStringIndex(setKey, storeKey, min, max string) {
-	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, storeKey, min, max}, nil)
+// store them in a sorted set identified by destKey.
+func (t *Transaction) extractIdsFromStringIndex(setKey, destKey, min, max string) {
+	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, destKey, min, max}, nil)
 }

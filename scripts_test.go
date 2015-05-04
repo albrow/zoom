@@ -169,10 +169,10 @@ func TestExtractIdsFromFieldIndexScript(t *testing.T) {
 	fieldIndexKey, _ := indexedTestModels.FieldIndexKey("Int")
 	for i, tc := range testCases {
 		gotIds := []string{}
-		storeKey := "TestExtractIdsFromFieldIndexScript:" + strconv.Itoa(i)
+		destKey := "TestExtractIdsFromFieldIndexScript:" + strconv.Itoa(i)
 		tx = NewTransaction()
-		tx.extractIdsFromFieldIndex(fieldIndexKey, storeKey, tc.min, tc.max)
-		tx.Command("ZRANGE", redis.Args{storeKey, 0, -1}, newScanStringsHandler(&gotIds))
+		tx.extractIdsFromFieldIndex(fieldIndexKey, destKey, tc.min, tc.max)
+		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, newScanStringsHandler(&gotIds))
 		if err := tx.Exec(); err != nil {
 			t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
 		}
@@ -225,10 +225,10 @@ func TestExtractIdsFromStringIndexScript(t *testing.T) {
 	fieldIndexKey, _ := indexedTestModels.FieldIndexKey("String")
 	for i, tc := range testCases {
 		gotIds := []string{}
-		storeKey := "ExtractIdsFromStringIndexScript:" + strconv.Itoa(i)
+		destKey := "ExtractIdsFromStringIndexScript:" + strconv.Itoa(i)
 		tx = NewTransaction()
-		tx.extractIdsFromStringIndex(fieldIndexKey, storeKey, tc.min, tc.max)
-		tx.Command("ZRANGE", redis.Args{storeKey, 0, -1}, newScanStringsHandler(&gotIds))
+		tx.extractIdsFromStringIndex(fieldIndexKey, destKey, tc.min, tc.max)
+		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, newScanStringsHandler(&gotIds))
 		if err := tx.Exec(); err != nil {
 			t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
 		}
