@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
-// Package zoom A blazing-fast datastore and querying engine for
+// Package zoom is a blazing-fast datastore and querying engine for
 // Go built on Redis. It supports models of any arbitrary struct
 // type and provides basic querying functionality. It also supports
 // atomic transactions, lua scripts, and running Redis commands
