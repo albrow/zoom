@@ -17,7 +17,7 @@ Table of Contents
 -----------------
 
 - [Development Status](#development-status)
-- [When is Zoom a Good Fit?](#when-is-zoom-a-good-fit-)
+- [When is Zoom a Good Fit?](#when-is-zoom-a-good-fit)
 - [Installation](#installation)
 - [Initialization](#initialization)
 - [Models](#models)
