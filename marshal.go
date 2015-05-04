@@ -1,4 +1,4 @@
-// Copyright 2014 Alex Browne.  All rights reserved.
+// Copyright 2015 Alex Browne.  All rights reserved.
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
@@ -28,7 +28,9 @@ type MarshalerUnmarshaler interface {
 // uses the builtin gob encoding.
 type gobMarshalerUnmarshaler struct{}
 
-var defaultMarshalerUnmarshaler gobMarshalerUnmarshaler = gobMarshalerUnmarshaler{}
+// defaultMarshalerUnmarshaler is used to marshal and unmarshal inconvertible
+// fields whenever a custom MarshalerUnmarshaler is not provided.
+var defaultMarshalerUnmarshaler MarshalerUnmarshaler = gobMarshalerUnmarshaler{}
 
 // Marshal returns the gob encoding of v.
 func (gobMarshalerUnmarshaler) Marshal(v interface{}) ([]byte, error) {
@@ -42,9 +44,8 @@ func (gobMarshalerUnmarshaler) Marshal(v interface{}) ([]byte, error) {
 
 // Unmarshal parses the gob-encoded data and stores the result in the value pointed to by v.
 func (gobMarshalerUnmarshaler) Unmarshal(data []byte, v interface{}) error {
-	var buff bytes.Buffer
-	dec := gob.NewDecoder(&buff)
-	buff.Write(data)
+	buff := bytes.NewBuffer(data)
+	dec := gob.NewDecoder(buff)
 	if err := dec.Decode(v); err != nil {
 		return err
 	}
