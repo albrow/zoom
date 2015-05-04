@@ -16,6 +16,7 @@ Full documentation is available on
 promise of backwards compatibility until version 1.0. I do not advise using Zoom for production or
 mission-critical applications. Feedback and pull requests are welcome :)
 
+
 Table of Contents
 -----------------
 
@@ -27,8 +28,8 @@ Table of Contents
 - [Queries](#queries)
 - [More Information](#more-information)
 - [Testing & Benchmarking](#testing--benchmarking)
+- [Contributing](#contributing)
 - [Example Usage](#example-usage)
-- [TODO](#todo)
 - [License](#license)
 
 
@@ -535,6 +536,37 @@ top priorities for this project, because without that you are better off using a
 SQL databases.
 
 
+Contributing
+------------
+
+Feedback, bug reports, and pull requests are greatly appreciated :)
+
+### Issues
+
+The following are all great reasons to submit an issue:
+
+1. You found a bug in the code.
+2. Something is missing from the documentation or the existing documentation is unclear.
+3. You have an idea for a new feature.
+
+If you are thinking about submitting an issue please remember to:
+
+1. Describe the issue in detail.
+2. If applicable, describe the steps to reproduce the error, which probably should include some example code.
+3. Mention details about your platform: OS, version of Go and Redis, etc.
+
+### Pull Requests
+
+Zoom uses semantic versioning and the [git branching model described here](http://nvie.com/posts/a-successful-git-branching-model/).
+If you plan on submitting a pull request, you should:
+
+1. Fork the repository.
+2. Create a new "feature branch" with a descriptive name (e.g. fix-database-error).
+3. Make your changes in the feature branch.
+4. Run the tests to make sure that they still pass. Updated the tests if needed.
+5. Submit a pull request to merge your feature branch into the *develop* branch. Please do not request to merge directly into master.
+
+
 Example Usage
 -------------
 
@@ -542,22 +574,6 @@ I have built an [example json/rest application](https://github.com/albrow/peeps-
 which uses the latest version of Zoom. It is a simple example that doesn't use all of
 Zoom's features, but should be good enough for understanding how zoom can work in a
 real application.
-
-
-TODO
-----
-
-Ordered generally by priority, here's what I'm working on:
-
-- Add godoc compatible examples in the test files
-- Support callbacks (BeforeSave, AfterSave, BeforeDelete, AfterDelete, etc.)
-- Implement high-level watching for record changes
-- Implement thread-safe updates across different application servers (probably optimistic locking)
-- Write a basic migration tool
-- Support AND and OR operators on Filters
-
-If you have an idea or suggestion for a feature, please [open an issue](https://github.com/albrow/zoom/issues/new)
-and describe it.
 
 
 License
