@@ -12,15 +12,12 @@ Requires Redis version >= 2.8.9 and Go version >= 1.2.
 Full documentation is available on
 [godoc.org](http://godoc.org/github.com/albrow/zoom).
 
-**WARNING:** this isn't done yet and may change significantly before the official release. There is no
-promise of backwards compatibility until version 1.0. I do not advise using Zoom for production or
-mission-critical applications. Feedback and pull requests are welcome :)
-
 
 Table of Contents
 -----------------
 
-- [Usefulness](#usefulness)
+- [Development Status](#development-status)
+- [When is Zoom a Good Fit?](#when-is-zoom-a-good-fit-)
 - [Installation](#installation)
 - [Initialization](#initialization)
 - [Models](#models)
@@ -33,35 +30,54 @@ Table of Contents
 - [License](#license)
 
 
-Usefulness
-----------
+Development Status
+------------------
 
-Zoom may be a good fit for you if:
+Zoom has been around for more than a year. It is well-tested and going forward the API
+will be relatively stable. We are closing in on version 1.0 and you can expect to see milestones
+laid out in the near future.
 
-1. You require high performance or low latency and don't want to write complicated database components from scratch
-2. You are using Redis and want the ability to do queries
-3. You are using Redis with some custom types and want to easily do conversions to store and retrieve those types
+At this time, Zoom can be considered safe for use in low-traffic production applications. However,
+as with any relatively new package, it is possible that there are some undiscovered bugs. Therefore
+we would recommend writing good tests, reporting any bugs you may find, and avoiding using Zoom for
+mission-critical or high-traffic applications.
 
-Zoom allows you to:
+Zoom follows semantic versioning, but offers no guarantees of backwards compatibility until version
+1.0. However, starting with version 0.9.0,
+[migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide) will be provided for any
+non-trivial breaking changes, making it easy to stay up to date with the latest version.
 
-- Persistently save models of any type
-- Retrieve models from the database
-- Perform basic queries
 
-Zoom consciously makes the trade off of using more memory in order to increase performance.
-Zoom stores all data in memory at all times, so if your machine runs out of memory, Zoom will
-either crash or start using swap space (resulting in huge performance penalties). 
-Zoom does not do sharding and does not support Redis Cluster (but might in the future), so be
-aware that memory could be a hard constraint for larger applications.
+When is Zoom a Good Fit?
+------------------------
 
-Zoom is a high-level library and abstracts away more complicated aspects of the Redis API. For example,
-it manages its own connection pool, performs atomic transactions with MULTI/EXEC or lua scripts when necessary,
-automatically converts structs to and from a format suitable for the database, and manages query indexes using
-sorted sets. If needed, you can still execute Redis commands directly.
+Zoom might be a good fit if:
 
-If you want to use advanced/complicated SQL queries, Zoom is not for you. For example, Zoom
-currently lacks an equivalent of the SQL keywords `IN` and `OR`. Although support for more
-types of queries may be added in the future, it is not a high priority.
+1. **You are building a low-latency application.** Because Zoom is built on top of
+  Redis and all data is stored in memory, it is typically much faster than datastores
+  based on SQL databases. Latency will be the most noticeable difference, although
+  throughput may also be improved.
+2. **You want more out of Redis.** Zoom offers a number of features that you don't get
+  by using a Redis driver directly. For example, Zoom supports a larger number of types
+  out of the box (including custom types, slices, maps, complex types, and embedded structs),
+  provides tools for making multi-command transactions easier, and of course, provides the
+  ability to run queries.
+3. **You want an easy-to-use datastore.** Zoom has a simple API and is arguable easier to
+  use than some ORMs. For example, it doesn't require database migrations and instead builds
+  up a schema based on your struct types. Zoom also does not require any knowledge of Redis
+  in order to use effectively. Just connect it to a database and you're good to go!
+
+Zoom might ***not*** be a good fit if:
+
+1. **You are working with a lot of data.** Zoom stores all data in memory at all times, and does not
+  yet support sharding or Redis Cluster. Memory could be a hard constraint for larger applications.
+  Keep in mind that it is possible (if expensive) to run Redis on machines with up to 256GB of memory
+  on cloud providers such as Amazon EC2. This is probably plenty for all but the largest applications.
+2. **You require the ability to run advanced queries.** Zoom currently only provides support for
+  basic queries and is not as powerful or flexible as something like SQL. For example, Zoom currently
+  lacks the equivalent of the `IN` or `OR` SQL keywords. See the
+  [documentation](http://godoc.org/github.com/albrow/zoom/#Query) for a full list of the types of queries
+  supported.
 
 
 Installation
@@ -156,10 +172,12 @@ type Person struct {
 }
 ```
 
-Because of the way Zoom uses reflection, all the fields you want to save need to be public.
+Because of the way Zoom uses reflection, all the fields you want to save need to be public. Almost
+any type of field is supported, including including custom types, slices, maps, complex types, and
+embedded structs. The only things that are not supported are recursive data structures and functions.
 
-You must also call zoom.Register on each Model type in your application. You only need to do this
-once per type.
+You must also call zoom.Register on each Model type in your application. Register examines the type
+and uses reflection to build up a schema. You only need to do this once per type.
 
 ``` go
 // register the *Person type and assign the corresponding *ModelType to the variable named Persons
@@ -171,7 +189,8 @@ if err != nil {
 
 Register returns a *ModelType, which is a reference to a registered model type and has methods for
 saving, deleting, and querying models of that type. Convention is to name the *ModelType the plural
-of the corresponding registered type, but it's just a variable so you can name it whatever you want.
+of the corresponding registered type (e.g. "Persons"), but it's just a variable so you can name it
+whatever you want.
 
 
 ### Saving Models
@@ -187,11 +206,10 @@ if err := Persons.Save(p); err != nil {
 ```
 
 When you call Save, Zoom converts all the fields of the model into a format suitable for Redis and stores them
-as a Redis hash. Struct fields can be any custom or built-in type, but cannot be functions or recursive data
-structures. If the model you are saving does not already have an id, Zoom will mutate the model by generating and
-assigning one via the SetId method. Ids assigned by Zoom have two components: the current unix time with
-millisecond precision and a randomly generated 16-character string. When Ids are generated this way, collisions
-are still possible, but they are highly, highly unlikely.
+as a Redis hash. If the model you are saving does not already have an id, Zoom will mutate the model by
+generating and assigning one via the SetId method. Ids assigned by Zoom have two components: the current unix
+time with millisecond precision and a randomly generated 16-character string. When Ids are generated this way,
+collisions are still possible, but they are highly, highly unlikely.
 
 ### Finding a Single Model
 
@@ -204,10 +222,10 @@ if err := Persons.Find("a_valid_person_id", p); err != nil {
 }
 ```
 
-The second argument to Find must be a pointer to a Model, with a type corresponding to the *ModelType. In this case,
-we passed in *Person since that is the type that corresponds to our *ModelType Persons. Find will mutate p by setting
-all its fields. Using Find in this way allows the caller to maintain type safety and avoid type casting. If Zoom couldn't
-find a model of type *Person with the given id, it will return a
+The second argument to Find must be a pointer to a struct which satisfies Model, and must have a type corresponding to
+the *ModelType. In this case, we passed in *Person since that is the type that corresponds to our *ModelType Persons. Find
+will mutate p by setting all its fields. Using Find in this way allows the caller to maintain type safety and avoid type
+casting. If Zoom couldn't find a model of type *Person with the given id, it will return a
 [ModelNotFoundError](http://godoc.org/github.com/albrow/zoom/#ModelNotFoundError).
 
 ### Finding All Models
@@ -221,9 +239,9 @@ if err := Persons.FindAll(&persons); err != nil {
 }
 ```
 
-FindAll expects a pointer to a slice of some registered type. It grows or shrinks the slice as needed, filling in all
-the fields of the elements inside of the slice. So the result of the call is that persons will be a slice of all models
-in the database with the type *Person.
+FindAll expects a pointer to a slice of some registered type that implements Model. It grows or shrinks the slice as needed,
+filling in all the fields of the elements inside of the slice. So the result of the call is that persons will be a slice of
+all models in the database with the type *Person.
 
 ### Deleting Models
 
