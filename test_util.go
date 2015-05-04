@@ -2,6 +2,8 @@
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
+// File test_util.go contains helper functions for writing tests.
+
 package zoom
 
 import (

@@ -2,6 +2,8 @@
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
+// File scripts_test.go tests all the lua scripts.
+
 package zoom
 
 import (
