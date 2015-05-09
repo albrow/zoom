@@ -7,7 +7,7 @@ Version: X.X.X
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
-Requires Redis version >= 2.8.9 and Go version >= 1.2.
+Requires Redis version >= 2.8.9 and Go version >= 1.2. The latest version of both is recommended.
 
 Full documentation is available on
 [godoc.org](http://godoc.org/github.com/albrow/zoom).
@@ -54,30 +54,30 @@ When is Zoom a Good Fit?
 Zoom might be a good fit if:
 
 1. **You are building a low-latency application.** Because Zoom is built on top of
-  Redis and all data is stored in memory, it is typically much faster than datastores
-  based on SQL databases. Latency will be the most noticeable difference, although
-  throughput may also be improved.
+	Redis and all data is stored in memory, it is typically much faster than datastores/ORMs
+	based on traditional SQL databases. Latency will be the most noticeable difference, although
+	throughput may also be improved.
 2. **You want more out of Redis.** Zoom offers a number of features that you don't get
-  by using a Redis driver directly. For example, Zoom supports a larger number of types
-  out of the box (including custom types, slices, maps, complex types, and embedded structs),
-  provides tools for making multi-command transactions easier, and of course, provides the
-  ability to run queries.
+	by using a Redis driver directly. For example, Zoom supports a larger number of types
+	out of the box (including custom types, slices, maps, complex types, and embedded structs),
+	provides tools for making multi-command transactions easier, and of course, provides the
+	ability to run queries.
 3. **You want an easy-to-use datastore.** Zoom has a simple API and is arguable easier to
-  use than some ORMs. For example, it doesn't require database migrations and instead builds
-  up a schema based on your struct types. Zoom also does not require any knowledge of Redis
-  in order to use effectively. Just connect it to a database and you're good to go!
+	use than some ORMs. For example, it doesn't require database migrations and instead builds
+	up a schema based on your struct types. Zoom also does not require any knowledge of Redis
+	in order to use effectively. Just connect it to a database and you're good to go!
 
 Zoom might ***not*** be a good fit if:
 
 1. **You are working with a lot of data.** Zoom stores all data in memory at all times, and does not
-  yet support sharding or Redis Cluster. Memory could be a hard constraint for larger applications.
-  Keep in mind that it is possible (if expensive) to run Redis on machines with up to 256GB of memory
-  on cloud providers such as Amazon EC2. This is probably plenty for all but the largest applications.
+	yet support sharding or Redis Cluster. Memory could be a hard constraint for larger applications.
+	Keep in mind that it is possible (if expensive) to run Redis on machines with up to 256GB of memory
+	on cloud providers such as Amazon EC2. This is probably plenty for all but the largest applications.
 2. **You require the ability to run advanced queries.** Zoom currently only provides support for
-  basic queries and is not as powerful or flexible as something like SQL. For example, Zoom currently
-  lacks the equivalent of the `IN` or `OR` SQL keywords. See the
-  [documentation](http://godoc.org/github.com/albrow/zoom/#Query) for a full list of the types of queries
-  supported.
+	basic queries and is not as powerful or flexible as something like SQL. For example, Zoom currently
+	lacks the equivalent of the `IN` or `OR` SQL keywords. See the
+	[documentation](http://godoc.org/github.com/albrow/zoom/#Query) for a full list of the types of queries
+	supported.
 
 
 Installation
@@ -90,12 +90,11 @@ as Redis To Go, RedisLabs, or Amazon Elasticache.
 If you need to install Redis, see the [installation instructions](http://redis.io/download) on the official
 Redis website.
 
-To install Zoom itself:
-
-    go get github.com/albrow/zoom
-    
-This will pull the current master branch, which is (most likely) working but is quickly changing.
-
+To install Zoom itself, run `go get github.com/albrow/zoom`. This will pull the current master branch,
+which is relatively stable and well-tested. However, because Zoom has not yet hit version 1.0, sometimes
+the master branch will introduce breaking changes. Usually these changes are small, but for bigger
+breaking changes, you can check the [migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide)
+page for help migrating to newer versions. 
 
 Initialization
 --------------
@@ -104,29 +103,34 @@ First, add github.com/albrow/zoom to your import statement:
 
 ``` go
 import (
-    // ...
-    github.com/albrow/zoom
+	 // ...
+	 github.com/albrow/zoom
 )
 ```
 
-Then, call zoom.Init somewhere in your app initialization code, e.g. in the main function. You must
-also call zoom.Close when your application exits, so it's a good idea to use defer.
+Then, call `zoom.Init` somewhere in your app initialization code, e.g. in the main function. You must
+also call `zoom.Close` when your application exits, so it's a good idea to use defer.
 
 ``` go
 func main() {
-    // ...
-    zoom.Init(nil)
-    defer zoom.Close()
-    // ...
+	if err := zoom.Init(nil); err != nil {
+		// handle error
+	}
+	defer func() {
+		if err := zoom.Close(); err != nil {
+			// handle error
+		}
+	}()
+	// ...
 }
 ```
 
-The Init function takes a *zoom.Configuration struct as an argument. Here's a list of options and their
+The Init function takes a `*zoom.Configuration` as an argument. Here's a list of options and their
 defaults:
 
 ``` go
 type Configuration struct {
-   // Address to connect to. Default: "localhost:6379"
+	// Address to connect to. Default: "localhost:6379"
   Address string
   // Network to use. Default: "tcp"
   Network string
@@ -139,9 +143,9 @@ type Configuration struct {
 }
 ```
 
-If you pass in nil to Init, Zoom will use all the default values. Any fields in the Configuration struct
-that are empty (i.e. an empty string or 0) will fall back to their default values, so you only need to
-provide a Configuration struct with the fields you want to change.
+If you pass in `nil` to `Init`, Zoom will use all the default values. Any fields in the `Configuration`
+struct that are empty (i.e. an empty string or 0) will fall back to their default values, so you only need
+to provide a `Configuration` struct with the fields you want to change.
 
 
 Models
@@ -149,7 +153,7 @@ Models
 
 ### What is a Model?
 
-Models in Zoom are just structs which implement the zoom.Model interface:
+Models in Zoom are just structs which implement the `zoom.Model` interface:
 
 ``` go
 type Model interface {
@@ -158,122 +162,126 @@ type Model interface {
 }
 ```
 
-To clarify, all you have to do to implement the Model interface is add getters and setters
-for a unique Id property. If you want, you can embed zoom.DefaultData to give your model all the
+To clarify, all you have to do to implement the `Model` interface is add getters and setters
+for a unique id property. If you want, you can embed `zoom.DefaultData` to give your model all the
 required methods.
 
-A struct definition serves as a sort of schema for your model. Here's an example of a Person model:
+A struct definition serves as a sort of schema for your model. Here's an example of a model for a person:
 
 ``` go
 type Person struct {
-    Name string
-    Age  int
-    zoom.DefaultData
+	 Name string
+	 Age  int
+	 zoom.DefaultData
 }
 ```
 
 Because of the way Zoom uses reflection, all the fields you want to save need to be public. Almost
-any type of field is supported, including including custom types, slices, maps, complex types, and
-embedded structs. The only things that are not supported are recursive data structures and functions.
+any type of field is supported, including custom types, slices, maps, complex types, and embedded
+structs. The only things that are not supported are recursive data structures and functions.
 
-You must also call zoom.Register on each Model type in your application. Register examines the type
-and uses reflection to build up a schema. You only need to do this once per type.
+You must also call `zoom.Register` on each model type in your application. `Register` examines the type
+and uses reflection to build up an internal schema. You only need to do this once per type.
 
 ``` go
-// register the *Person type and assign the corresponding *ModelType to the variable named Persons
-Persons, err := zoom.Register(&Person{})
+// register the *Person type and assign the corresponding *ModelType to the variable named People
+People, err := zoom.Register(&Person{})
 if err != nil {
-    // handle error
+	 // handle error
 }
 ```
 
-Register returns a *ModelType, which is a reference to a registered model type and has methods for
-saving, deleting, and querying models of that type. Convention is to name the *ModelType the plural
-of the corresponding registered type (e.g. "Persons"), but it's just a variable so you can name it
+`Register` returns a `*ModelType`, which is a reference to a registered struct type and has methods for
+saving, deleting, and querying models of that type. Convention is to name the `*ModelType` the plural
+of the corresponding registered type (e.g. "People"), but it's just a variable so you can name it
 whatever you want.
 
 
 ### Saving Models
 
-To persistently save a Person model to the database, you could call Persons.Save. Recall that in this
-example, Persons is just the name we gave to the *ModelType which corresponds to the type *Person.
+To persistently save a `Person` model to the database, use the `People.Save` method. Recall that in this
+example, "People" is just the name we gave to the `*ModelType` which corresponds to the struct type
+`*Person`.
 
 ``` go
 p := &Person{Name: "Alice", Age: 27}
-if err := Persons.Save(p); err != nil {
-    // handle error
+if err := People.Save(p); err != nil {
+	 // handle error
 }
 ```
 
-When you call Save, Zoom converts all the fields of the model into a format suitable for Redis and stores them
-as a Redis hash. If the model you are saving does not already have an id, Zoom will mutate the model by
-generating and assigning one via the SetId method. Ids assigned by Zoom have two components: the current unix
-time with millisecond precision and a randomly generated 16-character string. When Ids are generated this way,
-collisions are still possible, but they are highly, highly unlikely.
+When you call `Save`, Zoom converts all the fields of the model into a format suitable for Redis and stores them
+as a Redis hash. There is a wiki page describing
+[how zoom works under the hood](https://github.com/albrow/zoom/wiki/Under-the-Hood) in more detail. If the
+model you are saving does not already have an id, Zoom will mutate the model by generating and assigning one via
+the `SetId` method. Ids assigned by Zoom have two components: the current unix time with millisecond precision and
+a randomly generated 16-character string. When ids are generated this way, collisions are still possible, but they
+are very, very unlikely. If you are not comfortable with the chance for collisions, you can write your own `Id`
+and `SetId` methods which do something different (e.g. auto-increment).
 
 ### Finding a Single Model
 
-To retrieve a model by id, use the Find method:
+To retrieve a model by id, use the `Find` method:
 
 ``` go
 p := &Person{}
-if err := Persons.Find("a_valid_person_id", p); err != nil {
-    // handle error
+if err := People.Find("a_valid_person_id", p); err != nil {
+	 // handle error
 }
 ```
 
-The second argument to Find must be a pointer to a struct which satisfies Model, and must have a type corresponding to
-the *ModelType. In this case, we passed in *Person since that is the type that corresponds to our *ModelType Persons. Find
-will mutate p by setting all its fields. Using Find in this way allows the caller to maintain type safety and avoid type
-casting. If Zoom couldn't find a model of type *Person with the given id, it will return a
-[ModelNotFoundError](http://godoc.org/github.com/albrow/zoom/#ModelNotFoundError).
+The second argument to `Find` must be a pointer to a struct which satisfies `Model`, and must have a type corresponding to
+the `*ModelType`. In this case, we passed in `*Person` since that is the struct type that corresponds to our `*ModelType`
+`People`. `Find` will mutate `p` by setting all its fields. Using `Find` in this way allows the caller to maintain type
+safety and avoid type casting. If Zoom couldn't find a model of type `*Person` with the given id, it will return a
+`ModelNotFoundError`.
 
 ### Finding All Models
 
-To find all models of a given type, use the FindAll method:
+To find all models of a given type, use the `FindAll` method:
 
 ``` go
-persons := []*Person{}
-if err := Persons.FindAll(&persons); err != nil {
-    // handle error
+people := []*Person{}
+if err := People.FindAll(&people); err != nil {
+	 // handle error
 }
 ```
 
-FindAll expects a pointer to a slice of some registered type that implements Model. It grows or shrinks the slice as needed,
-filling in all the fields of the elements inside of the slice. So the result of the call is that persons will be a slice of
-all models in the database with the type *Person.
+`FindAll` expects a pointer to a slice of some registered type that implements `Model`. It grows or shrinks the slice as needed,
+filling in all the fields of the elements inside of the slice. So the result of the call is that `people` will be a slice of
+all models in the database with the type `*Person`.
 
 ### Deleting Models
 
-To delete a model, use the Delete method:
+To delete a model, use the `Delete` method:
 
 ``` go
 // ok will be true iff a model with the given id existed and was deleted
-if ok, err := Persons.Delete("a_valid_person_id"); err != nil {
-   // handle err
+if ok, err := People.Delete("a_valid_person_id"); err != nil {
+	// handle err
 }
 ```
 
-Delete expects a valid id as an argument, and will attempt to delete the model with the given id. If there was no model
+`Delete` expects a valid id as an argument, and will attempt to delete the model with the given id. If there was no model
 with the given type and id, the first return value will be false.
 
-You can also delete all models of a given type with the DeleteAll method:
+You can also delete all models of a given type with the `DeleteAll` method:
 
 ``` go
-numDeleted, err := Persons.DeleteAll()
+numDeleted, err := People.DeleteAll()
 if err != nil {
   // handle error
 }
 ```
 
-DeleteAll will return the number of models that existed and were successfully deleted.
+`DeleteAll` will return the number of models that existed and were successfully deleted.
 
 ### Counting the Number of Models
 
-You can get the number of models for a given type using the Count method:
+You can get the number of models for a given type using the `Count` method:
 
 ``` go
-count, err := Persons.Count()
+count, err := People.Count()
 if err != nil {
   // handle err
 }
@@ -283,35 +291,35 @@ if err != nil {
 Transactions
 ------------
 
-Zoom exposes a Transaction API which you can use to run multiple commands efficiently and atomically. Under the hood,
+Zoom exposes a transaction API which you can use to run multiple commands efficiently and atomically. Under the hood,
 Zoom uses a single [Redis transaction](http://redis.io/topics/transactions) to perform all the commands in a single
-round trip. Transactions feature delayed execution, so nothing touches the database until you call Exec. A transaction
-also remembers its errors to make error handling easier on the caller. Any errors that occur will be returned when you
-call Exec.
+round trip. Transactions feature delayed execution, so nothing touches the database until you call `Exec`. A transaction
+also remembers its errors to make error handling easier on the caller. The first error that occurs (if any) will be
+returned when you call `Exec`.
 
-Here's an example of how to save two models and get the number of *Person models in a single transaction.
+Here's an example of how to save two models and get the number of `*Person` models in a single transaction.
 
 ``` go
-numPersons := 0
+numPeople := 0
 t := NewTransaction()
-t.Save(Persons, &Person{Name: "Foo"})
-t.Save(Persons, &Person{Name: "Bar"})
+t.Save(People, &Person{Name: "Foo"})
+t.Save(People, &Person{Name: "Bar"})
 // Count expects a pointer to an integer, which it will change the value of
 // when the transaction is executed.
-t.Count(Persons, &numPersons)
+t.Count(People, &numPeople)
 if err := t.Exec(); err != nil {
   // handle error
 }
-// numPersons will now equal the number of *Person models in the database
-fmt.Println(numPersons)
+// numPeople will now equal the number of *Person models in the database
+fmt.Println(numPeople)
 ```
 
 You can also execute custom Redis commands or run lua scripts with the
-[Command](http://godoc.org/github.com/albrow/zoom/#Transaction.Command) and
-[Script](http://godoc.org/github.com/albrow/zoom/#Transaction.Command) methods. Both methods expect a
-[ReplyHandler](http://godoc.org/github.com/albrow/zoom/#ReplyHandler) as an argument. A ReplyHandler is
+[`Command`](http://godoc.org/github.com/albrow/zoom/#Transaction.Command) and
+[`Script`](http://godoc.org/github.com/albrow/zoom/#Transaction.Script) methods. Both methods expect a
+[`ReplyHandler`](http://godoc.org/github.com/albrow/zoom/#ReplyHandler) as an argument. A `ReplyHandler` is
 simply a function that will do something with the reply from Redis corresponding to the script or command
-that was run. ReplyHandler's are executed in order when you call Exec.
+that was run. `ReplyHandler`'s are executed in order when you call `Exec`.
 
 
 Queries
@@ -319,15 +327,15 @@ Queries
 
 ### The Query Object
 
-Zoom provides a useful abstraction for querying the database. You create queries by using the NewQuery
+Zoom provides a useful abstraction for querying the database. You create queries by using the `NewQuery`
 constructor, where you must pass in the name corresponding to the type of model you want to query. For now,
 Zoom only supports queries on a single type of model at a time.
 
-You can add one or more query modifiers to the query, such as Order, Limit, and Filter. These methods return
-the query itself, so you can chain them together. Any errors due to invalid arguments in the query modifiers
-will be remembered and returned when you attempt to run the query.
+You can add one or more query modifiers to the query, such as `Order`, `Limit`, and `Filter`. These methods
+return the query itself, so you can chain them together. The first error (if any) that occurs due to invalid
+arguments in the query modifiers will be remembered and returned when you attempt to run the query.
 
-Finally, you run the query using a query finisher method, such as Run or Count. Queries feature delayed
+Finally, you run the query using a query finisher method, such as `Run` or `Count`. Queries feature delayed
 execution, so nothing touches the database until you execute the query with a finisher method.
 
 ### Using Query Modifiers
@@ -335,27 +343,27 @@ execution, so nothing touches the database until you execute the query with a fi
 You can chain a query object together with one or more different modifiers. Here's a list
 of all the available modifiers:
 
-- Order
-- Limit
-- Offset
-- Include
-- Exclude
-- Filter
+- [`Order`](http://godoc.org/github.com/albrow/zoom/#Query.Order)
+- [`Limit`](http://godoc.org/github.com/albrow/zoom/#Query.Limit)
+- [`Offset`](http://godoc.org/github.com/albrow/zoom/#Query.Offset)
+- [`Include`](http://godoc.org/github.com/albrow/zoom/#Query.Include)
+- [`Exclude`](http://godoc.org/github.com/albrow/zoom/#Query.Exclude)
+- [`Filter`](http://godoc.org/github.com/albrow/zoom/#Query.Filter)
 
 You can run a query with one of the following query finishers:
 
-- Run
-- Ids
-- Count
-- RunOne
+- [`Run`](http://godoc.org/github.com/albrow/zoom/#Query.Run)
+- [`Ids`](http://godoc.org/github.com/albrow/zoom/#Query.Ids)
+- [`Count`](http://godoc.org/github.com/albrow/zoom/#Query.Count)
+- [`RunOne`](http://godoc.org/github.com/albrow/zoom/#Query.RunOne)
 
 Here's an example of a more complicated query using several modifiers:
 
 ``` go
-persons := []*Person{}
-q := Persons.NewQuery().Order("-Name").Filter("Age >=", 25).Limit(10)
-if err := q.Run(&persons); err != nil {
-   // handle error
+people := []*Person{}
+q := People.NewQuery().Order("-Name").Filter("Age >=", 25).Limit(10)
+if err := q.Run(&people); err != nil {
+	// handle error
 }
 ```
 
@@ -366,7 +374,7 @@ Full documentation on the different modifiers and finishers is available on
 
 Because Redis does not allow you to use strings as scores for sorted sets, Zoom relies on a workaround
 to store string indexes. It uses a sorted set where all the scores are 0 and each member has the following
-format: `value\0id`, where `\0` is the NULL character. With the string indexes stored this way, Zoom
+format: `value\x00id`, where `\x00` is the NULL character. With the string indexes stored this way, Zoom
 can issue the ZRANGEBYLEX command and related commands to filter models by their string values. As a consequence,
 here are some caveats to keep in mind:
 
@@ -407,9 +415,9 @@ If you intend to issue custom Redis commands or run custom scripts, it is highly
 you also make everything atomic. If you do not, Zoom can no longer guarantee that its indexes are
 consistent. For example, if you change the value of a field which is indexed, you should also
 update the index for that field in the same transaction. The keys that Zoom uses for indexes
-and models are provided via the [ModelKey](http://godoc.org/github.com/albrow/zoom/#ModelType.ModelKey),
-[AllIndexKey](http://godoc.org/github.com/albrow/zoom/#ModelType.AllIndexKey), and
-[FieldIndexKey](http://godoc.org/github.com/albrow/zoom/#ModelType.FieldIndexKey) methods.
+and models are provided via the [`ModelKey`](http://godoc.org/github.com/albrow/zoom/#ModelType.ModelKey),
+[`AllIndexKey`](http://godoc.org/github.com/albrow/zoom/#ModelType.AllIndexKey), and
+[`FieldIndexKey`](http://godoc.org/github.com/albrow/zoom/#ModelType.FieldIndexKey) methods.
 
 Read more about:
 - [Redis persistence](http://redis.io/topics/persistence)
@@ -426,13 +434,13 @@ func likePost(postId string) error {
   // Find the Post with the given postId
   post := &Post{}
   if err := Posts.Find(postId); err != nil {
-    return err
+	 return err
   }
   // Increment the number of likes
   post.Likes += 1
   // Save the post
   if err := Posts.Save(post); err != nil {
-    return err
+	 return err
   }
 }
 ```
@@ -449,12 +457,12 @@ func likePost(postId string) error {
   // stores the struct fields as hash fields in Redis.
   modelKey, err := Posts.ModelKey(postId)
   if err != nil {
-    return err
+	 return err
   }
   conn := zoom.NewConn()
   defer conn.Close()
   if _, err := conn.Do("HINCRBY", modelKey, 1); err != nil {
-    return err
+	 return err
   }
 }
 ```
@@ -588,7 +596,7 @@ If you plan on submitting a pull request, you should:
 Example Usage
 -------------
 
-I have built an [example json/rest application](https://github.com/albrow/peeps-negroni)
+There is an [example json/rest application](https://github.com/albrow/peeps-negroni)
 which uses the latest version of Zoom. It is a simple example that doesn't use all of
 Zoom's features, but should be good enough for understanding how zoom can work in a
 real application.
