@@ -8,3 +8,22 @@
 // atomic transactions, lua scripts, and running Redis commands
 // directly if needed.
 package zoom
+
+// Init starts the Zoom library and creates a connection pool. It accepts
+// a Configuration struct as an argument. Any zero values in the configuration
+// will fallback to their default values. Init should be called once during
+// application startup.
+func Init(config *Configuration) error {
+	config = parseConfig(config)
+	initPool(config.Network, config.Address, config.Database, config.Password)
+	if err := initScripts(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// Close closes the connection pool and shuts down the Zoom library.
+// It should be run when application exits, e.g. using defer.
+func Close() error {
+	return pool.Close()
+}
