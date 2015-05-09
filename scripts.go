@@ -26,8 +26,9 @@ var (
 	scriptsPath = filepath.Join(os.Getenv("GOPATH"), "src", "github.com", "albrow", "zoom", "scripts")
 )
 
-func init() {
-	// Parse all the script templates and create redis.Script objects
+// initScripts will parse all the lua script files in scriptsPath and assign them
+// to the variables above. It must be run before any scripts are executed.
+func initScripts() error {
 	scriptsToParse := []struct {
 		script   **redis.Script
 		filename string
@@ -59,11 +60,12 @@ func init() {
 		fullPath := filepath.Join(scriptsPath, s.filename)
 		src, err := ioutil.ReadFile(fullPath)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		// Set the value of the script pointer
 		(*s.script) = redis.NewScript(s.keyCount, string(src))
 	}
+	return nil
 }
 
 // deleteModelsBySetIds is a small function wrapper around deleteModelsBySetIdsScript.
