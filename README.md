@@ -62,7 +62,7 @@ Zoom might be a good fit if:
 	out of the box (including custom types, slices, maps, complex types, and embedded structs),
 	provides tools for making multi-command transactions easier, and of course, provides the
 	ability to run queries.
-3. **You want an easy-to-use datastore.** Zoom has a simple API and is arguable easier to
+3. **You want an easy-to-use datastore.** Zoom has a simple API and is arguably easier to
 	use than some ORMs. For example, it doesn't require database migrations and instead builds
 	up a schema based on your struct types. Zoom also does not require any knowledge of Redis
 	in order to use effectively. Just connect it to a database and you're good to go!
@@ -85,7 +85,7 @@ Installation
 
 Zoom is powered by Redis and needs to connect to a Redis database. You can install Redis on the same
 machine that Zoom runs on, connect to a remote database, or even use a Redis-as-a-service provider such
-as Redis To Go, RedisLabs, or Amazon Elasticache.
+as Redis To Go, RedisLabs, Google CLould Redis or Amazon Elasticache.
 
 If you need to install Redis, see the [installation instructions](http://redis.io/download) on the official
 Redis website.
