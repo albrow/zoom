@@ -85,7 +85,7 @@ Installation
 
 Zoom is powered by Redis and needs to connect to a Redis database. You can install Redis on the same
 machine that Zoom runs on, connect to a remote database, or even use a Redis-as-a-service provider such
-as Redis To Go, RedisLabs, Google CLould Redis or Amazon Elasticache.
+as Redis To Go, RedisLabs, Google CLoud Redis or Amazon Elasticache.
 
 If you need to install Redis, see the [installation instructions](http://redis.io/download) on the official
 Redis website.
