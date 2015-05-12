@@ -238,7 +238,7 @@ func modelIds(models []Model) []string {
 // The string is base58 encoded and consists of 4 components:
 //   1. The current UTC unix time with second precision
 //   2. An atomic counter which is always 4 characters long and cycles
-//      through the range of 0 to 11,316,496
+//      through the range of 0 to 11,316,495
 //   3. A unique hardware identifier based on the MAC address of the
 //      current machine
 //   4. A pseudo-randomly generated sequence of 6 characters
@@ -290,7 +290,7 @@ func getHardwareId() string {
 var counter int32 = 0
 
 // getAtomicCounter returns the base58 encoding of a counter which cycles through
-// the values in the range 0 to 11,316,496. This is the range that can be represented
+// the values in the range 0 to 11,316,495. This is the range that can be represented
 // with 4 base58 characters. The returned result will be padded with zeros such that
 // it is always 4 characters long.
 func getAtomicCounter() string {
