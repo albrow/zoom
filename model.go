@@ -14,29 +14,35 @@ import (
 	"strings"
 )
 
-// DefaultData should be embedded in any struct you wish to save.
-// It includes important fields and required methods to implement Model.
-type DefaultData struct {
-	id string
+// RandomId can be embedded in any model struct in order to satisfy
+// the Model interface. The first time the ModelId method is called
+// on an embedded RandomId, it will generate a pseudo-random id which
+// is highly likely to be unique.
+type RandomId struct {
+	Id string
 }
 
-// Model is an interface encapsulating anything that can be saved.
-// Any struct which includes an embedded DefaultData field satisfies
-// the Model interface.
+// Model is an interface encapsulating anything that can be saved and
+// retrieved by Zoom. The only requirement is that a Model must have
+// a getter and a setter for a unique id property.
 type Model interface {
-	Id() string
-	SetId(string)
-	// TODO: add getters and setters for other default fields?
+	ModelId() string
+	SetModelId(string)
 }
 
-// Id returns the id of the model, satisfying the Model interface
-func (d DefaultData) Id() string {
-	return d.id
+// ModelId returns the id of the model, satisfying the Model interface.
+// If r.Id is an empty string, it will generate a pseudo-random id which
+// is highly likely to be unique.
+func (r *RandomId) ModelId() string {
+	if r.Id == "" {
+		r.Id = generateRandomId()
+	}
+	return r.Id
 }
 
-// SetId sets the id of the model, satisfying the Model interface
-func (d *DefaultData) SetId(id string) {
-	d.id = id
+// SetModelId sets the id of the model, satisfying the Model interface
+func (r *RandomId) SetModelId(id string) {
+	r.Id = id
 }
 
 // modelSpec contains parsed information about a particular type of model
@@ -87,8 +93,8 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 	numFields := elem.NumField()
 	for i := 0; i < numFields; i++ {
 		field := elem.Field(i)
-		// Skip the DefaultData field
-		if field.Type == reflect.TypeOf(DefaultData{}) {
+		// Skip the RandomId field
+		if field.Type == reflect.TypeOf(RandomId{}) {
 			continue
 		}
 
@@ -304,7 +310,7 @@ func (mr *modelRef) fieldValue(name string) reflect.Value {
 
 // key returns a key which is used in redis to store the model
 func (mr *modelRef) key() string {
-	return mr.spec.name + ":" + mr.model.Id()
+	return mr.spec.name + ":" + mr.model.ModelId()
 }
 
 // mainHashArgs returns the args for the main hash for this model. Typically

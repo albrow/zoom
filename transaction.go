@@ -230,8 +230,8 @@ func newScanModelHandler(fieldNames []string, mr *modelRef) ReplyHandler {
 		}
 		if len(fieldValues) == 0 {
 			var msg string
-			if mr.model.Id() != "" {
-				msg = fmt.Sprintf("Could not find %s with id = %s", mr.spec.name, mr.model.Id())
+			if mr.model.ModelId() != "" {
+				msg = fmt.Sprintf("Could not find %s with id = %s", mr.spec.name, mr.model.ModelId())
 			} else {
 				msg = fmt.Sprintf("Could not find %s with the given criteria", mr.spec.name)
 			}

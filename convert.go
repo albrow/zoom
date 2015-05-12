@@ -18,7 +18,7 @@ import (
 // scans the value into the fields of mr.model. It expects fieldValues to be the output
 // from an HMGET command from redis, without the field names included. The order of the
 // values in fieldValues must match the order of the corresponding field names. The id
-// field is special and should have the field name "-", which will be set with the SetId
+// field is special and should have the field name "-", which will be set with the SetModelId
 // method. fieldNames should be the actual field names as they appear in the struct definition,
 // not the redis names which may be custom.
 func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) error {
@@ -32,7 +32,7 @@ func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) err
 		if fieldName == "-" {
 			// The Id signified by the field name "-" since that cannot
 			// possibly collide with other field names.
-			mr.model.SetId(string(replyBytes))
+			mr.model.SetModelId(string(replyBytes))
 			continue
 		}
 		fs, found := ms.fieldsByName[fieldName]

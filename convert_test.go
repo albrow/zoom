@@ -36,7 +36,7 @@ func TestConvertInconvertibles(t *testing.T) {
 		StringArray [3]string
 		StringMap   map[string]string
 		IntMap      map[int]int
-		DefaultData
+		RandomId
 	}
 	inconvertiblesModels, err := Register(&inconvertiblesModel{})
 	if err != nil {
@@ -66,7 +66,7 @@ func TestConvertEmbeddedStruct(t *testing.T) {
 
 	type embeddedStructModel struct {
 		embeddable
-		DefaultData
+		RandomId
 	}
 	embededStructModels, err := Register(&embeddedStructModel{})
 	if err != nil {
@@ -88,7 +88,7 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 
 	type embeddedPointerToStructModel struct {
 		*embeddable
-		DefaultData
+		RandomId
 	}
 	embededPointerToStructModels, err := Register(&embeddedPointerToStructModel{})
 	if err != nil {
@@ -116,7 +116,7 @@ func testConvertType(t *testing.T, modelType *ModelType, model Model) {
 	if !ok {
 		t.Fatalf("Unexpected error: Could not convert type %s to Model", modelType.spec.typ.String())
 	}
-	if err := modelType.Find(model.Id(), modelCopy); err != nil {
+	if err := modelType.Find(model.ModelId(), modelCopy); err != nil {
 		t.Errorf("Unexpected error in Find: %s", err.Error())
 	}
 	// Make sure the copy equals the original

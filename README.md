@@ -3,7 +3,7 @@ Zoom
 
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
-Version: 0.9.1
+Version: 0.9.2
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
@@ -157,14 +157,24 @@ Models in Zoom are just structs which implement the `zoom.Model` interface:
 
 ``` go
 type Model interface {
-  Id() string
-  SetId(string)
+  ModelId() string
+  SetModelId(string)
 }
 ```
 
-To clarify, all you have to do to implement the `Model` interface is add getters and setters
-for a unique id property. If you want, you can embed `zoom.DefaultData` to give your model all the
-required methods.
+To clarify, all you have to do to implement the `Model` interface is add a getter and setter
+for a unique id property.
+
+If you want, you can embed `zoom.RandomId` to give your model all the
+required methods. A struct with `zoom.RandomId` embedded will genrate a pseudo-random id for itself
+the first time the `ModelId` method is called iff it does not already have an id. The pseudo-randomly
+generated id consists of the current UTC unix time with second precision, an incremented atomic
+counter, a unique machine identifier, and an additional random string of characters. With ids generated
+this way collisions are extremely unlikely.
+
+Future versions of Zoom may provide additional id implementations out of the box, e.g. one that assigns
+auto-incremented ids. You are also free to write your own id implementation as long as it satisfies the
+interface.
 
 A struct definition serves as a sort of schema for your model. Here's an example of a model for a person:
 
@@ -172,7 +182,7 @@ A struct definition serves as a sort of schema for your model. Here's an example
 type Person struct {
 	 Name string
 	 Age  int
-	 zoom.DefaultData
+	 zoom.RandomId
 }
 ```
 
@@ -180,7 +190,25 @@ Because of the way Zoom uses reflection, all the fields you want to save need to
 any type of field is supported, including custom types, slices, maps, complex types, and embedded
 structs. The only things that are not supported are recursive data structures and functions.
 
-You must also call `zoom.Register` on each model type in your application. `Register` examines the type
+### Customizing Field Names
+
+You can change the name used to store the field in Redis with the `redis:"<name>"` struct tag. So
+for example, if you wanted the fields to be stored as lowercase fields in redis, you could use the
+following struct definition:
+
+``` go
+type Person struct {
+	 Name string    `redis:"name"`
+	 Age  int       `redis:"age"`
+	 zoom.RandomId
+}
+```
+
+If you don't want a field to be saved in Redis at all, you can use the special struct tag `redis:"-"`.
+
+### Registering Models
+
+You must call `zoom.Register` on each model type in your application. `Register` examines the type
 and uses reflection to build up an internal schema. You only need to do this once per type.
 
 ``` go
@@ -195,7 +223,6 @@ if err != nil {
 saving, deleting, and querying models of that type. Convention is to name the `*ModelType` the plural
 of the corresponding registered type (e.g. "People"), but it's just a variable so you can name it
 whatever you want.
-
 
 ### Saving Models
 
@@ -212,12 +239,7 @@ if err := People.Save(p); err != nil {
 
 When you call `Save`, Zoom converts all the fields of the model into a format suitable for Redis and stores them
 as a Redis hash. There is a wiki page describing
-[how zoom works under the hood](https://github.com/albrow/zoom/wiki/Under-the-Hood) in more detail. If the
-model you are saving does not already have an id, Zoom will mutate the model by generating and assigning one via
-the `SetId` method. Ids assigned by Zoom have two components: the current unix time with millisecond precision and
-a randomly generated 16-character string. When ids are generated this way, collisions are still possible, but they
-are very, very unlikely. If you are not comfortable with the chance for collisions, you can write your own `Id`
-and `SetId` methods which do something different (e.g. auto-increment).
+[how zoom works under the hood](https://github.com/albrow/zoom/wiki/Under-the-Hood) in more detail.
 
 ### Finding a Single Model
 

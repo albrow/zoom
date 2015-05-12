@@ -26,7 +26,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 	// The set of ids will contain three valid ids and two invalid ones
 	ids := []string{}
 	for _, model := range models[:3] {
-		ids = append(ids, model.Id())
+		ids = append(ids, model.ModelId())
 	}
 	ids = append(ids, "foo", "bar")
 	tempSetKey := "testModelIds"
@@ -53,21 +53,21 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 
 	// Make sure the first three models were deleted
 	for _, model := range models[:3] {
-		modelKey, err := testModels.ModelKey(model.Id())
+		modelKey, err := testModels.ModelKey(model.ModelId())
 		if err != nil {
 			t.Errorf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, testModels.AllIndexKey(), model.Id())
+		expectSetDoesNotContain(t, testModels.AllIndexKey(), model.ModelId())
 	}
 	// Make sure the last two models were not deleted
 	for _, model := range models[3:] {
-		modelKey, err := testModels.ModelKey(model.Id())
+		modelKey, err := testModels.ModelKey(model.ModelId())
 		if err != nil {
 			t.Errorf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyExists(t, modelKey)
-		expectSetContains(t, testModels.AllIndexKey(), model.Id())
+		expectSetContains(t, testModels.AllIndexKey(), model.ModelId())
 	}
 }
 
@@ -78,7 +78,7 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	// Register a new model type with an indexed string field
 	type stringIndexModel struct {
 		String string `zoom:"index"`
-		DefaultData
+		RandomId
 	}
 	stringIndexModels, err := Register(&stringIndexModel{})
 	if err != nil {
@@ -89,11 +89,11 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	model := &stringIndexModel{
 		String: "foo",
 	}
-	model.SetId("testId")
+	model.SetModelId("testId")
 
 	// Run the script before saving the hash, to make sure it does not cause an error
 	tx := NewTransaction()
-	tx.deleteStringIndex(stringIndexModels.Name(), model.Id(), "String")
+	tx.deleteStringIndex(stringIndexModels.Name(), model.ModelId(), "String")
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
@@ -101,7 +101,7 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	// Set the field value in the main hash
 	conn := NewConn()
 	defer conn.Close()
-	modelKey, _ := stringIndexModels.ModelKey(model.Id())
+	modelKey, _ := stringIndexModels.ModelKey(model.ModelId())
 	if _, err := conn.Do("HSET", modelKey, "String", model.String); err != nil {
 		t.Errorf("Unexpected error in HSET")
 	}
@@ -111,14 +111,14 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error in FieldIndexKey: %s", err.Error())
 	}
-	member := model.String + " " + model.Id()
+	member := model.String + " " + model.ModelId()
 	if _, err := conn.Do("ZADD", fieldIndexKey, 0, member); err != nil {
 		t.Fatalf("Unexpected error in ZADD: %s", err.Error())
 	}
 
 	// Run the script again. This time we expect the index to be removed
 	tx = NewTransaction()
-	tx.deleteStringIndex(stringIndexModels.Name(), model.Id(), "String")
+	tx.deleteStringIndex(stringIndexModels.Name(), model.ModelId(), "String")
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}

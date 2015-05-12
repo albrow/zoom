@@ -193,7 +193,7 @@ func BenchmarkDelete(b *testing.B) {
 			b.Fatal(err)
 		}
 		b.StartTimer()
-		if _, err := testModels.Delete(models[0].Id()); err != nil {
+		if _, err := testModels.Delete(models[0].ModelId()); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -217,7 +217,7 @@ func BenchmarkDelete100(b *testing.B) {
 		t := NewTransaction()
 		for _, model := range models {
 			deleted := false
-			t.Delete(testModels, model.Id(), &deleted)
+			t.Delete(testModels, model.ModelId(), &deleted)
 		}
 		if err := t.Exec(); err != nil {
 			b.Fatal(err)

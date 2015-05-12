@@ -10,10 +10,14 @@ package zoom
 import (
 	"fmt"
 	"github.com/dchest/uniuri"
+	"github.com/tv42/base58"
+	"hash/crc32"
+	"math/big"
 	"math/cmplx"
 	"math/rand"
+	"net"
 	"reflect"
-	"strconv"
+	"sync/atomic"
 	"time"
 )
 
@@ -26,7 +30,14 @@ var (
 	// NULL character and is the lowest possible value (in terms of codepoint, which is also
 	// how redis sorts strings) for an ASCII character.
 	nullString = string([]byte{byte(0)})
+	// hardwareId is a unique id for the current machine. Right now it uses the MAC address.
+	hardwareId = ""
 )
+
+func init() {
+	// Set chars to the 58 non-ambiguous characters use by base58 encoding
+	uniuri.StdChars = []byte("123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
+}
 
 // Models converts in to []Model. It will panic if the underlying type
 // of in is not a slice of some concrete type which implements Model.
@@ -218,22 +229,94 @@ func convertBoolToInt(b bool) int {
 func modelIds(models []Model) []string {
 	results := make([]string, len(models))
 	for i, m := range models {
-		results[i] = m.Id()
+		results[i] = m.ModelId()
 	}
 	return results
 }
 
-// generateRandomId generates a random string that is more or less
-// garunteed to be unique. Used as Ids for records where an Id is
-// not otherwise provided.
+// generateRandomId generates a pseudo-random string that is highly likely to be unique.
+// The string is base58 encoded and consists of 4 components:
+//   1. The current UTC unix time with second precision
+//   2. An atomic counter which is always 4 characters long and cycles
+//      through the range of 0 to 11,316,496
+//   3. A unique hardware identifier based on the MAC address of the
+//      current machine
+//   4. A pseudo-randomly generated sequence of 6 characters
 func generateRandomId() string {
-	timeInt := time.Now().Unix()
-	timeString := strconv.FormatInt(timeInt, 36)
-	randomString := uniuri.NewLen(16)
-	return randomString + timeString
+	// str := getTimeString() + getAtomicCounter() + getHardwareId() + uniuri.NewLen(4)
+	// fmt.Println(str)
+	// return str
+	return getTimeString() + getAtomicCounter() + getHardwareId() + uniuri.NewLen(6)
 }
 
-// randomInt returns a psuedo-random int between the minimum and maximum
+// getTimeString returns the current UTC unix time with second precision encoded
+// with base58 encoding.
+func getTimeString() string {
+	timeInt := time.Now().UTC().Unix()
+	timeBytes := base58.EncodeBig(nil, big.NewInt(timeInt))
+	return string(timeBytes)
+}
+
+// getHardwareId returns a unique identifier for the current machine. It does this
+// by iterating through the network interfaces of the machine and picking the first
+// one that has a non-empty hardware (MAC) address. Then it takes the crc32 checksum
+// of the MAC address and encodes it in base58 encoding. getHardwareId caches results,
+// so subsequent calls will return the previously calculated result. If no MAC address
+// could be found, the function will use "0" as the MAC address. This is not ideal, but
+// generateRandomId uses other means to try and avoid collisions.
+func getHardwareId() string {
+	if hardwareId != "" {
+		return hardwareId
+	}
+	address := ""
+	inters, err := net.Interfaces()
+	if err == nil {
+		for _, inter := range inters {
+			if inter.HardwareAddr.String() != "" {
+				address = inter.HardwareAddr.String()
+				break
+			}
+		}
+	}
+	if address == "" {
+		address = "0"
+	}
+	check32 := crc32.ChecksumIEEE([]byte(address))
+	id58 := base58.EncodeBig(nil, big.NewInt(int64(check32)))
+	hardwareId = string(id58)
+	return hardwareId
+}
+
+var counter int32 = 0
+
+// getAtomicCounter returns the base58 encoding of a counter which cycles through
+// the values in the range 0 to 11,316,496. This is the range that can be represented
+// with 4 base58 characters. The returned result will be padded with zeros such that
+// it is always 4 characters long.
+func getAtomicCounter() string {
+	atomic.AddInt32(&counter, 1)
+	if counter > 58*58*58*58-1 {
+		// Reset the counter if we're beyond what we
+		// can represent with 4 base58 characters
+		atomic.StoreInt32(&counter, 0)
+	}
+	counterBytes := base58.EncodeBig(nil, big.NewInt(int64(counter)))
+	counterStr := string(counterBytes)
+	switch len(counterStr) {
+	case 0:
+		return "0000"
+	case 1:
+		return "000" + counterStr
+	case 2:
+		return "00" + counterStr
+	case 3:
+		return "0" + counterStr
+	default:
+		return counterStr[0:4]
+	}
+}
+
+// randomInt returns a pseudo-random int between the minimum and maximum
 // possible values.
 func randomInt() int {
 	return rand.Int()
