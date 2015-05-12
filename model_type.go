@@ -149,10 +149,6 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 		t.setError(fmt.Errorf("zoom: Error in Save or Transaction.Save: %s", err.Error()))
 		return
 	}
-	// Generate id if needed
-	if model.Id() == "" {
-		model.SetId(generateRandomId())
-	}
 	// Create a modelRef and start a transaction
 	mr := &modelRef{
 		spec:  mt.spec,
@@ -175,7 +171,7 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 		t.Command("HMSET", hashArgs, nil)
 	}
 	// Add the model id to the set of all models of this type
-	t.Command("SADD", redis.Args{mt.AllIndexKey(), model.Id()}, nil)
+	t.Command("SADD", redis.Args{mt.AllIndexKey(), model.ModelId()}, nil)
 }
 
 // saveFieldIndexes adds commands to the transaction for saving the indexes
@@ -207,7 +203,7 @@ func (t *Transaction) saveNumericIndex(mr *modelRef, fs *fieldSpec) {
 	if err != nil {
 		t.setError(err)
 	}
-	t.Command("ZADD", redis.Args{indexKey, score, mr.model.Id()}, nil)
+	t.Command("ZADD", redis.Args{indexKey, score, mr.model.ModelId()}, nil)
 }
 
 // saveBooleanIndex adds commands to the transaction for saving a boolean
@@ -222,14 +218,14 @@ func (t *Transaction) saveBooleanIndex(mr *modelRef, fs *fieldSpec) {
 	if err != nil {
 		t.setError(err)
 	}
-	t.Command("ZADD", redis.Args{indexKey, score, mr.model.Id()}, nil)
+	t.Command("ZADD", redis.Args{indexKey, score, mr.model.ModelId()}, nil)
 }
 
 // saveStringIndex adds commands to the transaction for saving a string
 // index on the given field. This includes removing the old index (if any).
 func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 	// Remove the old index (if any)
-	t.deleteStringIndex(mr.spec.name, mr.model.Id(), fs.redisName)
+	t.deleteStringIndex(mr.spec.name, mr.model.ModelId(), fs.redisName)
 	fieldValue := mr.fieldValue(fs.name)
 	for fieldValue.Kind() == reflect.Ptr {
 		if fieldValue.IsNil() {
@@ -237,7 +233,7 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 		}
 		fieldValue = fieldValue.Elem()
 	}
-	member := fieldValue.String() + nullString + mr.model.Id()
+	member := fieldValue.String() + nullString + mr.model.ModelId()
 	indexKey, err := mr.spec.fieldIndexKey(fs.name)
 	if err != nil {
 		t.setError(err)
@@ -271,7 +267,7 @@ func (t *Transaction) Find(mt *ModelType, id string, model Model) {
 		t.setError(fmt.Errorf("zoom: Error in Find or Transaction.Find: %s", err.Error()))
 		return
 	}
-	model.SetId(id)
+	model.SetModelId(id)
 	mr := &modelRef{
 		spec:  mt.spec,
 		model: model,

@@ -775,19 +775,19 @@ func newModelSorter(models []*indexedTestModel, fieldName string) *modelSorter {
 			if m1.Int == m2.Int {
 				// Redis sorts by member if the scores are equal.
 				// Which means all models have a secondary order: the Id field.
-				return m1.Id() < m2.Id()
+				return m1.ModelId() < m2.ModelId()
 			}
 			return m1.Int < m2.Int
 		},
 		"String": func(m1, m2 *indexedTestModel) bool {
 			if m1.String == m2.String {
-				return m1.Id() < m2.Id()
+				return m1.ModelId() < m2.ModelId()
 			}
 			return m1.String < m2.String
 		},
 		"Bool": func(m1, m2 *indexedTestModel) bool {
 			if m1.Bool == m2.Bool {
-				return m1.Id() < m2.Id()
+				return m1.ModelId() < m2.ModelId()
 			}
 			return m1.Bool == false && m2.Bool == true
 		},
@@ -917,8 +917,8 @@ func applyIncludes(models []*indexedTestModel, includes []string) []*indexedTest
 		origVal := reflect.ValueOf(m).Elem()
 		for fieldIndex := 0; fieldIndex < origVal.NumField(); fieldIndex++ {
 			fieldType := origVal.Type().Field(fieldIndex)
-			if fieldType.Name == "DefaultData" {
-				// DefaultData is a special case
+			if fieldType.Name == "RandomId" {
+				// RandomId is a special case
 				resVal.Field(fieldIndex).Set(origVal.Field(fieldIndex))
 			}
 			if stringSliceContains(includes, fieldType.Name) {
@@ -1030,8 +1030,8 @@ func applyExcludes(models []*indexedTestModel, excludes []string) []*indexedTest
 		origVal := reflect.ValueOf(m).Elem()
 		for fieldIndex := 0; fieldIndex < origVal.NumField(); fieldIndex++ {
 			fieldType := origVal.Type().Field(fieldIndex)
-			if fieldType.Name == "DefaultData" {
-				// DefaultData is a special case
+			if fieldType.Name == "RandomId" {
+				// RandomId is a special case
 				resVal.Field(fieldIndex).Set(origVal.Field(fieldIndex))
 			}
 			if !stringSliceContains(excludes, fieldType.Name) {

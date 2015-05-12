@@ -20,7 +20,7 @@ func TestRedisIgnoreOption(t *testing.T) {
 
 	type ignoredFieldModel struct {
 		Attr string `redis:"-"`
-		DefaultData
+		RandomId
 	}
 	ignoredFieldModels, err := Register(&ignoredFieldModel{})
 	if err != nil {
@@ -47,7 +47,7 @@ func TestRedisIgnoreOption(t *testing.T) {
 	// Check the database to make sure the field is not there
 	conn := NewConn()
 	defer conn.Close()
-	key, _ := ignoredFieldModels.ModelKey(model.Id())
+	key, _ := ignoredFieldModels.ModelKey(model.ModelId())
 	gotAttr, err := redis.String(conn.Do("HGET", key, "Attr"))
 	if err != nil && err != redis.ErrNil {
 		t.Errorf("Unexpected error in HGET command: %s", err.Error())
@@ -64,7 +64,7 @@ func TestRedisNameOption(t *testing.T) {
 
 	type customFieldModel struct {
 		Attr string `redis:"a"`
-		DefaultData
+		RandomId
 	}
 	customFieldModels, err := Register(&customFieldModel{})
 	if err != nil {
@@ -89,7 +89,7 @@ func TestRedisNameOption(t *testing.T) {
 	if err := customFieldModels.Save(model); err != nil {
 		t.Errorf("Unexpected error in Save: %s", err.Error())
 	}
-	modelKey, _ := customFieldModels.ModelKey(model.Id())
+	modelKey, _ := customFieldModels.ModelKey(model.ModelId())
 	expectFieldEquals(t, modelKey, "a", "test")
 }
 
@@ -99,7 +99,7 @@ func TestInvalidOptionThrowsError(t *testing.T) {
 
 	type invalid struct {
 		Attr string `zoom:"index,poop"`
-		DefaultData
+		RandomId
 	}
 	if _, err := Register(&invalid{}); err == nil {
 		t.Error("Expected error when registering struct with invalid tag")
@@ -162,7 +162,7 @@ func TestDeleteIndexedPrimativesModel(t *testing.T) {
 	if err := indexedPrimativesModels.Save(model); err != nil {
 		t.Fatalf("Unexpected error in Save: %s", err.Error())
 	}
-	if _, err := indexedPrimativesModels.Delete(model.Id()); err != nil {
+	if _, err := indexedPrimativesModels.Delete(model.ModelId()); err != nil {
 		t.Fatalf("Unexpected error in Delete: %s", err.Error())
 	}
 
@@ -188,7 +188,7 @@ func TestDeleteIndexedPointersModel(t *testing.T) {
 	if err := indexedPointersModels.Save(model); err != nil {
 		t.Fatalf("Unexpected error in Save: %s", err.Error())
 	}
-	if _, err := indexedPointersModels.Delete(model.Id()); err != nil {
+	if _, err := indexedPointersModels.Delete(model.ModelId()); err != nil {
 		t.Fatalf("Unexpected error in Delete: %s", err.Error())
 	}
 
@@ -213,7 +213,7 @@ func TestIndexAndCustomName(t *testing.T) {
 		Int    int    `zoom:"index" redis:"integer"`
 		String string `zoom:"index" redis:"str"`
 		Bool   bool   `zoom:"index" redis:"boolean"`
-		DefaultData
+		RandomId
 	}
 	customIndexModels, err := Register(&customIndexModel{})
 	if err != nil {

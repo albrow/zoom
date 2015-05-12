@@ -32,7 +32,7 @@ func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) err
 		if fieldName == "-" {
 			// The Id signified by the field name "-" since that cannot
 			// possibly collide with other field names.
-			mr.model.SetId(string(replyBytes))
+			mr.model.SetModelId(string(replyBytes))
 			continue
 		}
 		fs, found := ms.fieldsByName[fieldName]

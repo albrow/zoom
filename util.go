@@ -218,7 +218,7 @@ func convertBoolToInt(b bool) int {
 func modelIds(models []Model) []string {
 	results := make([]string, len(models))
 	for i, m := range models {
-		results[i] = m.Id()
+		results[i] = m.ModelId()
 	}
 	return results
 }
