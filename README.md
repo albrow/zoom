@@ -164,8 +164,8 @@ type Model interface {
 
 To clarify, all you have to do to implement the `Model` interface is add a getter and setter
 for a unique id property. If you want, you can embed `zoom.RandomId` to give your model all the
-required methods. A struct with `zoom.RandomId` embedded will genrate a psuedo-random id for itself
-the first time the `ModelId` method is called iff it does not already have an id. The psuedo-randomly
+required methods. A struct with `zoom.RandomId` embedded will genrate a pseudo-random id for itself
+the first time the `ModelId` method is called iff it does not already have an id. The pseudo-randomly
 generated id consists of a machine identifier, an incremented atomic counter, the current unix time
 with millisecond precision, and an additional random string of characters. With ids generated this way
 collisions are extremely unlikely.

@@ -124,9 +124,8 @@ func (mt *ModelType) FieldIndexKey(fieldName string) (string, error) {
 
 // Save writes a model (a struct which satisfies the Model interface) to the redis
 // database. Save throws an error if the type of model does not match the registered
-// ModelType. If the Id field of the struct is empty, Save will mutate the struct by
-// setting the Id. To make a struct satisfy the Model interface, you can embed
-// zoom.DefaultData.
+// ModelType. To make a struct satisfy the Model interface, you can embed
+// zoom.RandomId, which will generate pseudo-random ids for each model.
 func (mt *ModelType) Save(model Model) error {
 	t := NewTransaction()
 	t.Save(mt, model)
@@ -139,11 +138,10 @@ func (mt *ModelType) Save(model Model) error {
 // Save writes a model (a struct which satisfies the Model interface) to the redis
 // database inside an existing transaction. save will set the err property of the
 // transaction if the type of model does not matched the registered ModelType, which
-// will cause exec to fail immediately and return the error. If the Id field of the
-// struct is empty, save will mutate the struct by setting the Id. To make a struct
-// satisfy the Model interface, you can embed zoom.DefaultData. Any errors encountered
-// will be added to the transaction and returned as an error when the transaction is
-// executed.
+// will cause exec to fail immediately and return the error. To make a struct satisfy
+// the Model interface, you can embed zoom.RandomId, which will generate pseudo-random
+// ids for each model. Any errors encountered will be added to the transaction and
+// returned as an error when the transaction is executed.
 func (t *Transaction) Save(mt *ModelType, model Model) {
 	if err := mt.checkModelType(model); err != nil {
 		t.setError(fmt.Errorf("zoom: Error in Save or Transaction.Save: %s", err.Error()))

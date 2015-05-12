@@ -16,7 +16,7 @@ import (
 
 // RandomId can be embedded in any model struct in order to satisfy
 // the Model interface. The first time the ModelId method is called
-// on an embedded RandomId, it will generate a psuedo-random id which
+// on an embedded RandomId, it will generate a pseudo-random id which
 // is highly likely to be unique.
 type RandomId struct {
 	Id string
@@ -31,7 +31,7 @@ type Model interface {
 }
 
 // ModelId returns the id of the model, satisfying the Model interface.
-// If r.Id is an empty string, it will generate a psuedo-random id which
+// If r.Id is an empty string, it will generate a pseudo-random id which
 // is highly likely to be unique.
 func (r *RandomId) ModelId() string {
 	if r.Id == "" {

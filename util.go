@@ -233,7 +233,7 @@ func generateRandomId() string {
 	return randomString + timeString
 }
 
-// randomInt returns a psuedo-random int between the minimum and maximum
+// randomInt returns a pseudo-random int between the minimum and maximum
 // possible values.
 func randomInt() int {
 	return rand.Int()
