@@ -163,12 +163,14 @@ type Model interface {
 ```
 
 To clarify, all you have to do to implement the `Model` interface is add a getter and setter
-for a unique id property. If you want, you can embed `zoom.RandomId` to give your model all the
+for a unique id property.
+
+If you want, you can embed `zoom.RandomId` to give your model all the
 required methods. A struct with `zoom.RandomId` embedded will genrate a pseudo-random id for itself
 the first time the `ModelId` method is called iff it does not already have an id. The pseudo-randomly
-generated id consists of a machine identifier, an incremented atomic counter, the current unix time
-with millisecond precision, and an additional random string of characters. With ids generated this way
-collisions are extremely unlikely.
+generated id consists of the current UTC unix time with second precision, an incremented atomic
+counter, a unique machine identifier, and an additional random string of characters. With ids generated
+this way collisions are extremely unlikely.
 
 Future versions of Zoom may provide additional id implementations out of the box, e.g. one that assigns
 auto-incremented ids. You are also free to write your own id implementation as long as it satisfies the
