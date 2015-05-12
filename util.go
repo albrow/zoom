@@ -30,7 +30,7 @@ var (
 	// NULL character and is the lowest possible value (in terms of codepoint, which is also
 	// how redis sorts strings) for an ASCII character.
 	nullString = string([]byte{byte(0)})
-	// hardwareId is a unique id for the current machine. Right now it uses the MAC address.
+	// hardwareId is a unique id for the current machine. Right now it uses the crc32 checksum of the MAC address.
 	hardwareId = ""
 )
 
