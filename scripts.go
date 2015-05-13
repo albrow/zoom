@@ -10,8 +10,8 @@ package zoom
 
 import (
 	"github.com/garyburd/redigo/redis"
+	"go/build"
 	"io/ioutil"
-	"os"
 	"path/filepath"
 )
 
@@ -23,12 +23,17 @@ var (
 )
 
 var (
-	scriptsPath = filepath.Join(os.Getenv("GOPATH"), "src", "github.com", "albrow", "zoom", "scripts")
+	scriptsPath string
 )
 
 // initScripts will parse all the lua script files in scriptsPath and assign them
 // to the variables above. It must be run before any scripts are executed.
 func initScripts() error {
+	pkg, err := build.Import("github.com/albrow/zoom", "", build.FindOnly)
+	if err != nil {
+		return err
+	}
+	scriptsPath = filepath.Join(pkg.Dir, "scripts")
 	scriptsToParse := []struct {
 		script   **redis.Script
 		filename string
