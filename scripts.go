@@ -9,10 +9,11 @@
 package zoom
 
 import (
-	"github.com/garyburd/redigo/redis"
-	"io/ioutil"
 	"os"
+	"path"
 	"path/filepath"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 var (
@@ -57,8 +58,7 @@ func initScripts() error {
 	}
 	for _, s := range scriptsToParse {
 		// Parse the file corresponding to this script
-		fullPath := filepath.Join(scriptsPath, s.filename)
-		src, err := ioutil.ReadFile(fullPath)
+		src, err := Asset(path.Join("scripts", s.filename))
 		if err != nil {
 			return err
 		}
