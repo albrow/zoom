@@ -13,10 +13,10 @@
 -- and then stores them destKey with the appropriate scores in ascending order.
 
 -- Assign keys to variables for easy access
-local setKey = KEYS[1]
-local destKey = KEYS[2]
-local min = ARGV[1]
-local max = ARGV[2]
+local setKey = ARGV[1]
+local destKey = ARGV[2]
+local min = ARGV[3]
+local max = ARGV[4]
 -- Get all the members (value+id pairs) from the sorted set
 local members = redis.call('ZRANGEBYLEX', setKey, min, max)
 if #members > 0 then

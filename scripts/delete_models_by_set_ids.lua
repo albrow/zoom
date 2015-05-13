@@ -10,8 +10,8 @@
 -- given set.
 
 -- Assign keys to variables for easy access
-local setKey = KEYS[1]
-local modelName = ARGV[1]
+local setKey = ARGV[1]
+local modelName = ARGV[2]
 -- Get all the ids from the set name
 local ids = redis.call('SMEMBERS', setKey)
 local count = 0
