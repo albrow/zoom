@@ -113,9 +113,7 @@ also call `zoom.Close` when your application exits, so it's a good idea to use d
 
 ``` go
 func main() {
-	if err := zoom.Init(nil); err != nil {
-		// handle error
-	}
+	zoom.Init(nil)
 	defer func() {
 		if err := zoom.Close(); err != nil {
 			// handle error
