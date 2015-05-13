@@ -13,13 +13,9 @@ package zoom
 // a Configuration struct as an argument. Any zero values in the configuration
 // will fallback to their default values. Init should be called once during
 // application startup.
-func Init(config *Configuration) error {
+func Init(config *Configuration) {
 	config = parseConfig(config)
 	initPool(config.Network, config.Address, config.Database, config.Password)
-	if err := initScripts(); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Close closes the connection pool and shuts down the Zoom library.

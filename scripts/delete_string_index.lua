@@ -10,6 +10,8 @@
 -- model hash, and if there is, removes the model from the index on the given field.
 -- NOTE: This script *must* be called before the main hash for the model is updated/deleted.
 
+-- IMPORTANT: If you edit this file, you must run go generate . to rewrite ../scripts.go
+
 -- Assign keys to variables for easy access
 local modelName = ARGV[1]
 local modelId = ARGV[2]
