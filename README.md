@@ -3,7 +3,7 @@ Zoom
 
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
-Version: 0.9.2
+Version: 0.9.3
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
@@ -113,9 +113,7 @@ also call `zoom.Close` when your application exits, so it's a good idea to use d
 
 ``` go
 func main() {
-	if err := zoom.Init(nil); err != nil {
-		// handle error
-	}
+	zoom.Init(nil)
 	defer func() {
 		if err := zoom.Close(); err != nil {
 			// handle error

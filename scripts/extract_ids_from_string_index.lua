@@ -12,11 +12,13 @@
 -- The script then extracts the ids from setKey using the given min and max arguments,
 -- and then stores them destKey with the appropriate scores in ascending order.
 
+-- IMPORTANT: If you edit this file, you must run go generate . to rewrite ../scripts.go
+
 -- Assign keys to variables for easy access
-local setKey = KEYS[1]
-local destKey = KEYS[2]
-local min = ARGV[1]
-local max = ARGV[2]
+local setKey = ARGV[1]
+local destKey = ARGV[2]
+local min = ARGV[3]
+local max = ARGV[4]
 -- Get all the members (value+id pairs) from the sorted set
 local members = redis.call('ZRANGEBYLEX', setKey, min, max)
 if #members > 0 then

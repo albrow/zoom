@@ -31,13 +31,11 @@ var setUpOnce = sync.Once{}
 // testingSetUp
 func testingSetUp() {
 	setUpOnce.Do(func() {
-		if err := Init(&Configuration{
+		Init(&Configuration{
 			Address:  *address,
 			Network:  *network,
 			Database: *database,
-		}); err != nil {
-			panic(err)
-		}
+		})
 		checkDatabaseEmpty()
 		registerTestingTypes()
 	})
