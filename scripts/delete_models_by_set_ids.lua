@@ -9,6 +9,8 @@
 -- set. It returns the number of models that were deleted. It does not delete the
 -- given set.
 
+-- IMPORTANT: If you edit this file, you must run go generate . to rewrite ../scripts.go
+
 -- Assign keys to variables for easy access
 local setKey = ARGV[1]
 local modelName = ARGV[2]

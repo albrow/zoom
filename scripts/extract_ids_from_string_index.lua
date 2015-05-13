@@ -12,6 +12,8 @@
 -- The script then extracts the ids from setKey using the given min and max arguments,
 -- and then stores them destKey with the appropriate scores in ascending order.
 
+-- IMPORTANT: If you edit this file, you must run go generate . to rewrite ../scripts.go
+
 -- Assign keys to variables for easy access
 local setKey = ARGV[1]
 local destKey = ARGV[2]
