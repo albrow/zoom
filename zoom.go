@@ -16,7 +16,7 @@ package zoom
 func Init(config *Configuration) error {
 	config = parseConfig(config)
 	initPool(config.Network, config.Address, config.Database, config.Password)
-	if err := initScripts(); err != nil {
+	if err := initScripts(config.ScriptsPath); err != nil {
 		return err
 	}
 	return nil
