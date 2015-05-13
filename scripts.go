@@ -9,10 +9,10 @@
 package zoom
 
 import (
-	"github.com/garyburd/redigo/redis"
 	"io/ioutil"
-	"os"
 	"path/filepath"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 var (
@@ -22,13 +22,9 @@ var (
 	extractIdsFromStringIndexScript *redis.Script
 )
 
-var (
-	scriptsPath = filepath.Join(os.Getenv("GOPATH"), "src", "github.com", "albrow", "zoom", "scripts")
-)
-
 // initScripts will parse all the lua script files in scriptsPath and assign them
 // to the variables above. It must be run before any scripts are executed.
-func initScripts() error {
+func initScripts(scriptsPath string) error {
 	scriptsToParse := []struct {
 		script   **redis.Script
 		filename string

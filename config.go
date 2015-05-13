@@ -1,13 +1,23 @@
 package zoom
 
+import (
+	"os"
+	"path/filepath"
+)
+
+var (
+	scriptsPath = filepath.Join(os.Getenv("GOPATH"), "src", "github.com", "albrow", "zoom", "scripts")
+)
+
 // defaultConfiguration holds the default values for each config option
 // if the zero value is provided in the input configuration, the value
 // will fallback to the default value
 var defaultConfiguration = Configuration{
-	Address:  "localhost:6379",
-	Network:  "tcp",
-	Database: 0,
-	Password: "",
+	Address:     "localhost:6379",
+	Network:     "tcp",
+	Database:    0,
+	Password:    "",
+	ScriptsPath: "",
 }
 
 // parseConfig returns a well-formed configuration struct.
@@ -18,14 +28,22 @@ func parseConfig(passedConfig *Configuration) *Configuration {
 	if passedConfig == nil {
 		return &defaultConfiguration
 	}
+
 	// copy the passedConfig
 	newConfig := *passedConfig
+
 	if newConfig.Address == "" {
 		newConfig.Address = defaultConfiguration.Address
 	}
+
 	if newConfig.Network == "" {
 		newConfig.Network = defaultConfiguration.Network
 	}
+
+	if newConfig.ScriptsPath == "" {
+		newConfig.ScriptsPath = scriptsPath
+	}
+
 	// since the zero value for int is 0, we can skip config.Database
 	// since the zero value for string is "", we can skip config.Address
 	return &newConfig
@@ -44,4 +62,8 @@ type Configuration struct {
 	// every connection will use the AUTH command during initialization
 	// to authenticate with the database. Default: ""
 	Password string
+
+	// ScriptsPath for location of lua scripts to load
+	// Default: $GOPATH/src/github.com/albrow/zoom/scripts
+	ScriptsPath string
 }
