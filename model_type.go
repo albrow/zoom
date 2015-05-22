@@ -15,18 +15,12 @@ import (
 	"strings"
 )
 
-var (
-	// modelTypeToSpec maps a registered model type to a modelSpec
-	modelTypeToSpec map[reflect.Type]*modelSpec = map[reflect.Type]*modelSpec{}
-	// modelNameToSpec maps a registered model name to a modelSpec
-	modelNameToSpec map[string]*modelSpec = map[string]*modelSpec{}
-)
-
 // ModelType represents a specific registered type of model. It has methods
 // for saving, finding, and deleting models of a specific type. Use the
 // Register and RegisterName functions to register new types.
 type ModelType struct {
 	spec *modelSpec
+	pool *Pool
 }
 
 // Name returns the name for the given ModelType. The name is a unique
@@ -44,9 +38,9 @@ func (mt *ModelType) Name() string {
 // default the name is just its type without the package prefix or dereference
 // operators. So for example, the default name corresponding to *models.User
 // would be "User". See RegisterName if you need to specify a custom name.
-func Register(model Model) (*ModelType, error) {
+func (p *Pool) Register(model Model) (*ModelType, error) {
 	defaultName := getDefaultName(reflect.TypeOf(model))
-	return RegisterName(defaultName, model)
+	return p.RegisterName(defaultName, model)
 }
 
 // getDefaultName returns the default name for the given type, which is
@@ -67,13 +61,13 @@ func getDefaultName(typ reflect.Type) string {
 // a prefix for all models of this type that are stored in the
 // database. Both the name and the model must be unique, i.e., not
 // already registered. The type of model must be a pointer to a struct.
-func RegisterName(name string, model Model) (*ModelType, error) {
+func (p *Pool) RegisterName(name string, model Model) (*ModelType, error) {
 	// Make sure the name and type have not been previously registered
 	typ := reflect.TypeOf(model)
 	switch {
-	case typeIsRegistered(typ):
+	case p.typeIsRegistered(typ):
 		return nil, fmt.Errorf("zoom: Error in Register or RegisterName: The type %T has already been registered.", model)
-	case nameIsRegistered(name):
+	case p.nameIsRegistered(name):
 		return nil, fmt.Errorf("zoom: Error in Register or RegisterName: The name %s has already been registered.", name)
 	case !typeIsPointerToStruct(typ):
 		return nil, fmt.Errorf("zoom: Register and RegisterName require a pointer to a struct as an argument. Got type %T", model)
@@ -85,20 +79,23 @@ func RegisterName(name string, model Model) (*ModelType, error) {
 		return nil, err
 	}
 	spec.name = name
-	modelTypeToSpec[typ] = spec
-	modelNameToSpec[name] = spec
+	p.modelTypeToSpec[typ] = spec
+	p.modelNameToSpec[name] = spec
 
 	// Return the ModelType
-	return &ModelType{spec}, nil
+	return &ModelType{
+		spec: spec,
+		pool: p,
+	}, nil
 }
 
-func typeIsRegistered(typ reflect.Type) bool {
-	_, found := modelTypeToSpec[typ]
+func (p *Pool) typeIsRegistered(typ reflect.Type) bool {
+	_, found := p.modelTypeToSpec[typ]
 	return found
 }
 
-func nameIsRegistered(name string) bool {
-	_, found := modelNameToSpec[name]
+func (p *Pool) nameIsRegistered(name string) bool {
+	_, found := p.modelNameToSpec[name]
 	return found
 }
 
@@ -127,7 +124,7 @@ func (mt *ModelType) FieldIndexKey(fieldName string) (string, error) {
 // ModelType. To make a struct satisfy the Model interface, you can embed
 // zoom.RandomId, which will generate pseudo-random ids for each model.
 func (mt *ModelType) Save(model Model) error {
-	t := NewTransaction()
+	t := mt.pool.NewTransaction()
 	t.Save(mt, model)
 	if err := t.Exec(); err != nil {
 		return err
@@ -246,7 +243,7 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 // with the given id does not exist, if the given model was the wrong type, or
 // if there was a problem connecting to the database.
 func (mt *ModelType) Find(id string, model Model) error {
-	t := NewTransaction()
+	t := mt.pool.NewTransaction()
 	t.Find(mt, id, model)
 	if err := t.Exec(); err != nil {
 		return err
@@ -288,7 +285,7 @@ func (t *Transaction) Find(mt *ModelType, id string, model Model) {
 func (mt *ModelType) FindAll(models interface{}) error {
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
-	t := NewTransaction()
+	t := mt.pool.NewTransaction()
 	t.FindAll(mt, models)
 	if err := t.Exec(); err != nil {
 		return err
@@ -318,7 +315,7 @@ func (t *Transaction) FindAll(mt *ModelType, models interface{}) {
 // Count returns the number of models of the given type that exist in the database.
 // It returns an error if there was a problem connecting to the database.
 func (mt *ModelType) Count() (int, error) {
-	t := NewTransaction()
+	t := mt.pool.NewTransaction()
 	count := 0
 	t.Count(mt, &count)
 	if err := t.Exec(); err != nil {
@@ -341,7 +338,7 @@ func (t *Transaction) Count(mt *ModelType, count *int) {
 // or not the model was found and deleted, and will only return an error
 // if there was a problem connecting to the database.
 func (mt *ModelType) Delete(id string) (bool, error) {
-	t := NewTransaction()
+	t := mt.pool.NewTransaction()
 	deleted := false
 	t.Delete(mt, id, &deleted)
 	if err := t.Exec(); err != nil {
@@ -397,7 +394,7 @@ func (t *Transaction) deleteNumericOrBooleanIndex(fs *fieldSpec, ms *modelSpec, 
 // http://redis.io/topics/transactions. It returns the number of models deleted
 // and an error if there was a problem connecting to the database.
 func (mt *ModelType) DeleteAll() (int, error) {
-	t := NewTransaction()
+	t := mt.pool.NewTransaction()
 	count := 0
 	t.DeleteAll(mt, &count)
 	if err := t.Exec(); err != nil {

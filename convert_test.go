@@ -38,9 +38,9 @@ func TestConvertInconvertibles(t *testing.T) {
 		IntMap      map[int]int
 		RandomId
 	}
-	inconvertiblesModels, err := Register(&inconvertiblesModel{})
+	inconvertiblesModels, err := testPool.Register(&inconvertiblesModel{})
 	if err != nil {
-		t.Errorf("Unexpected error in Register: %s", err.Error())
+		t.Errorf("Unexpected error in testPool.Register: %s", err.Error())
 	}
 	model := &inconvertiblesModel{
 		Complex:     randomComplex(),
@@ -68,9 +68,9 @@ func TestConvertEmbeddedStruct(t *testing.T) {
 		embeddable
 		RandomId
 	}
-	embededStructModels, err := Register(&embeddedStructModel{})
+	embededStructModels, err := testPool.Register(&embeddedStructModel{})
 	if err != nil {
-		t.Errorf("Unexpected error in Register: %s", err.Error())
+		t.Errorf("Unexpected error in testPool.Register: %s", err.Error())
 	}
 	model := &embeddedStructModel{
 		embeddable: embeddable{
@@ -90,9 +90,9 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 		*embeddable
 		RandomId
 	}
-	embededPointerToStructModels, err := Register(&embeddedPointerToStructModel{})
+	embededPointerToStructModels, err := testPool.Register(&embeddedPointerToStructModel{})
 	if err != nil {
-		t.Errorf("Unexpected error in Register: %s", err.Error())
+		t.Errorf("Unexpected error in testPool.Register: %s", err.Error())
 	}
 	model := &embeddedPointerToStructModel{
 		embeddable: &embeddable{

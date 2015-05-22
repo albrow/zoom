@@ -19,7 +19,8 @@ import (
 // (e.g. Filter or Order) and may be executed with a query finisher
 // (e.g. Run or Ids).
 type Query struct {
-	modelSpec *modelSpec
+	modelType *ModelType
+	pool      *Pool
 	tx        *Transaction
 	includes  []string
 	excludes  []string
@@ -33,7 +34,7 @@ type Query struct {
 // String satisfies fmt.Stringer and prints out the query in a format that
 // matches the go code used to declare it.
 func (q *Query) String() string {
-	result := fmt.Sprintf("%s.NewQuery()", q.modelSpec.name)
+	result := fmt.Sprintf("%s.NewQuery()", q.modelType.Name())
 	for _, filter := range q.filters {
 		result += fmt.Sprintf(".%s", filter)
 	}
@@ -145,7 +146,8 @@ var filterOps = map[string]filterOp{
 // execute it.
 func (modelType *ModelType) NewQuery() *Query {
 	return &Query{
-		modelSpec: modelType.spec,
+		modelType: modelType,
+		pool:      modelType.pool,
 	}
 }
 
@@ -185,9 +187,9 @@ func (q *Query) Order(fieldName string) *Query {
 		orderKind = ascendingOrder
 	}
 	// Get the redisName for the given fieldName
-	fs, found := q.modelSpec.fieldsByName[fieldName]
+	fs, found := q.modelType.spec.fieldsByName[fieldName]
 	if !found {
-		err := fmt.Errorf("zoom: error in Query.Order: could not find field %s in type %s", fieldName, q.modelSpec.typ.String())
+		err := fmt.Errorf("zoom: error in Query.Order: could not find field %s in type %s", fieldName, q.modelType.spec.typ.String())
 		q.setError(err)
 	}
 	q.order = order{
@@ -275,15 +277,15 @@ func (q *Query) Filter(filterString string, value interface{}) *Query {
 		return q
 	}
 	// Get the fieldSpec for the given fieldName
-	fieldSpec, found := q.modelSpec.fieldsByName[fieldName]
+	fieldSpec, found := q.modelType.spec.fieldsByName[fieldName]
 	if !found {
-		err := fmt.Errorf("zoom: error in Query.Order: could not find field %s in type %s", fieldName, q.modelSpec.typ.String())
+		err := fmt.Errorf("zoom: error in Query.Order: could not find field %s in type %s", fieldName, q.modelType.spec.typ.String())
 		q.setError(err)
 		return q
 	}
 	// Make sure the field is an indexed field
 	if fieldSpec.indexKind == noIndex {
-		err := fmt.Errorf("zoom: filters are only allowed on indexed fields. %s.%s is not indexed. You can index it by adding the `zoom:\"index\"` struct tag.", q.modelSpec.typ.String(), fieldName)
+		err := fmt.Errorf("zoom: filters are only allowed on indexed fields. %s.%s is not indexed. You can index it by adding the `zoom:\"index\"` struct tag.", q.modelType.spec.typ.String(), fieldName)
 		q.setError(err)
 		return q
 	}
@@ -340,10 +342,10 @@ func (filter filter) checkValType(value interface{}) error {
 // return the first error that occured during the lifetime of the query object
 // (if any). It will also return an error if models is the wrong type.
 func (q *Query) Run(models interface{}) error {
-	if err := q.modelSpec.checkModelsType(models); err != nil {
+	if err := q.modelType.spec.checkModelsType(models); err != nil {
 		return err
 	}
-	q.tx = NewTransaction()
+	q.tx = q.pool.NewTransaction()
 	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {
 		if len(tmpKeys) > 0 {
@@ -357,8 +359,8 @@ func (q *Query) Run(models interface{}) error {
 		// But in redis, -1 means unlimited
 		limit = -1
 	}
-	sortArgs := q.modelSpec.sortArgs(idsKey, q.redisFieldNames(), limit, q.offset, q.order.kind)
-	q.tx.Command("SORT", sortArgs, newScanModelsHandler(q.modelSpec, append(q.fieldNames(), "-"), models))
+	sortArgs := q.modelType.spec.sortArgs(idsKey, q.redisFieldNames(), limit, q.offset, q.order.kind)
+	q.tx.Command("SORT", sortArgs, newScanModelsHandler(q.modelType.spec, append(q.fieldNames(), "-"), models))
 	if len(tmpKeys) > 0 {
 		q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
 	}
@@ -372,7 +374,7 @@ func (q *Query) Run(models interface{}) error {
 // query criteria and scans the values into model. If no model fits the criteria,
 // an error will be returned.
 func (q *Query) RunOne(model Model) error {
-	if err := q.modelSpec.checkModelType(model); err != nil {
+	if err := q.modelType.spec.checkModelType(model); err != nil {
 		return err
 	}
 	models := reflect.New(reflect.SliceOf(reflect.TypeOf(model)))
@@ -396,9 +398,9 @@ func (q *Query) RunOne(model Model) error {
 func (q *Query) Count() (uint, error) {
 	if !q.hasFilters() {
 		// Just return the number of ids in the all index set
-		conn := NewConn()
+		conn := q.pool.NewConn()
 		defer conn.Close()
-		count64, err := redis.Uint64(conn.Do("SCARD", q.modelSpec.allIndexKey()))
+		count64, err := redis.Uint64(conn.Do("SCARD", q.modelType.spec.allIndexKey()))
 		if err != nil {
 			return 0, nil
 		}
@@ -432,7 +434,7 @@ func (q *Query) Count() (uint, error) {
 // models themselves. Ids will return the first error that occured
 // during the lifetime of the query object (if any).
 func (q *Query) Ids() ([]string, error) {
-	q.tx = NewTransaction()
+	q.tx = q.pool.NewTransaction()
 	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {
 		if len(tmpKeys) > 0 {
@@ -446,7 +448,7 @@ func (q *Query) Ids() ([]string, error) {
 		// But in redis, -1 means unlimited
 		limit = -1
 	}
-	sortArgs := q.modelSpec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind)
+	sortArgs := q.modelType.spec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind)
 	ids := []string{}
 	q.tx.Command("SORT", sortArgs, newScanStringsHandler(&ids))
 	if len(tmpKeys) > 0 {
@@ -463,14 +465,14 @@ func (q *Query) Ids() ([]string, error) {
 // during the process of creating the set of ids. Note that tmpKeys may contain idsKey itself,
 // so the temporary keys should not be deleted until after the ids have been read from idsKey.
 func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err error) {
-	idsKey = q.modelSpec.allIndexKey()
+	idsKey = q.modelType.spec.allIndexKey()
 	tmpKeys = []interface{}{}
 	if q.hasOrder() {
-		fieldIndexKey, err := q.modelSpec.fieldIndexKey(q.order.fieldName)
+		fieldIndexKey, err := q.modelType.spec.fieldIndexKey(q.order.fieldName)
 		if err != nil {
 			return "", nil, err
 		}
-		fieldSpec := q.modelSpec.fieldsByName[q.order.fieldName]
+		fieldSpec := q.modelType.spec.fieldsByName[q.order.fieldName]
 		if fieldSpec.indexKind == stringIndex {
 			// If the order is a string field, we need to extract the ids before
 			// we use ZRANGE. Create a temporary set to store the ordered ids
@@ -527,7 +529,7 @@ func (q *Query) intersectFilter(filter filter, origKey string, destKey string) e
 // numeric filter criteria, then intersect those ids with origKey and store the result
 // in destKey.
 func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey string) error {
-	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
+	fieldIndexKey, err := q.modelType.spec.fieldIndexKey(filter.fieldSpec.name)
 	if err != nil {
 		return err
 	}
@@ -578,7 +580,7 @@ func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey st
 // bool filter criteria, then intersect those ids with origKey and store the result
 // in destKey.
 func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey string) error {
-	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
+	fieldIndexKey, err := q.modelType.spec.fieldIndexKey(filter.fieldSpec.name)
 	if err != nil {
 		return err
 	}
@@ -646,7 +648,7 @@ func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey strin
 // string filter criteria, then intersect those ids with origKey and store the result
 // in destKey.
 func (q *Query) intersectStringFilter(filter filter, origKey string, destKey string) error {
-	fieldIndexKey, err := q.modelSpec.fieldIndexKey(filter.fieldSpec.name)
+	fieldIndexKey, err := q.modelType.spec.fieldIndexKey(filter.fieldSpec.name)
 	if err != nil {
 		return err
 	}
@@ -702,13 +704,13 @@ func (q *Query) fieldNames() []string {
 	case q.hasIncludes():
 		return q.includes
 	case q.hasExcludes():
-		results := q.modelSpec.fieldNames()
+		results := q.modelType.spec.fieldNames()
 		for _, name := range q.excludes {
 			results = removeElementFromStringSlice(results, name)
 		}
 		return results
 	default:
-		return q.modelSpec.fieldNames()
+		return q.modelType.spec.fieldNames()
 	}
 }
 
@@ -719,7 +721,7 @@ func (q *Query) redisFieldNames() []string {
 	fieldNames := q.fieldNames()
 	redisNames := []string{}
 	for _, fieldName := range fieldNames {
-		redisNames = append(redisNames, q.modelSpec.fieldsByName[fieldName].redisName)
+		redisNames = append(redisNames, q.modelType.spec.fieldsByName[fieldName].redisName)
 	}
 	return redisNames
 }

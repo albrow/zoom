@@ -20,6 +20,7 @@ var (
 	address  *string = flag.String("address", "localhost:6379", "the address of a redis server to connect to")
 	network  *string = flag.String("network", "tcp", "the network to use for the database connection (e.g. 'tcp' or 'unix')")
 	database *int    = flag.Int("database", 9, "the redis database number to use for testing")
+	testPool *Pool
 )
 
 // setUpOnce is used to enforce that the setup process happens exactly once,
@@ -31,7 +32,7 @@ var setUpOnce = sync.Once{}
 // testingSetUp
 func testingSetUp() {
 	setUpOnce.Do(func() {
-		Init(&Configuration{
+		testPool = NewPool(&PoolConfig{
 			Address:  *address,
 			Network:  *network,
 			Database: *database,
@@ -67,7 +68,7 @@ func createTestModels(n int) []*testModel {
 // values, saves them, and returns them.
 func createAndSaveTestModels(n int) ([]*testModel, error) {
 	models := createTestModels(n)
-	t := NewTransaction()
+	t := testPool.NewTransaction()
 	for _, model := range models {
 		t.Save(testModels, model)
 	}
@@ -111,7 +112,7 @@ func createIndexedTestModels(n int) []*indexedTestModel {
 // random field values, saves them, and returns them.
 func createAndSaveIndexedTestModels(n int) ([]*indexedTestModel, error) {
 	models := createIndexedTestModels(n)
-	t := NewTransaction()
+	t := testPool.NewTransaction()
 	for _, model := range models {
 		t.Save(indexedTestModels, model)
 	}
@@ -254,7 +255,7 @@ func registerTestingTypes() {
 		},
 	}
 	for _, m := range testModelTypes {
-		modelType, err := Register(m.model)
+		modelType, err := testPool.Register(m.model)
 		if err != nil {
 			panic(err)
 		}
@@ -265,7 +266,7 @@ func registerTestingTypes() {
 // checkDatabaseEmpty panics if the database to be used for testing
 // is not empty.
 func checkDatabaseEmpty() {
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	n, err := redis.Int(conn.Do("DBSIZE"))
 	if err != nil {
@@ -281,7 +282,7 @@ func checkDatabaseEmpty() {
 // of each test that toches the database, typically by using defer.
 func testingTearDown() {
 	// flush and close the database
-	conn := NewConn()
+	conn := testPool.NewConn()
 	_, err := conn.Do("flushdb")
 	if err != nil {
 		panic(err)
@@ -291,7 +292,7 @@ func testingTearDown() {
 
 // expectSetContains sets an error via t.Errorf if member is not in the set
 func expectSetContains(t *testing.T, setName string, member interface{}) {
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	contains, err := redis.Bool(conn.Do("SISMEMBER", setName, member))
 	if err != nil {
@@ -304,7 +305,7 @@ func expectSetContains(t *testing.T, setName string, member interface{}) {
 
 // expectSetDoesNotContain sets an error via t.Errorf if member is in the set
 func expectSetDoesNotContain(t *testing.T, setName string, member interface{}) {
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	contains, err := redis.Bool(conn.Do("SISMEMBER", setName, member))
 	if err != nil {
@@ -318,7 +319,7 @@ func expectSetDoesNotContain(t *testing.T, setName string, member interface{}) {
 // expectFieldEquals sets an error via t.Errorf if the the field identified by fieldName does
 // not equal expected according to the database.
 func expectFieldEquals(t *testing.T, key string, fieldName string, expected interface{}) {
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	reply, err := conn.Do("HGET", key, fieldName)
 	if err != nil {
@@ -349,7 +350,7 @@ func expectFieldEquals(t *testing.T, key string, fieldName string, expected inte
 
 // expectKeyExists sets an error via t.Errorf if key does not exist in the database.
 func expectKeyExists(t *testing.T, key string) {
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	if exists, err := redis.Bool(conn.Do("EXISTS", key)); err != nil {
 		t.Errorf("Unexpected error in EXISTS: %s", err.Error())
@@ -360,7 +361,7 @@ func expectKeyExists(t *testing.T, key string) {
 
 // expectKeyDoesNotExist sets an error via t.Errorf if key does exist in the database.
 func expectKeyDoesNotExist(t *testing.T, key string) {
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	if exists, err := redis.Bool(conn.Do("EXISTS", key)); err != nil {
 		t.Errorf("Unexpected error in EXISTS: %s", err.Error())
@@ -482,7 +483,7 @@ func numericIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 	}
 	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName)
 	score := numericScore(fieldValue)
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	gotIds, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
 	if err != nil {
@@ -504,7 +505,7 @@ func stringIndexExists(modelType *ModelType, model Model, fieldName string) (boo
 		fieldValue = fieldValue.Elem()
 	}
 	memberKey := fieldValue.String() + nullString + model.ModelId()
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	reply, err := conn.Do("ZRANK", indexKey, memberKey)
 	if err != nil {
@@ -524,7 +525,7 @@ func booleanIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 	}
 	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName)
 	score := boolScore(fieldValue)
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	gotIds, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
 	if err != nil {

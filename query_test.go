@@ -131,7 +131,7 @@ func TestQueryFilterString(t *testing.T) {
 	models := createIndexedTestModels(10)
 	models[1].String = models[0].String + " "
 	models[2].String = models[0].String[:len(models[0].String)-1]
-	tx := NewTransaction()
+	tx := testPool.NewTransaction()
 	for _, model := range models {
 		tx.Save(indexedTestModels, model)
 	}
@@ -218,7 +218,7 @@ func TestQueryRunOne(t *testing.T) {
 	defer testingTearDown()
 
 	models := []*indexedTestModel{}
-	tx := NewTransaction()
+	tx := testPool.NewTransaction()
 	for i := 0; i < 5; i++ {
 		model := &indexedTestModel{
 			Int:    i,
