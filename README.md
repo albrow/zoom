@@ -34,8 +34,8 @@ Development Status
 ------------------
 
 Zoom has been around for more than a year. It is well-tested and going forward the API
-will be relatively stable. We are closing in on version 1.0 and you can expect to see milestones
-laid out in the near future.
+will be relatively stable. We are closing in on
+[Version 1.0.0-alpha](https://github.com/albrow/zoom/milestones).
 
 At this time, Zoom can be considered safe for use in low-traffic production applications. However,
 as with any relatively new package, it is possible that there are some undiscovered bugs. Therefore
@@ -45,7 +45,7 @@ mission-critical or high-traffic applications.
 Zoom follows semantic versioning, but offers no guarantees of backwards compatibility until version
 1.0. However, starting with version 0.9.0,
 [migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide) will be provided for any
-non-trivial breaking changes, making it easy to stay up to date with the latest version.
+non-trivial breaking changes, making it easier to stay up to date with the latest version.
 
 
 When is Zoom a Good Fit?
@@ -64,8 +64,8 @@ Zoom might be a good fit if:
 	ability to run queries.
 3. **You want an easy-to-use datastore.** Zoom has a simple API and is arguably easier to
 	use than some ORMs. For example, it doesn't require database migrations and instead builds
-	up a schema based on your struct types. Zoom also does not require any knowledge of Redis
-	in order to use effectively. Just connect it to a database and you're good to go!
+	up a schema based on your struct types. Zoom also does not typically require any knowledge
+	of Redis in order to use effectively. Just connect it to a database and you're good to go!
 
 Zoom might ***not*** be a good fit if:
 
@@ -96,6 +96,7 @@ the master branch will introduce breaking changes. Usually these changes are sma
 breaking changes, you can check the [migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide)
 page for help migrating to newer versions. 
 
+
 Initialization
 --------------
 
@@ -108,14 +109,18 @@ import (
 )
 ```
 
-Then, call `zoom.Init` somewhere in your app initialization code, e.g. in the main function. You must
-also call `zoom.Close` when your application exits, so it's a good idea to use defer.
+Then, you must create a new pool with `zoom.NewPool`. Since you may need access to the pool in different parts
+of your application, it is sometimes a good idea to declare a top-level variable and then initialize it
+in the `main` or `init` function. You must also call `pool.Close` when your application exits, so it's a good
+idea to use defer.
 
 ``` go
+var pool *zoom.Pool
+
 func main() {
-	zoom.Init(nil)
+	pool = zoom.NewPool(nil)
 	defer func() {
-		if err := zoom.Close(); err != nil {
+		if err := pool.Close(); err != nil {
 			// handle error
 		}
 	}()
@@ -123,27 +128,27 @@ func main() {
 }
 ```
 
-The Init function takes a `*zoom.Configuration` as an argument. Here's a list of options and their
+The `NewPool` function takes a `*zoom.PoolConfig` as an argument. Here's a list of options and their
 defaults:
 
 ``` go
-type Configuration struct {
+type PoolConfig struct {
 	// Address to connect to. Default: "localhost:6379"
-  Address string
-  // Network to use. Default: "tcp"
-  Network string
-  // Database id to use (using SELECT). Default: 0
-  Database int
-  // Password for a password-protected Redis database. If not empty,
-  // every connection will use the AUTH command during initialization
-  // to authenticate with the database. Default: ""
-  Password string
+	Address string
+	// Network to use. Default: "tcp"
+	Network string
+	// Database id to use (using SELECT). Default: 0
+	Database int
+	// Password for a password-protected redis database. If not empty,
+	// every connection will use the AUTH command during initialization
+	// to authenticate with the database. Default: ""
+	Password string
 }
 ```
 
-If you pass in `nil` to `Init`, Zoom will use all the default values. Any fields in the `Configuration`
-struct that are empty (i.e. an empty string or 0) will fall back to their default values, so you only need
-to provide a `Configuration` struct with the fields you want to change.
+If you pass in `nil` to `NewPool`, Zoom will use all the default values. Any fields in the `PoolConfig`
+struct that are empty (e.g., an empty string or 0) will fall back to their default values, so you only need
+to provide a `PoolConfig` struct with the fields you want to change.
 
 
 Models
@@ -206,12 +211,14 @@ If you don't want a field to be saved in Redis at all, you can use the special s
 
 ### Registering Models
 
-You must call `zoom.Register` on each model type in your application. `Register` examines the type
-and uses reflection to build up an internal schema. You only need to do this once per type.
+You must call `pool.Register` on each model type in your application. `Register` examines the type
+and uses reflection to build up an internal schema. You only need to do this once per type. Each pool
+has keeps track of its own registered models, so if you wish to share a model type between two or more
+pools, you will need to call `pool.Register` for each pool.
 
 ``` go
-// register the *Person type and assign the corresponding *ModelType to the variable named People
-People, err := zoom.Register(&Person{})
+// register the Person type and assign the corresponding ModelType to the variable named People
+People, err := pool.Register(&Person{})
 if err != nil {
 	 // handle error
 }
@@ -220,13 +227,29 @@ if err != nil {
 `Register` returns a `*ModelType`, which is a reference to a registered struct type and has methods for
 saving, deleting, and querying models of that type. Convention is to name the `*ModelType` the plural
 of the corresponding registered type (e.g. "People"), but it's just a variable so you can name it
-whatever you want.
+whatever you want. If you need to access a `ModelType` in different parts of your application, it is
+sometimes a good idea to declare a top-level variable and then initialize it in the `init` function:
+
+```go
+var (
+	People *zoom.ModelType
+)
+
+func init() {
+	var err error
+	// Assuming pool and Person are already defined.
+	People, err = pool.Register(&Person{})
+	if err != nil {
+		// handle error
+	}
+}
+```
 
 ### Saving Models
 
 To persistently save a `Person` model to the database, use the `People.Save` method. Recall that in this
-example, "People" is just the name we gave to the `*ModelType` which corresponds to the struct type
-`*Person`.
+example, "People" is just the name we gave to the `ModelType` which corresponds to the struct type
+`Person`.
 
 ``` go
 p := &Person{Name: "Alice", Age: 27}
@@ -317,11 +340,11 @@ round trip. Transactions feature delayed execution, so nothing touches the datab
 also remembers its errors to make error handling easier on the caller. The first error that occurs (if any) will be
 returned when you call `Exec`.
 
-Here's an example of how to save two models and get the number of `*Person` models in a single transaction.
+Here's an example of how to save two models and get the number of `Person` models in a single transaction.
 
 ``` go
 numPeople := 0
-t := NewTransaction()
+t := pool.NewTransaction()
 t.Save(People, &Person{Name: "Foo"})
 t.Save(People, &Person{Name: "Bar"})
 // Count expects a pointer to an integer, which it will change the value of
@@ -409,7 +432,7 @@ More Information
 
 ### Persistence
 
-Zoom is as persistent as the underlying Redis database is. If you intend to use Redis as a permanent
+Zoom is as persistent as the underlying Redis database. If you intend to use Redis as a permanent
 datastore, it is recommended that you turn on both AOF and RDB persistence options and set fsync to
 everysec. This will give you good performance while making data loss highly unlikely.
 
@@ -466,10 +489,10 @@ func likePost(postId string) error {
 ```
 
 This can cause a bug if the function is called across multiple threads or multiple machines
-concurrently, because the Post model can change in between the time we retrieved it from the
-database with Find and saved it again with Save. Future versions of Zoom will provide optimistic
+concurrently, because the `Post` model can change in between the time we retrieved it from the
+database with `Find` and saved it again with `Save`. Future versions of Zoom will provide optimistic
 locking or other means to avoid these kinds of errors. In the meantime, you could fix this code
-by using an HINCRBY command directly like so:
+by using an `HINCRBY` command directly like so:
 
 ``` go
 func likePost(postId string) error {
@@ -576,10 +599,10 @@ BenchmarkComplexQuery          10000      142476 ns/op
 
 The results of these benchmarks can vary widely from system to system, and so the benchmarks
 here are really only useful for comparing across versions of Zoom, and for identifying possible
-performance regressions during development. You should run your own benchmarks that are closer to
-your use case to get a real sense of how Zoom will perform for you. High performance is one of the
-top priorities for this project, because without that you are better off using an ORM designed for
-SQL databases.
+performance regressions or improvements during development. You should run your own benchmarks that
+are closer to your use case to get a real sense of how Zoom will perform for you. High performance
+is one of the top priorities for this project, because without that you are better off using an ORM
+designed for SQL databases.
 
 
 Contributing
