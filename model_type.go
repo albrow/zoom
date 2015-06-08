@@ -17,7 +17,7 @@ import (
 
 // ModelType represents a specific registered type of model. It has methods
 // for saving, finding, and deleting models of a specific type. Use the
-// Register and RegisterName functions to register new types.
+// Register and RegisterName methods of a Pool to register new types.
 type ModelType struct {
 	spec *modelSpec
 	pool *Pool

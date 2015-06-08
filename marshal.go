@@ -13,7 +13,7 @@ import (
 	"encoding/gob"
 )
 
-// Interface MarshalerUnmarshaler defines a handler for marshaling
+// MarshalerUnmarshaler defines a handler for marshaling
 // arbitrary data structures into a byte format and unmarshaling
 // bytes into arbitrary data structures. Any struct which correctly
 // implements the interface should have the property that what you

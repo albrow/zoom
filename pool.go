@@ -15,8 +15,7 @@ import (
 )
 
 // Pool represents a pool of connections. Each pool connects
-// to one database. Each pool also manages its own set of
-// registered models.
+// to one database and manages its own set of registered models.
 type Pool struct {
 	// config is the fully parsed conifg, with defaults filling in any
 	// blanks from the poolConfig passed into NewPool.
@@ -72,8 +71,8 @@ func (p *Pool) NewConn() redis.Conn {
 	return p.redisPool.Get()
 }
 
-// Close closes the connection pool. It should be run when application
-// exits, e.g. using defer.
+// Close closes the pool. It should be run whenever the pool is no longer
+// needed. It is often used in conjunction with defer.
 func (p *Pool) Close() error {
 	return p.redisPool.Close()
 }
