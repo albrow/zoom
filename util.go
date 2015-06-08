@@ -52,10 +52,6 @@ func Models(in interface{}) []Model {
 		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nSlice or array must have elements of type pointer to struct.", in)
 		panic(msg)
 	}
-	if !typeIsRegistered(elemTyp) {
-		msg := fmt.Sprintf("zoom: panic in Models() - attempt to convert invalid type %T to []Model.\nType %s is not registered.", in, elemTyp)
-		panic(msg)
-	}
 	val := reflect.ValueOf(in)
 	length := val.Len()
 	results := make([]Model, length)

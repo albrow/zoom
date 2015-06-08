@@ -22,13 +22,13 @@ func TestRedisIgnoreOption(t *testing.T) {
 		Attr string `redis:"-"`
 		RandomId
 	}
-	ignoredFieldModels, err := Register(&ignoredFieldModel{})
+	ignoredFieldModels, err := testPool.Register(&ignoredFieldModel{})
 	if err != nil {
 		t.Errorf("Unexpected error in Register: %s", err)
 	}
 
 	// check the spec
-	spec, found := modelNameToSpec["ignoredFieldModel"]
+	spec, found := testPool.modelNameToSpec["ignoredFieldModel"]
 	if !found {
 		t.Error("Could not find spec for model name ignoredFieldModel")
 	}
@@ -45,7 +45,7 @@ func TestRedisIgnoreOption(t *testing.T) {
 	}
 
 	// Check the database to make sure the field is not there
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	key, _ := ignoredFieldModels.ModelKey(model.ModelId())
 	gotAttr, err := redis.String(conn.Do("HGET", key, "Attr"))
@@ -66,13 +66,13 @@ func TestRedisNameOption(t *testing.T) {
 		Attr string `redis:"a"`
 		RandomId
 	}
-	customFieldModels, err := Register(&customFieldModel{})
+	customFieldModels, err := testPool.Register(&customFieldModel{})
 	if err != nil {
 		t.Errorf("Unexpected error in Register: %s", err.Error())
 	}
 
 	// check the spec
-	spec, found := modelNameToSpec["customFieldModel"]
+	spec, found := testPool.modelNameToSpec["customFieldModel"]
 	if !found {
 		t.Error("Could not find spec for model name customFieldModel")
 	}
@@ -101,7 +101,7 @@ func TestInvalidOptionThrowsError(t *testing.T) {
 		Attr string `zoom:"index,poop"`
 		RandomId
 	}
-	if _, err := Register(&invalid{}); err == nil {
+	if _, err := testPool.Register(&invalid{}); err == nil {
 		t.Error("Expected error when registering struct with invalid tag")
 	}
 }
@@ -215,7 +215,7 @@ func TestIndexAndCustomName(t *testing.T) {
 		Bool   bool   `zoom:"index" redis:"boolean"`
 		RandomId
 	}
-	customIndexModels, err := Register(&customIndexModel{})
+	customIndexModels, err := testPool.Register(&customIndexModel{})
 	if err != nil {
 		t.Fatalf("Unexpected error in Register: %s", err.Error())
 	}

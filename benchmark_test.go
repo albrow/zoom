@@ -17,7 +17,7 @@ func BenchmarkConnection(b *testing.B) {
 	defer testingTearDown()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		conn := NewConn()
+		conn := testPool.NewConn()
 		conn.Close()
 	}
 }
@@ -34,7 +34,7 @@ func BenchmarkSet(b *testing.B) {
 
 // BenchmarkGet sends the GET command after first sending SET
 func BenchmarkGet(b *testing.B) {
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	_, err := conn.Do("SET", "foo", "bar")
 	if err != nil {
@@ -49,7 +49,7 @@ func benchmarkCommand(b *testing.B, cmd string, args ...interface{}) {
 	testingSetUp()
 	defer testingTearDown()
 	for i := 0; i < b.N; i++ {
-		conn := NewConn()
+		conn := testPool.NewConn()
 		if _, err := conn.Do(cmd, args...); err != nil {
 			conn.Close()
 			b.Fatal(err)
@@ -82,7 +82,7 @@ func BenchmarkSave100(b *testing.B) {
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		t := NewTransaction()
+		t := testPool.NewTransaction()
 		for _, model := range models {
 			t.Save(testModels, model)
 		}
@@ -131,7 +131,7 @@ func BenchmarkFind100(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		selectedIds := selectUnique(100, ids)
-		t := NewTransaction()
+		t := testPool.NewTransaction()
 		for _, id := range selectedIds {
 			t.Find(testModels, id, &testModel{})
 		}
@@ -214,7 +214,7 @@ func BenchmarkDelete100(b *testing.B) {
 			b.Fatal(err)
 		}
 		b.StartTimer()
-		t := NewTransaction()
+		t := testPool.NewTransaction()
 		for _, model := range models {
 			deleted := false
 			t.Delete(testModels, model.ModelId(), &deleted)
@@ -436,7 +436,7 @@ func BenchmarkComplexQuery(b *testing.B) {
 		m.String = "not me"
 	}
 	// Save all the models in a single transaction
-	t := NewTransaction()
+	t := testPool.NewTransaction()
 	for _, model := range models {
 		t.Save(indexedTestModels, model)
 	}
@@ -463,7 +463,7 @@ func benchmarkQueryFilterInt(b *testing.B, selected int, total int) {
 	defer testingTearDown()
 
 	models := createIndexedTestModels(total)
-	t := NewTransaction()
+	t := testPool.NewTransaction()
 	for i := 0; i < selected; i++ {
 		models[i].Int = 1
 		t.Save(indexedTestModels, models[i])
@@ -483,7 +483,7 @@ func benchmarkQueryFilterString(b *testing.B, selected int, total int) {
 	defer testingTearDown()
 
 	models := createIndexedTestModels(total)
-	t := NewTransaction()
+	t := testPool.NewTransaction()
 	for i := 0; i < selected; i++ {
 		models[i].String = "find me"
 		t.Save(indexedTestModels, models[i])
@@ -503,7 +503,7 @@ func benchmarkQueryFilterBool(b *testing.B, selected int, total int) {
 	defer testingTearDown()
 
 	models := createIndexedTestModels(total)
-	t := NewTransaction()
+	t := testPool.NewTransaction()
 	for i := 0; i < selected; i++ {
 		models[i].Bool = true
 		t.Save(indexedTestModels, models[i])

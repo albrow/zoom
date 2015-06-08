@@ -30,7 +30,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 	}
 	ids = append(ids, "foo", "bar")
 	tempSetKey := "testModelIds"
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	saddArgs := redis.Args{tempSetKey}
 	saddArgs = saddArgs.Add(Interfaces(ids)...)
@@ -39,7 +39,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 	}
 
 	// Run the script
-	tx := NewTransaction()
+	tx := testPool.NewTransaction()
 	count := 0
 	tx.deleteModelsBySetIds(tempSetKey, testModels.Name(), newScanIntHandler(&count))
 	if err := tx.Exec(); err != nil {
@@ -80,7 +80,7 @@ func TestDeleteStringIndexScript(t *testing.T) {
 		String string `zoom:"index"`
 		RandomId
 	}
-	stringIndexModels, err := Register(&stringIndexModel{})
+	stringIndexModels, err := testPool.Register(&stringIndexModel{})
 	if err != nil {
 		t.Errorf("Unexpected error registering stringIndexModel: %s", err.Error())
 	}
@@ -92,14 +92,14 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	model.SetModelId("testId")
 
 	// Run the script before saving the hash, to make sure it does not cause an error
-	tx := NewTransaction()
+	tx := testPool.NewTransaction()
 	tx.deleteStringIndex(stringIndexModels.Name(), model.ModelId(), "String")
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
 
 	// Set the field value in the main hash
-	conn := NewConn()
+	conn := testPool.NewConn()
 	defer conn.Close()
 	modelKey, _ := stringIndexModels.ModelKey(model.ModelId())
 	if _, err := conn.Do("HSET", modelKey, "String", model.String); err != nil {
@@ -117,7 +117,7 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	}
 
 	// Run the script again. This time we expect the index to be removed
-	tx = NewTransaction()
+	tx = testPool.NewTransaction()
 	tx.deleteStringIndex(stringIndexModels.Name(), model.ModelId(), "String")
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
@@ -133,7 +133,7 @@ func TestExtractIdsFromFieldIndexScript(t *testing.T) {
 
 	// Create and save some test models with increasing Int values
 	models := createIndexedTestModels(5)
-	tx := NewTransaction()
+	tx := testPool.NewTransaction()
 	for i, model := range models {
 		model.Int = i
 		tx.Save(indexedTestModels, model)
@@ -170,7 +170,7 @@ func TestExtractIdsFromFieldIndexScript(t *testing.T) {
 	for i, tc := range testCases {
 		gotIds := []string{}
 		destKey := "TestExtractIdsFromFieldIndexScript:" + strconv.Itoa(i)
-		tx = NewTransaction()
+		tx = testPool.NewTransaction()
 		tx.extractIdsFromFieldIndex(fieldIndexKey, destKey, tc.min, tc.max)
 		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, newScanStringsHandler(&gotIds))
 		if err := tx.Exec(); err != nil {
@@ -188,7 +188,7 @@ func TestExtractIdsFromStringIndexScript(t *testing.T) {
 
 	// Create and save some test models with increasing String values
 	models := createIndexedTestModels(5)
-	tx := NewTransaction()
+	tx := testPool.NewTransaction()
 	for i, model := range models {
 		model.String = strconv.Itoa(i)
 		tx.Save(indexedTestModels, model)
@@ -226,7 +226,7 @@ func TestExtractIdsFromStringIndexScript(t *testing.T) {
 	for i, tc := range testCases {
 		gotIds := []string{}
 		destKey := "ExtractIdsFromStringIndexScript:" + strconv.Itoa(i)
-		tx = NewTransaction()
+		tx = testPool.NewTransaction()
 		tx.extractIdsFromStringIndex(fieldIndexKey, destKey, tc.min, tc.max)
 		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, newScanStringsHandler(&gotIds))
 		if err := tx.Exec(); err != nil {

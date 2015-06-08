@@ -22,7 +22,10 @@ type regTestModel struct {
 }
 
 func TestRegister(t *testing.T) {
-	regTestModels, err := Register(&regTestModel{})
+	testingSetUp()
+	defer testingTearDown()
+
+	regTestModels, err := testPool.Register(&regTestModel{})
 	if err != nil {
 		t.Fatalf("Unexpected error in Register: %s", err.Error())
 	}
@@ -31,13 +34,16 @@ func TestRegister(t *testing.T) {
 	testRegisteredModelType(t, regTestModels, expectedName, expectedType)
 
 	// Effectively unregister the type by removing it from the map
-	delete(modelNameToSpec, regTestModels.Name())
-	delete(modelTypeToSpec, regTestModels.spec.typ)
+	delete(testPool.modelNameToSpec, regTestModels.Name())
+	delete(testPool.modelTypeToSpec, regTestModels.spec.typ)
 }
 
 func TestRegisterName(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
 	expectedName := "customName"
-	regTestModels, err := RegisterName(expectedName, &regTestModel{})
+	regTestModels, err := testPool.RegisterName(expectedName, &regTestModel{})
 	if err != nil {
 		t.Fatalf("Unexpected error in Register: %s", err.Error())
 	}
@@ -45,8 +51,8 @@ func TestRegisterName(t *testing.T) {
 	testRegisteredModelType(t, regTestModels, expectedName, expectedType)
 
 	// Effectively unregister the type by removing it from the map
-	delete(modelNameToSpec, regTestModels.Name())
-	delete(modelTypeToSpec, regTestModels.spec.typ)
+	delete(testPool.modelNameToSpec, regTestModels.Name())
+	delete(testPool.modelTypeToSpec, regTestModels.spec.typ)
 }
 
 func testRegisteredModelType(t *testing.T, modelType *ModelType, expectedName string, expectedType reflect.Type) {
@@ -62,10 +68,10 @@ func testRegisteredModelType(t *testing.T, modelType *ModelType, expectedName st
 	}
 
 	// Check that the model type was added to the appropriate maps
-	if !nameIsRegistered(expectedName) {
+	if !testPool.nameIsRegistered(expectedName) {
 		t.Error("Registered spec was not added to the modelNameToSpec map")
 	}
-	if !typeIsRegistered(expectedType) {
+	if !testPool.typeIsRegistered(expectedType) {
 		t.Error("Registered spec was not added to the modelTypeToSpec map")
 	}
 
