@@ -7,4 +7,9 @@
 // type and provides basic querying functionality. It also supports
 // atomic transactions, lua scripts, and running Redis commands
 // directly if needed.
+//
+// Version X.X.X
+//
+// For installation instructions, examples, and more information
+// visit https://github.com/albrow/zoom.
 package zoom
