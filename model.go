@@ -269,8 +269,6 @@ func (spec *modelSpec) checkModelsType(models interface{}) error {
 		return fmt.Errorf("models should be a pointer to a slice or array of models")
 	case !typeIsPointerToStruct(elemType):
 		return fmt.Errorf("the elements in models should be pointers to structs")
-	case !typeIsRegistered(elemType):
-		return fmt.Errorf("the elements in models should be of a registered type\nType %s has not been registered.", elemType.String())
 	case elemType != spec.typ:
 		return fmt.Errorf("models were the wrong type. Expected slice or array of %s but got %T", spec.typ.String(), models)
 	}

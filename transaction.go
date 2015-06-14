@@ -46,9 +46,9 @@ const (
 type ReplyHandler func(interface{}) error
 
 // NewTransaction instantiates and returns a new transaction.
-func NewTransaction() *Transaction {
+func (p *Pool) NewTransaction() *Transaction {
 	t := &Transaction{
-		conn: NewConn(),
+		conn: p.NewConn(),
 	}
 	return t
 }
