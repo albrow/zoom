@@ -521,7 +521,7 @@ Testing & Benchmarking
 To run the tests, make sure you're in the root directory for Zoom and run:
 
 ```
-go test .
+go test
 ```   
 
 If everything passes, you should see something like:
@@ -538,7 +538,7 @@ network, and database used with flags. So to run on a unix socket at /tmp/redis.
 you could use:
 
 ```
-go test . -network=unix -address=/tmp/redis.sock -database=3
+go test -network=unix -address=/tmp/redis.sock -database=3
 ```
 
 ### Running the Benchmarks:
@@ -546,7 +546,7 @@ go test . -network=unix -address=/tmp/redis.sock -database=3
 To run the benchmarks, make sure you're in the root directory for the project and run:
 
 ```
-go test . -run=none -bench .
+go test -run=none -bench .
 ```   
 
 The `-run=none` flag is optional, and just tells the test runner to skip the tests and run only the benchmarks
