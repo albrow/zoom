@@ -12,59 +12,62 @@ import (
 	"testing"
 )
 
-// regTestModel is a model type that is only used for testing
+// collectionTestModel is a model type that is only used for testing
 // the Register and RegisterName functions
-type regTestModel struct {
+type collectionTestModel struct {
 	Int    int
 	Bool   bool
 	String string
 	RandomId
 }
 
-func TestRegister(t *testing.T) {
+func TestNewCollection(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	regTestModels, err := testPool.Register(&regTestModel{})
+	col, err := testPool.NewCollection(&collectionTestModel{}, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error in Register: %s", err.Error())
 	}
-	expectedName := "regTestModel"
-	expectedType := reflect.TypeOf(&regTestModel{})
-	testRegisteredModelType(t, regTestModels, expectedName, expectedType)
+	expectedName := "collectionTestModel"
+	expectedType := reflect.TypeOf(&collectionTestModel{})
+	testRegisteredCollectionType(t, col, expectedName, expectedType)
 
 	// Effectively unregister the type by removing it from the map
-	delete(testPool.modelNameToSpec, regTestModels.Name())
-	delete(testPool.modelTypeToSpec, regTestModels.spec.typ)
+	delete(testPool.modelNameToSpec, col.Name())
+	delete(testPool.modelTypeToSpec, col.spec.typ)
 }
 
-func TestRegisterName(t *testing.T) {
+func TestNewCollectionWithName(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
 	expectedName := "customName"
-	regTestModels, err := testPool.RegisterName(expectedName, &regTestModel{})
+	col, err := testPool.NewCollection(&collectionTestModel{},
+		&CollectionOptions{
+			Name: expectedName,
+		})
 	if err != nil {
 		t.Fatalf("Unexpected error in Register: %s", err.Error())
 	}
-	expectedType := reflect.TypeOf(&regTestModel{})
-	testRegisteredModelType(t, regTestModels, expectedName, expectedType)
+	expectedType := reflect.TypeOf(&collectionTestModel{})
+	testRegisteredCollectionType(t, col, expectedName, expectedType)
 
 	// Effectively unregister the type by removing it from the map
-	delete(testPool.modelNameToSpec, regTestModels.Name())
-	delete(testPool.modelTypeToSpec, regTestModels.spec.typ)
+	delete(testPool.modelNameToSpec, col.Name())
+	delete(testPool.modelTypeToSpec, col.spec.typ)
 }
 
-func testRegisteredModelType(t *testing.T, modelType *ModelType, expectedName string, expectedType reflect.Type) {
+func testRegisteredCollectionType(t *testing.T, collection *Collection, expectedName string, expectedType reflect.Type) {
 	// Check that the name and type are correct
-	if modelType.Name() != expectedName {
-		t.Errorf("Registered name was incorrect. Expected %s but got %s", expectedName, modelType.Name())
+	if collection.Name() != expectedName {
+		t.Errorf("Registered name was incorrect. Expected %s but got %s", expectedName, collection.Name())
 	}
-	if modelType.spec.typ == nil {
+	if collection.spec.typ == nil {
 		t.Fatalf("Registered model spec had nil type")
 	}
-	if modelType.spec.typ != expectedType {
-		t.Errorf("Registered type was incorrect. Expected %s but got %s", expectedType.String(), modelType.spec.typ.String())
+	if collection.spec.typ != expectedType {
+		t.Errorf("Registered type was incorrect. Expected %s but got %s", expectedType.String(), collection.spec.typ.String())
 	}
 
 	// Check that the model type was added to the appropriate maps
@@ -76,7 +79,7 @@ func testRegisteredModelType(t *testing.T, modelType *ModelType, expectedName st
 	}
 
 	// Check the underlying spec
-	spec := modelType.spec
+	spec := collection.spec
 	if len(spec.fields) != 3 {
 		t.Errorf("Expected spec to have 3 fields but got %d", len(spec.fields))
 	}

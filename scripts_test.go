@@ -7,10 +7,11 @@
 package zoom
 
 import (
-	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"strconv"
 	"testing"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 func TestDeleteModelsBySetIdsScript(t *testing.T) {
@@ -58,7 +59,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 			t.Errorf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, testModels.AllIndexKey(), model.ModelId())
+		expectSetDoesNotContain(t, testModels.IndexKey(), model.ModelId())
 	}
 	// Make sure the last two models were not deleted
 	for _, model := range models[3:] {
@@ -67,7 +68,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 			t.Errorf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyExists(t, modelKey)
-		expectSetContains(t, testModels.AllIndexKey(), model.ModelId())
+		expectSetContains(t, testModels.IndexKey(), model.ModelId())
 	}
 }
 
@@ -75,12 +76,15 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	// Register a new model type with an indexed string field
+	// Create a new collection with an indexed string field
 	type stringIndexModel struct {
 		String string `zoom:"index"`
 		RandomId
 	}
-	stringIndexModels, err := testPool.Register(&stringIndexModel{})
+	stringIndexModels, err := testPool.NewCollection(&stringIndexModel{},
+		&CollectionOptions{
+			Index: true,
+		})
 	if err != nil {
 		t.Errorf("Unexpected error registering stringIndexModel: %s", err.Error())
 	}
@@ -198,7 +202,7 @@ func TestExtractIdsFromStringIndexScript(t *testing.T) {
 	}
 
 	// Create a few test cases
-	var delString string = string([]byte{byte(127)})
+	delString := string([]byte{byte(127)})
 	testCases := []struct {
 		min         string
 		max         string

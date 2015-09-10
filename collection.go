@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
-// File model_type.go contains code related to the ModelType type.
+// File model_type.go contains code related to the Collection type.
 // This includes all of the most basic operations like Save and Find.
 // The Register method and associated methods are also included here.
 
@@ -10,67 +10,65 @@ package zoom
 
 import (
 	"fmt"
-	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"strings"
+
+	"github.com/garyburd/redigo/redis"
 )
 
-// ModelType represents a specific registered type of model. It has methods
+// Collection represents a specific registered type of model. It has methods
 // for saving, finding, and deleting models of a specific type. Use the
-// Register and RegisterName methods of a Pool to register new types.
-type ModelType struct {
-	spec *modelSpec
-	pool *Pool
+// NewCollection method to create a new collection.
+type Collection struct {
+	spec  *modelSpec
+	pool  *Pool
+	index bool
 }
 
-// Name returns the name for the given ModelType. The name is a unique
-// string identifier which is used as a prefix when storing this type of
-// model in the database.
-func (mt *ModelType) Name() string {
-	return mt.spec.name
+// CollectionOptions contains various options for a pool.
+type CollectionOptions struct {
+	// Name is a unique string identifier to use for the collection in redis. All
+	// models in this collection that are saved in the database will use the
+	// collection name as a prefix. If not provided, the default name will be the
+	// name of the model type without the package prefix or pointer declarations.
+	// So for example, the default name corresponding to *models.User would be
+	// "User". If a custom name is provided, it cannot contain a colon.
+	Name string
+	// Iff Index is true, any model in the collection that is saved will be added
+	// to a set in redis which acts as an index. The default value is false. The
+	// key for the set is exposed via the IndexKey method. Queries and the
+	// FindAll, Count, and DeleteAll methods will not work for unindexed
+	// collections. This may change in future versions.
+	Index bool
 }
 
-// Register adds a model type to the list of registered types. Any model
-// you wish to save must be registered first. The type of model must be
-// unique, i.e., not already registered, and must be a pointer to a struct.
-// Each registered model gets a name, which is a unique string identifier
-// used as a prefix when storing this type of model in the database. By
-// default the name is just its type without the package prefix or dereference
-// operators. So for example, the default name corresponding to *models.User
-// would be "User". See RegisterName if you need to specify a custom name.
-func (p *Pool) Register(model Model) (*ModelType, error) {
-	defaultName := getDefaultName(reflect.TypeOf(model))
-	return p.RegisterName(defaultName, model)
+// Name returns the name for the given collection. The name is a unique string
+// identifier to use for the collection in redis. All models in this collection
+// that are saved in the database will use the collection name as a prefix.
+func (c *Collection) Name() string {
+	return c.spec.name
 }
 
-// getDefaultName returns the default name for the given type, which is
-// simply the name of the type without the package prefix or dereference
-// operators.
-func getDefaultName(typ reflect.Type) string {
-	// Strip any dereference operators
-	for typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
+// NewCollection registers and returns a new collection of the given model type.
+// You must create a collection for each model type you want to save. The type
+// of model must be unique, i.e., not already registered, and must be a pointer
+// to a struct. To use the default options, pass in nil as the options argument.
+func (p *Pool) NewCollection(model Model, options *CollectionOptions) (*Collection, error) {
+	// Parse the options
+	fullOptions, err := parseCollectionOptions(model, options)
+	if err != nil {
+		return nil, err
 	}
-	nameWithPackage := typ.String()
-	// Strip the package name
-	return strings.Join(strings.Split(nameWithPackage, ".")[1:], "")
-}
 
-// RegisterName is like Register but allows you to specify a custom
-// name to use for the model type. The custom name will be used as
-// a prefix for all models of this type that are stored in the
-// database. Both the name and the model must be unique, i.e., not
-// already registered. The type of model must be a pointer to a struct.
-func (p *Pool) RegisterName(name string, model Model) (*ModelType, error) {
 	// Make sure the name and type have not been previously registered
 	typ := reflect.TypeOf(model)
 	switch {
 	case p.typeIsRegistered(typ):
-		return nil, fmt.Errorf("zoom: Error in Register or RegisterName: The type %T has already been registered.", model)
-	case p.nameIsRegistered(name):
-		return nil, fmt.Errorf("zoom: Error in Register or RegisterName: The name %s has already been registered.", name)
+		return nil, fmt.Errorf("zoom: Error in NewCollection: The type %T has already been registered", model)
+	case p.nameIsRegistered(fullOptions.Name):
+		return nil, fmt.Errorf("zoom: Error in NewCollection: The name %s has already been registered", fullOptions.Name)
 	case !typeIsPointerToStruct(typ):
-		return nil, fmt.Errorf("zoom: Register and RegisterName require a pointer to a struct as an argument. Got type %T", model)
+		return nil, fmt.Errorf("zoom: NewCollection requires a pointer to a struct as an argument. Got type %T", model)
 	}
 
 	// Compile the spec for this model and store it in the maps
@@ -78,15 +76,51 @@ func (p *Pool) RegisterName(name string, model Model) (*ModelType, error) {
 	if err != nil {
 		return nil, err
 	}
-	spec.name = name
+	spec.name = fullOptions.Name
 	p.modelTypeToSpec[typ] = spec
-	p.modelNameToSpec[name] = spec
+	p.modelNameToSpec[fullOptions.Name] = spec
 
-	// Return the ModelType
-	return &ModelType{
-		spec: spec,
-		pool: p,
+	// Return the Collection
+	return &Collection{
+		spec:  spec,
+		pool:  p,
+		index: fullOptions.Index,
 	}, nil
+}
+
+// parseCollectionOptions returns a well-formed CollectionOptions struct. If
+// passedOptions is nil, it uses all the default options. Else, for each zero
+// value field in passedOptions, it uses the default value for that field.
+func parseCollectionOptions(model Model, passedOptions *CollectionOptions) (*CollectionOptions, error) {
+	// If passedOptions is nil, use all the default values
+	if passedOptions == nil {
+		return &CollectionOptions{
+			Name: getDefaultCollectionName(reflect.TypeOf(model)),
+		}, nil
+	}
+	// Copy and validate the passedOptions
+	newOptions := *passedOptions
+	if newOptions.Name == "" {
+		newOptions.Name = getDefaultCollectionName(reflect.TypeOf(model))
+	} else if strings.Contains(newOptions.Name, ":") {
+		return nil, fmt.Errorf("zoom: CollectionOptions.Name cannot contain a colon. Got: %s", newOptions.Name)
+	}
+	// NOTE: we don't need to modify the Index field becuase the default value,
+	// false, is also the zero value.
+	return &newOptions, nil
+}
+
+// getDefaultCollectionName returns the default collection name for the given
+// type, which is simply the name of the type without the package prefix or
+// dereference operators.
+func getDefaultCollectionName(typ reflect.Type) string {
+	// Strip any dereference operators
+	for typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	nameWithPackage := typ.String()
+	// Strip the package name
+	return strings.Join(strings.Split(nameWithPackage, ".")[1:], "")
 }
 
 func (p *Pool) typeIsRegistered(typ reflect.Type) bool {
@@ -102,51 +136,52 @@ func (p *Pool) nameIsRegistered(name string) bool {
 // ModelKey returns the key that identifies a hash in the database
 // which contains all the fields of the model corresponding to the given
 // id. It returns an error iff id is empty.
-func (mt *ModelType) ModelKey(id string) (string, error) {
-	return mt.spec.modelKey(id)
+func (c *Collection) ModelKey(id string) (string, error) {
+	return c.spec.modelKey(id)
 }
 
-// AllIndexKey returns the key that identifies a set in the database that
-// stores all the ids for models of the given type.
-func (mt *ModelType) AllIndexKey() string {
-	return mt.spec.allIndexKey()
+// IndexKey returns the key that identifies a set in the database that
+// stores all the ids for models in the given collection.
+func (c *Collection) IndexKey() string {
+	return c.spec.indexKey()
 }
 
-// FieldIndexKey returns the key for the sorted set used to index the field identified
-// by fieldName. It returns an error if fieldName does not identify a field in the spec
-// or if the field it identifies is not an indexed field.
-func (mt *ModelType) FieldIndexKey(fieldName string) (string, error) {
-	return mt.spec.fieldIndexKey(fieldName)
+// FieldIndexKey returns the key for the sorted set used to index the field
+// identified by fieldName. It returns an error if fieldName does not identify a
+// field in the spec or if the field it identifies is not an indexed field.
+func (c *Collection) FieldIndexKey(fieldName string) (string, error) {
+	return c.spec.fieldIndexKey(fieldName)
 }
 
-// Save writes a model (a struct which satisfies the Model interface) to the redis
-// database. Save throws an error if the type of model does not match the registered
-// ModelType. To make a struct satisfy the Model interface, you can embed
-// zoom.RandomId, which will generate pseudo-random ids for each model.
-func (mt *ModelType) Save(model Model) error {
-	t := mt.pool.NewTransaction()
-	t.Save(mt, model)
+// Save writes a model (a struct which satisfies the Model interface) to the
+// redis database. Save throws an error if the type of model does not match the
+// registered Collection. To make a struct satisfy the Model interface, you can
+// embed zoom.RandomId, which will generate pseudo-random ids for each model.
+func (c *Collection) Save(model Model) error {
+	t := c.pool.NewTransaction()
+	t.Save(c, model)
 	if err := t.Exec(); err != nil {
 		return err
 	}
 	return nil
 }
 
-// Save writes a model (a struct which satisfies the Model interface) to the redis
-// database inside an existing transaction. save will set the err property of the
-// transaction if the type of model does not matched the registered ModelType, which
-// will cause exec to fail immediately and return the error. To make a struct satisfy
-// the Model interface, you can embed zoom.RandomId, which will generate pseudo-random
-// ids for each model. Any errors encountered will be added to the transaction and
-// returned as an error when the transaction is executed.
-func (t *Transaction) Save(mt *ModelType, model Model) {
-	if err := mt.checkModelType(model); err != nil {
+// Save writes a model (a struct which satisfies the Model interface) to the
+// redis database inside an existing transaction. save will set the err property
+// of the transaction if the type of model does not matched the registered
+// Collection, which will cause exec to fail immediately and return the error.
+// To make a struct satisfy the Model interface, you can embed zoom.RandomId,
+// which will generate pseudo-random ids for each model. Any errors encountered
+// will be added to the transaction and returned as an error when the
+// transaction is executed.
+func (t *Transaction) Save(c *Collection, model Model) {
+	if err := c.checkModelType(model); err != nil {
 		t.setError(fmt.Errorf("zoom: Error in Save or Transaction.Save: %s", err.Error()))
 		return
 	}
 	// Create a modelRef and start a transaction
 	mr := &modelRef{
-		spec:  mt.spec,
+		spec:  c.spec,
 		model: model,
 	}
 	// Save indexes
@@ -165,8 +200,10 @@ func (t *Transaction) Save(mt *ModelType, model Model) {
 		// 1.
 		t.Command("HMSET", hashArgs, nil)
 	}
-	// Add the model id to the set of all models of this type
-	t.Command("SADD", redis.Args{mt.AllIndexKey(), model.ModelId()}, nil)
+	// Add the model id to the set of all models for this collection
+	if c.index {
+		t.Command("SADD", redis.Args{c.IndexKey(), model.ModelId()}, nil)
+	}
 }
 
 // saveFieldIndexes adds commands to the transaction for saving the indexes
@@ -238,13 +275,13 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 
 // Find retrieves a model with the given id from redis and scans its values
 // into model. model should be a pointer to a struct of a registered type
-// corresponding to the ModelType. Find will mutate the struct, filling in its
+// corresponding to the Collection. Find will mutate the struct, filling in its
 // fields and overwriting any previous values. It returns an error if a model
 // with the given id does not exist, if the given model was the wrong type, or
 // if there was a problem connecting to the database.
-func (mt *ModelType) Find(id string, model Model) error {
-	t := mt.pool.NewTransaction()
-	t.Find(mt, id, model)
+func (c *Collection) Find(id string, model Model) error {
+	t := c.pool.NewTransaction()
+	t.Find(c, id, model)
 	if err := t.Exec(); err != nil {
 		return err
 	}
@@ -253,18 +290,18 @@ func (mt *ModelType) Find(id string, model Model) error {
 
 // Find retrieves a model with the given id from redis and scans its values
 // into model in an existing transaction. model should be a pointer to a struct
-// of a registered type corresponding to the ModelType. find will mutate the struct,
+// of a registered type corresponding to the Collection. find will mutate the struct,
 // filling in its fields and overwriting any previous values. Any errors encountered
 // will be added to the transaction and returned as an error when the transaction is
 // executed.
-func (t *Transaction) Find(mt *ModelType, id string, model Model) {
-	if err := mt.checkModelType(model); err != nil {
+func (t *Transaction) Find(c *Collection, id string, model Model) {
+	if err := c.checkModelType(model); err != nil {
 		t.setError(fmt.Errorf("zoom: Error in Find or Transaction.Find: %s", err.Error()))
 		return
 	}
 	model.SetModelId(id)
 	mr := &modelRef{
-		spec:  mt.spec,
+		spec:  c.spec,
 		model: model,
 	}
 	// Get the fields from the main hash for this model
@@ -277,16 +314,16 @@ func (t *Transaction) Find(mt *ModelType, id string, model Model) {
 
 // FindAll finds all the models of the given type. It executes the commands needed
 // to retrieve the models in a single transaction. See http://redis.io/topics/transactions.
-// models must be a pointer to a slice of models with a type corresponding to the ModelType.
+// models must be a pointer to a slice of models with a type corresponding to the Collection.
 // FindAll will grow or shrink the models slice as needed and if any of the models in the
 // models slice are nil, FindAll will use reflection to allocate memory for them.
 // FindAll returns an error if models is the wrong type or if there was a problem connecting
 // to the database.
-func (mt *ModelType) FindAll(models interface{}) error {
+func (c *Collection) FindAll(models interface{}) error {
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
-	t := mt.pool.NewTransaction()
-	t.FindAll(mt, models)
+	t := c.pool.NewTransaction()
+	t.FindAll(c, models)
 	if err := t.Exec(); err != nil {
 		return err
 	}
@@ -295,29 +332,33 @@ func (mt *ModelType) FindAll(models interface{}) error {
 
 // FindAll finds all the models of the given type and scans the values of the models into
 // models in an existing transaction. See http://redis.io/topics/transactions.
-// models must be a pointer to a slice of models with a type corresponding to the ModelType.
+// models must be a pointer to a slice of models with a type corresponding to the Collection.
 // findAll will grow the models slice as needed and if any of the models in the
 // models slice are nil, FindAll will use reflection to allocate memory for them.
 // Any errors encountered will be added to the transaction and returned as an error
 // when the transaction is executed.
-func (t *Transaction) FindAll(mt *ModelType, models interface{}) {
+func (t *Transaction) FindAll(c *Collection, models interface{}) {
+	if !c.index {
+		t.setError(fmt.Errorf("zoom: error in FindAll: FindAll only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
+		return
+	}
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
-	if err := mt.checkModelsType(models); err != nil {
+	if err := c.checkModelsType(models); err != nil {
 		t.setError(fmt.Errorf("zoom: Error in FindAll or Transaction.FindAll: %s", err.Error()))
 		return
 	}
-	sortArgs := mt.spec.sortArgs(mt.spec.allIndexKey(), mt.spec.fieldRedisNames(), 0, 0, ascendingOrder)
-	fieldNames := append(mt.spec.fieldNames(), "-")
-	t.Command("SORT", sortArgs, newScanModelsHandler(mt.spec, fieldNames, models))
+	sortArgs := c.spec.sortArgs(c.spec.indexKey(), c.spec.fieldRedisNames(), 0, 0, ascendingOrder)
+	fieldNames := append(c.spec.fieldNames(), "-")
+	t.Command("SORT", sortArgs, newScanModelsHandler(c.spec, fieldNames, models))
 }
 
 // Count returns the number of models of the given type that exist in the database.
 // It returns an error if there was a problem connecting to the database.
-func (mt *ModelType) Count() (int, error) {
-	t := mt.pool.NewTransaction()
+func (c *Collection) Count() (int, error) {
+	t := c.pool.NewTransaction()
 	count := 0
-	t.Count(mt, &count)
+	t.Count(c, &count)
 	if err := t.Exec(); err != nil {
 		return count, err
 	}
@@ -328,8 +369,12 @@ func (mt *ModelType) Count() (int, error) {
 // transaction. It sets the value of count to the number of models. Any errors
 // encountered will be added to the transaction and returned as an error when the
 // transaction is executed.
-func (t *Transaction) Count(mt *ModelType, count *int) {
-	t.Command("SCARD", redis.Args{mt.AllIndexKey()}, newScanIntHandler(count))
+func (t *Transaction) Count(c *Collection, count *int) {
+	if !c.index {
+		t.setError(fmt.Errorf("zoom: error in Count: Count only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
+		return
+	}
+	t.Command("SCARD", redis.Args{c.IndexKey()}, newScanIntHandler(count))
 }
 
 // Delete removes the model with the given type and id from the database. It will
@@ -337,10 +382,10 @@ func (t *Transaction) Count(mt *ModelType, count *int) {
 // found in the database. Instead, it will return a boolean representing whether
 // or not the model was found and deleted, and will only return an error
 // if there was a problem connecting to the database.
-func (mt *ModelType) Delete(id string) (bool, error) {
-	t := mt.pool.NewTransaction()
+func (c *Collection) Delete(id string) (bool, error) {
+	t := c.pool.NewTransaction()
 	deleted := false
-	t.Delete(mt, id, &deleted)
+	t.Delete(c, id, &deleted)
 	if err := t.Exec(); err != nil {
 		return deleted, err
 	}
@@ -353,29 +398,29 @@ func (mt *ModelType) Delete(id string) (bool, error) {
 // the value of deleted will be set to false. Any errors encountered will be
 // added to the transaction and returned as an error when the transaction is
 // executed.
-func (t *Transaction) Delete(mt *ModelType, id string, deleted *bool) {
+func (t *Transaction) Delete(c *Collection, id string, deleted *bool) {
 	// Delete any field indexes
 	// This must happen first, because it relies on reading the old field values
 	// from the hash for string indexes (if any)
-	t.deleteFieldIndexes(mt, id)
+	t.deleteFieldIndexes(c, id)
 	// Delete the main hash
-	t.Command("DEL", redis.Args{mt.Name() + ":" + id}, newScanBoolHandler(deleted))
+	t.Command("DEL", redis.Args{c.Name() + ":" + id}, newScanBoolHandler(deleted))
 	// Remvoe the id from the index of all models for the given type
-	t.Command("SREM", redis.Args{mt.AllIndexKey(), id}, nil)
+	t.Command("SREM", redis.Args{c.IndexKey(), id}, nil)
 }
 
 // deleteFieldIndexes adds commands to the transaction for deleting the field
 // indexes for all indexed fields of the given model type.
-func (t *Transaction) deleteFieldIndexes(mt *ModelType, id string) {
-	for _, fs := range mt.spec.fields {
+func (t *Transaction) deleteFieldIndexes(c *Collection, id string) {
+	for _, fs := range c.spec.fields {
 		switch fs.indexKind {
 		case noIndex:
 			continue
 		case numericIndex, booleanIndex:
-			t.deleteNumericOrBooleanIndex(fs, mt.spec, id)
+			t.deleteNumericOrBooleanIndex(fs, c.spec, id)
 		case stringIndex:
 			// NOTE: this invokes a lua script which is defined in scripts/delete_string_index.lua
-			t.deleteStringIndex(mt.Name(), id, fs.redisName)
+			t.deleteStringIndex(c.Name(), id, fs.redisName)
 		}
 	}
 }
@@ -393,10 +438,10 @@ func (t *Transaction) deleteNumericOrBooleanIndex(fs *fieldSpec, ms *modelSpec, 
 // DeleteAll deletes all the models of the given type in a single transaction. See
 // http://redis.io/topics/transactions. It returns the number of models deleted
 // and an error if there was a problem connecting to the database.
-func (mt *ModelType) DeleteAll() (int, error) {
-	t := mt.pool.NewTransaction()
+func (c *Collection) DeleteAll() (int, error) {
+	t := c.pool.NewTransaction()
 	count := 0
-	t.DeleteAll(mt, &count)
+	t.DeleteAll(c, &count)
 	if err := t.Exec(); err != nil {
 		return count, err
 	}
@@ -407,18 +452,22 @@ func (mt *ModelType) DeleteAll() (int, error) {
 // The value of count will be set to the number of models that were successfully deleted
 // when the transaction is executed. Any errors encountered will be added to the transaction
 // and returned as an error when the transaction is executed.
-func (t *Transaction) DeleteAll(mt *ModelType, count *int) {
-	t.deleteModelsBySetIds(mt.AllIndexKey(), mt.Name(), newScanIntHandler(count))
+func (t *Transaction) DeleteAll(c *Collection, count *int) {
+	if !c.index {
+		t.setError(fmt.Errorf("zoom: error in DeleteAll: DeleteAll only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
+		return
+	}
+	t.deleteModelsBySetIds(c.IndexKey(), c.Name(), newScanIntHandler(count))
 }
 
 // checkModelType returns an error iff model is not of the registered type that
-// corresponds to mt.
-func (modelType *ModelType) checkModelType(model Model) error {
-	return modelType.spec.checkModelType(model)
+// corresponds to c.
+func (c *Collection) checkModelType(model Model) error {
+	return c.spec.checkModelType(model)
 }
 
 // checkModelsType returns an error iff models is not a pointer to a slice of models of the
-// registered type that corresponds to modelType.
-func (modelType *ModelType) checkModelsType(models interface{}) error {
-	return modelType.spec.checkModelsType(models)
+// registered type that corresponds to the collection.
+func (c *Collection) checkModelsType(models interface{}) error {
+	return c.spec.checkModelsType(models)
 }

@@ -3,7 +3,7 @@ Zoom
 
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
-Version: 0.10.0
+Version: 0.11.0
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
@@ -37,15 +37,22 @@ Zoom has been around for more than a year. It is well-tested and going forward t
 will be relatively stable. We are closing in on
 [Version 1.0.0-alpha](https://github.com/albrow/zoom/milestones).
 
-At this time, Zoom can be considered safe for use in low-traffic production applications. However,
-as with any relatively new package, it is possible that there are some undiscovered bugs. Therefore
-we would recommend writing good tests, reporting any bugs you may find, and avoiding using Zoom for
-mission-critical or high-traffic applications.
+At this time, Zoom can be considered safe for use in low-traffic production
+applications. However, as with any relatively new package, it is possible that
+there are some undiscovered bugs. Therefore we would recommend writing good
+tests, reporting any bugs you may find, and avoiding using Zoom for mission-
+critical or high-traffic applications.
 
-Zoom follows semantic versioning, but offers no guarantees of backwards compatibility until version
-1.0. However, starting with version 0.9.0,
-[migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide) will be provided for any
-non-trivial breaking changes, making it easier to stay up to date with the latest version.
+Zoom follows semantic versioning, but offers no guarantees of backwards
+compatibility until version 1.0. We recommend using a dependency manager such as
+[godep](https://github.com/tools/godep)
+or [glide](https://github.com/Masterminds/glide) to lock in a specific version
+of Zoom. You can also keep an eye on the
+[Releases page](https://github.com/albrow/zoom/releases) to see a full changelog
+for each release. In addition, starting with version 0.9.0,
+[migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide) will be
+provided for any non-trivial breaking changes, making it easier to stay up to
+date with the latest version.
 
 
 When is Zoom a Good Fit?
@@ -72,7 +79,7 @@ Zoom might ***not*** be a good fit if:
 1. **You are working with a lot of data.** Zoom stores all data in memory at all times, and does not
 	yet support sharding or Redis Cluster. Memory could be a hard constraint for larger applications.
 	Keep in mind that it is possible (if expensive) to run Redis on machines with up to 256GB of memory
-	on cloud providers such as Amazon EC2. This is probably plenty for all but the largest applications.
+	on cloud providers such as Amazon EC2.
 2. **You require the ability to run advanced queries.** Zoom currently only provides support for
 	basic queries and is not as powerful or flexible as something like SQL. For example, Zoom currently
 	lacks the equivalent of the `IN` or `OR` SQL keywords. See the
@@ -90,11 +97,9 @@ as Redis To Go, RedisLabs, Google Cloud Redis, or Amazon Elasticache.
 If you need to install Redis, see the [installation instructions](http://redis.io/download) on the official
 Redis website.
 
-To install Zoom itself, run `go get github.com/albrow/zoom`. This will pull the current master branch,
-which is relatively stable and well-tested. However, because Zoom has not yet hit version 1.0, sometimes
-the master branch will introduce breaking changes. Usually these changes are small, but for bigger
-breaking changes, you can check the [migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide)
-page for help migrating to newer versions. 
+To install Zoom itself, run `go get github.com/albrow/zoom` to pull down the
+current master branch, or install with the dependency manager of your choice to
+lock in a specific version.
 
 
 Initialization
@@ -128,11 +133,11 @@ func main() {
 }
 ```
 
-The `NewPool` function takes a `*zoom.PoolConfig` as an argument. Here's a list of options and their
+The `NewPool` function takes a `zoom.PoolOptions` as an argument. Here's a list of options and their
 defaults:
 
 ``` go
-type PoolConfig struct {
+type PoolOptions struct {
 	// Address to connect to. Default: "localhost:6379"
 	Address string
 	// Network to use. Default: "tcp"
@@ -146,9 +151,9 @@ type PoolConfig struct {
 }
 ```
 
-If you pass in `nil` to `NewPool`, Zoom will use all the default values. Any fields in the `PoolConfig`
+If you pass in `nil` to `NewPool`, Zoom will use all the default values. Any fields in the `PoolOptions`
 struct that are empty (e.g., an empty string or 0) will fall back to their default values, so you only need
-to provide a `PoolConfig` struct with the fields you want to change.
+to provide a `PoolOptions` struct with the fields you want to change.
 
 
 Models
@@ -209,36 +214,70 @@ type Person struct {
 
 If you don't want a field to be saved in Redis at all, you can use the special struct tag `redis:"-"`.
 
-### Registering Models
+### Creating Collections
 
-You must call `pool.Register` on each model type in your application. `Register` examines the type
-and uses reflection to build up an internal schema. You only need to do this once per type. Each pool
-has keeps track of its own registered models, so if you wish to share a model type between two or more
-pools, you will need to call `pool.Register` for each pool.
+You must create a `Collection` for each type of model you want to save. A
+`Collection` is simply a set of all models of a specific type and has methods
+for saving, finding, deleting, and querying those models. `NewCollection`
+examines the type of a model and uses reflection to build up an internal schema.
+You only need to call `NewCollection` once per type. Each pool keeps track of
+its own collections, so if you wish to share a model type between two or more
+pools, you will need to create a collection for each pool.
 
 ``` go
-// register the Person type and assign the corresponding ModelType to the variable named People
-People, err := pool.Register(&Person{})
+// Create a new collection for the Person type.
+People, err := pool.NewCollection(&Person{}, nil)
 if err != nil {
 	 // handle error
 }
 ```
 
-`Register` returns a `*ModelType`, which is a reference to a registered struct type and has methods for
-saving, deleting, and querying models of that type. Convention is to name the `*ModelType` the plural
-of the corresponding registered type (e.g. "People"), but it's just a variable so you can name it
-whatever you want. If you need to access a `ModelType` in different parts of your application, it is
-sometimes a good idea to declare a top-level variable and then initialize it in the `init` function:
+The second argument to `NewCollection` is a
+[`CollectionOptions`](http://godoc.org/github.com/albrow/zoom#CollectionOptions).
+It works similarly to `PoolOptions`. You can just pass nil to use all the
+default options. Additionally, any zero-valued fields in the struct indicate
+that the default value should be used for that field.
+
+
+``` go
+type CollectionOptions struct {
+	// Name is a unique string identifier to use for the collection in redis. All
+	// models in this collection that are saved in the database will use the
+	// collection name as a prefix. If not provided, the default name will be the
+	// name of the model type without the package prefix or pointer declarations.
+	// So for example, the default name corresponding to *models.User would be
+	// "User". If a custom name is provided, it cannot contain a colon.
+	Name string
+	// Iff Index is true, any model in the collection that is saved will be added
+	// to a set in redis which acts as an index. The default value is false. The
+	// key for the set is exposed via the IndexKey method. Queries and the
+	// FindAll, Count, and DeleteAll methods will not work for unindexed
+	// collections. This may change in future versions.
+	Index bool
+}
+```
+
+There are a few important points to emphasize concerning collections:
+
+1. The collection name cannot contain a colon.
+2. Queries, as well as the FindAll, DeleteAll, and Count methods will not work
+   if Index is false. This may change in future versions.
+
+Convention is to name the `Collection` the plural of the corresponding
+model type (e.g. "People"), but it's just a variable so you can name it
+whatever you want. If you need to access a `Collection` in different parts of
+your application, it is sometimes a good idea to declare a top-level variable
+and then initialize it in the `init` function:
 
 ```go
 var (
-	People *zoom.ModelType
+	People *zoom.Collection
 )
 
 func init() {
 	var err error
 	// Assuming pool and Person are already defined.
-	People, err = pool.Register(&Person{})
+	People, err = pool.NewCollection(&Person{}, nil)
 	if err != nil {
 		// handle error
 	}
@@ -247,9 +286,10 @@ func init() {
 
 ### Saving Models
 
-To persistently save a `Person` model to the database, use the `People.Save` method. Recall that in this
-example, "People" is just the name we gave to the `ModelType` which corresponds to the struct type
-`Person`.
+Continuing from the previous example, to persistently save a `Person` model to
+the database, we use the `People.Save` method. Recall that in this example,
+"People" is just the name we gave to the `Collection` which corresponds to the
+model type `Person`.
 
 ``` go
 p := &Person{Name: "Alice", Age: 27}
@@ -258,8 +298,9 @@ if err := People.Save(p); err != nil {
 }
 ```
 
-When you call `Save`, Zoom converts all the fields of the model into a format suitable for Redis and stores them
-as a Redis hash. There is a wiki page describing
+When you call `Save`, Zoom converts all the fields of the model into a format
+suitable for Redis and stores them as a Redis hash. There is a wiki page
+describing
 [how zoom works under the hood](https://github.com/albrow/zoom/wiki/Under-the-Hood) in more detail.
 
 ### Finding a Single Model
@@ -274,9 +315,9 @@ if err := People.Find("a_valid_person_id", p); err != nil {
 ```
 
 The second argument to `Find` must be a pointer to a struct which satisfies `Model`, and must have a type corresponding to
-the `*ModelType`. In this case, we passed in `*Person` since that is the struct type that corresponds to our `*ModelType`
-`People`. `Find` will mutate `p` by setting all its fields. Using `Find` in this way allows the caller to maintain type
-safety and avoid type casting. If Zoom couldn't find a model of type `*Person` with the given id, it will return a
+the `Collection`. In this case, we passed in `Person` since that is the struct type that corresponds to our `People`
+collection. `Find` will mutate `p` by setting all its fields. Using `Find` in this way allows the caller to maintain type
+safety and avoid type casting. If Zoom couldn't find a model of type `Person` with the given id, it will return a
 `ModelNotFoundError`.
 
 ### Finding All Models
@@ -292,7 +333,7 @@ if err := People.FindAll(&people); err != nil {
 
 `FindAll` expects a pointer to a slice of some registered type that implements `Model`. It grows or shrinks the slice as needed,
 filling in all the fields of the elements inside of the slice. So the result of the call is that `people` will be a slice of
-all models in the database with the type `*Person`.
+all models in the `People` collection.
 
 ### Deleting Models
 
@@ -308,7 +349,7 @@ if ok, err := People.Delete("a_valid_person_id"); err != nil {
 `Delete` expects a valid id as an argument, and will attempt to delete the model with the given id. If there was no model
 with the given type and id, the first return value will be false.
 
-You can also delete all models of a given type with the `DeleteAll` method:
+You can also delete all models in a collection with the `DeleteAll` method:
 
 ``` go
 numDeleted, err := People.DeleteAll()
@@ -317,11 +358,11 @@ if err != nil {
 }
 ```
 
-`DeleteAll` will return the number of models that existed and were successfully deleted.
+`DeleteAll` will return the number of models that were successfully deleted.
 
 ### Counting the Number of Models
 
-You can get the number of models for a given type using the `Count` method:
+You can get the number of models in a collection using the `Count` method:
 
 ``` go
 count, err := People.Count()
@@ -340,7 +381,8 @@ round trip. Transactions feature delayed execution, so nothing touches the datab
 also remembers its errors to make error handling easier on the caller. The first error that occurs (if any) will be
 returned when you call `Exec`.
 
-Here's an example of how to save two models and get the number of `Person` models in a single transaction.
+Here's an example of how to save two models and get the new number of models in
+the `People` collection in a single transaction.
 
 ``` go
 numPeople := 0
@@ -372,7 +414,7 @@ Queries
 
 Zoom provides a useful abstraction for querying the database. You create queries by using the `NewQuery`
 constructor, where you must pass in the name corresponding to the type of model you want to query. For now,
-Zoom only supports queries on a single type of model at a time.
+Zoom only supports queries on a single collection at a time.
 
 You can add one or more query modifiers to the query, such as `Order`, `Limit`, and `Filter`. These methods
 return the query itself, so you can chain them together. The first error (if any) that occurs due to invalid
@@ -458,9 +500,9 @@ If you intend to issue custom Redis commands or run custom scripts, it is highly
 you also make everything atomic. If you do not, Zoom can no longer guarantee that its indexes are
 consistent. For example, if you change the value of a field which is indexed, you should also
 update the index for that field in the same transaction. The keys that Zoom uses for indexes
-and models are provided via the [`ModelKey`](http://godoc.org/github.com/albrow/zoom/#ModelType.ModelKey),
-[`AllIndexKey`](http://godoc.org/github.com/albrow/zoom/#ModelType.AllIndexKey), and
-[`FieldIndexKey`](http://godoc.org/github.com/albrow/zoom/#ModelType.FieldIndexKey) methods.
+and models are provided via the [`ModelKey`](http://godoc.org/github.com/albrow/zoom/#Collection.ModelKey),
+[`AllIndexKey`](http://godoc.org/github.com/albrow/zoom/#Collection.AllIndexKey), and
+[`FieldIndexKey`](http://godoc.org/github.com/albrow/zoom/#Collection.FieldIndexKey) methods.
 
 Read more about:
 - [Redis persistence](http://redis.io/topics/persistence)

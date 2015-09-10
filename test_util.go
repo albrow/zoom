@@ -9,11 +9,12 @@ package zoom
 import (
 	"flag"
 	"fmt"
-	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"sort"
 	"sync"
 	"testing"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 var (
@@ -32,7 +33,7 @@ var setUpOnce = sync.Once{}
 // testingSetUp
 func testingSetUp() {
 	setUpOnce.Do(func() {
-		testPool = NewPool(&PoolConfig{
+		testPool = NewPool(&PoolOptions{
 			Address:  *address,
 			Network:  *network,
 			Database: *database,
@@ -225,41 +226,48 @@ func createIndexedPointersModel() *indexedPointersModel {
 }
 
 var (
-	testModels              *ModelType
-	indexedTestModels       *ModelType
-	indexedPrimativesModels *ModelType
-	indexedPointersModels   *ModelType
+	testModels              *Collection
+	indexedTestModels       *Collection
+	indexedPrimativesModels *Collection
+	indexedPointersModels   *Collection
 )
 
 // registerTestingTypes registers the common types used for testing
 func registerTestingTypes() {
 	testModelTypes := []struct {
-		modelType **ModelType
-		model     Model
+		collection **Collection
+		model      Model
+		index      bool
 	}{
 		{
-			modelType: &testModels,
-			model:     &testModel{},
+			collection: &testModels,
+			model:      &testModel{},
+			index:      true,
 		},
 		{
-			modelType: &indexedTestModels,
-			model:     &indexedTestModel{},
+			collection: &indexedTestModels,
+			model:      &indexedTestModel{},
+			index:      true,
 		},
 		{
-			modelType: &indexedPrimativesModels,
-			model:     &indexedPrimativesModel{},
+			collection: &indexedPrimativesModels,
+			model:      &indexedPrimativesModel{},
+			index:      true,
 		},
 		{
-			modelType: &indexedPointersModels,
-			model:     &indexedPointersModel{},
+			collection: &indexedPointersModels,
+			model:      &indexedPointersModel{},
+			index:      true,
 		},
 	}
 	for _, m := range testModelTypes {
-		modelType, err := testPool.Register(m.model)
+		collection, err := testPool.NewCollection(m.model, &CollectionOptions{
+			Index: m.index,
+		})
 		if err != nil {
 			panic(err)
 		}
-		*m.modelType = modelType
+		*m.collection = collection
 	}
 }
 
@@ -373,65 +381,65 @@ func expectKeyDoesNotExist(t *testing.T, key string) {
 // expectModelExists sets an error via t.Errorf if model does not exist in
 // the database. It checks for the main hash as well as the id in the index of all
 // ids for a given type.
-func expectModelExists(t *testing.T, mt *ModelType, model Model) {
+func expectModelExists(t *testing.T, mt *Collection, model Model) {
 	modelKey, err := mt.ModelKey(model.ModelId())
 	if err != nil {
 		t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 	}
 	expectKeyExists(t, modelKey)
-	expectSetContains(t, mt.AllIndexKey(), model.ModelId())
+	expectSetContains(t, mt.IndexKey(), model.ModelId())
 }
 
 // expectModelDoesNotExist sets an error via t.Errorf if model exists in the database.
 // It checks for the main hash as well as the id in the index of all ids for a
 // given type.
-func expectModelDoesNotExist(t *testing.T, mt *ModelType, model Model) {
+func expectModelDoesNotExist(t *testing.T, mt *Collection, model Model) {
 	modelKey, err := mt.ModelKey(model.ModelId())
 	if err != nil {
 		t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 	}
 	expectKeyDoesNotExist(t, modelKey)
-	expectSetDoesNotContain(t, mt.AllIndexKey(), model.ModelId())
+	expectSetDoesNotContain(t, mt.IndexKey(), model.ModelId())
 }
 
 // expectModelsExist sets an error via t.Errorf for each model in models that
 // does not exist in the database. It checks for the main hash as well as the id in
 // the index of all ids for a given type.
-func expectModelsExist(t *testing.T, mt *ModelType, models []Model) {
+func expectModelsExist(t *testing.T, mt *Collection, models []Model) {
 	for _, model := range models {
 		modelKey, err := mt.ModelKey(model.ModelId())
 		if err != nil {
 			t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyExists(t, modelKey)
-		expectSetContains(t, mt.AllIndexKey(), model.ModelId())
+		expectSetContains(t, mt.IndexKey(), model.ModelId())
 	}
 }
 
 // expectModelsDoNotExist sets an error via t.Errorf for each model in models that
 // exists in the database. It checks for the main hash as well as the id in the index
 // of all ids for a given type.
-func expectModelsDoNotExist(t *testing.T, mt *ModelType, models []Model) {
+func expectModelsDoNotExist(t *testing.T, mt *Collection, models []Model) {
 	for _, model := range models {
 		modelKey, err := mt.ModelKey(model.ModelId())
 		if err != nil {
 			t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
 		}
 		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, mt.AllIndexKey(), model.ModelId())
+		expectSetDoesNotContain(t, mt.IndexKey(), model.ModelId())
 	}
 }
 
 // indexExists returns true iff an index for the given type and field exists in the database.
-// It returns an error if modelType does not have a field called fieldName, the field identified
+// It returns an error if collection does not have a field called fieldName, the field identified
 // by fieldName is not an indexed field, there was a problem connecting to the database, or
 // there was some other unexpected problem.
-func indexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
-	fs, found := modelType.spec.fieldsByName[fieldName]
+func indexExists(collection *Collection, model Model, fieldName string) (bool, error) {
+	fs, found := collection.spec.fieldsByName[fieldName]
 	if !found {
-		return false, fmt.Errorf("Type %s has no field called %s", modelType.spec.typ.String(), fieldName)
+		return false, fmt.Errorf("Type %s has no field called %s", collection.spec.typ.String(), fieldName)
 	} else if fs.indexKind == noIndex {
-		return false, fmt.Errorf("%s.%s is not an indexed field", modelType.spec.typ.String(), fieldName)
+		return false, fmt.Errorf("%s.%s is not an indexed field", collection.spec.typ.String(), fieldName)
 	}
 	typ := fs.typ
 	for typ.Kind() == reflect.Ptr {
@@ -439,45 +447,45 @@ func indexExists(modelType *ModelType, model Model, fieldName string) (bool, err
 	}
 	switch {
 	case typeIsNumeric(typ):
-		return numericIndexExists(modelType, model, fieldName)
+		return numericIndexExists(collection, model, fieldName)
 	case typeIsString(typ):
-		return stringIndexExists(modelType, model, fieldName)
+		return stringIndexExists(collection, model, fieldName)
 	case typeIsBool(typ):
-		return booleanIndexExists(modelType, model, fieldName)
+		return booleanIndexExists(collection, model, fieldName)
 	default:
 		return false, fmt.Errorf("Unknown indexed field type %s", fs.typ)
 	}
 }
 
 // expectIndexExists sets an error via t.Error if an index on the given type and field
-// does not exist in the database. It also reports an error if modelType does not have a field
+// does not exist in the database. It also reports an error if collection does not have a field
 // called fieldName, the field identified by fieldName is not an indexed field, there was a
 // problem connecting to the database, or there was some other unexpected problem.
-func expectIndexExists(t *testing.T, modelType *ModelType, model Model, fieldName string) {
-	if exists, err := indexExists(modelType, model, fieldName); err != nil {
+func expectIndexExists(t *testing.T, collection *Collection, model Model, fieldName string) {
+	if exists, err := indexExists(collection, model, fieldName); err != nil {
 		t.Errorf("Unexpected error in indexExists: %s", err.Error())
 	} else if !exists {
-		t.Errorf("Expected an index for %s.%s to exist but it did not", modelType.spec.typ.String(), fieldName)
+		t.Errorf("Expected an index for %s.%s to exist but it did not", collection.spec.typ.String(), fieldName)
 	}
 }
 
 // expectIndexDoesNotExist sets an error via t.Error if an index on the given type and field
-// does exist in the database. It also reports an error if modelType does not have a field
+// does exist in the database. It also reports an error if collection does not have a field
 // called fieldName, the field identified by fieldName is not an indexed field, there was a
 // problem connecting to the database, or there was some other unexpected problem.
-func expectIndexDoesNotExist(t *testing.T, modelType *ModelType, model Model, fieldName string) {
-	if exists, err := indexExists(modelType, model, fieldName); err != nil {
+func expectIndexDoesNotExist(t *testing.T, collection *Collection, model Model, fieldName string) {
+	if exists, err := indexExists(collection, model, fieldName); err != nil {
 		t.Errorf("Unexpected error in indexExists: %s", err.Error())
 	} else if exists {
-		t.Errorf("Expected an index for %s.%s to not exist but it did", modelType.spec.typ.String(), fieldName)
+		t.Errorf("Expected an index for %s.%s to not exist but it did", collection.spec.typ.String(), fieldName)
 	}
 }
 
 // numericIndexExists returns true iff a numeric index on the given type and field exists. It
 // reads the current field value from model and if it is a pointer, dereferences it until
 // it reaches the underlying value.
-func numericIndexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
-	indexKey, err := modelType.FieldIndexKey(fieldName)
+func numericIndexExists(collection *Collection, model Model, fieldName string) (bool, error) {
+	indexKey, err := collection.FieldIndexKey(fieldName)
 	if err != nil {
 		return false, err
 	}
@@ -495,8 +503,8 @@ func numericIndexExists(modelType *ModelType, model Model, fieldName string) (bo
 // stringIndexExists returns true iff a string index on the given type and field exists. It
 // reads the current field value from model and if it is a pointer, dereferences it until
 // it reaches the underlying value.
-func stringIndexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
-	indexKey, err := modelType.FieldIndexKey(fieldName)
+func stringIndexExists(collection *Collection, model Model, fieldName string) (bool, error) {
+	indexKey, err := collection.FieldIndexKey(fieldName)
 	if err != nil {
 		return false, err
 	}
@@ -510,16 +518,15 @@ func stringIndexExists(modelType *ModelType, model Model, fieldName string) (boo
 	reply, err := conn.Do("ZRANK", indexKey, memberKey)
 	if err != nil {
 		return false, fmt.Errorf("Error in ZRANK: %s", err.Error())
-	} else {
-		return reply != nil, nil
 	}
+	return reply != nil, nil
 }
 
 // booleanIndexExists returns true iff a boolean index on the given type and field exists. It
 // reads the current field value from model and if it is a pointer, dereferences it until
 // it reaches the underlying value.
-func booleanIndexExists(modelType *ModelType, model Model, fieldName string) (bool, error) {
-	indexKey, err := modelType.FieldIndexKey(fieldName)
+func booleanIndexExists(collection *Collection, model Model, fieldName string) (bool, error) {
+	indexKey, err := collection.FieldIndexKey(fieldName)
 	if err != nil {
 		return false, err
 	}
