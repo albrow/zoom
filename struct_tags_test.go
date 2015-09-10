@@ -9,8 +9,9 @@
 package zoom
 
 import (
-	"github.com/garyburd/redigo/redis"
 	"testing"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 // Test that the redis ignore struct tag causes a field to be ignored
@@ -22,7 +23,7 @@ func TestRedisIgnoreOption(t *testing.T) {
 		Attr string `redis:"-"`
 		RandomId
 	}
-	ignoredFieldModels, err := testPool.Register(&ignoredFieldModel{})
+	ignoredFieldModels, err := testPool.NewCollection(&ignoredFieldModel{}, nil)
 	if err != nil {
 		t.Errorf("Unexpected error in Register: %s", err)
 	}
@@ -66,7 +67,7 @@ func TestRedisNameOption(t *testing.T) {
 		Attr string `redis:"a"`
 		RandomId
 	}
-	customFieldModels, err := testPool.Register(&customFieldModel{})
+	customFieldModels, err := testPool.NewCollection(&customFieldModel{}, nil)
 	if err != nil {
 		t.Errorf("Unexpected error in Register: %s", err.Error())
 	}
@@ -101,7 +102,7 @@ func TestInvalidOptionThrowsError(t *testing.T) {
 		Attr string `zoom:"index,poop"`
 		RandomId
 	}
-	if _, err := testPool.Register(&invalid{}); err == nil {
+	if _, err := testPool.NewCollection(&invalid{}, nil); err == nil {
 		t.Error("Expected error when registering struct with invalid tag")
 	}
 }
@@ -215,7 +216,7 @@ func TestIndexAndCustomName(t *testing.T) {
 		Bool   bool   `zoom:"index" redis:"boolean"`
 		RandomId
 	}
-	customIndexModels, err := testPool.Register(&customIndexModel{})
+	customIndexModels, err := testPool.NewCollection(&customIndexModel{}, nil)
 	if err != nil {
 		t.Fatalf("Unexpected error in Register: %s", err.Error())
 	}

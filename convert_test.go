@@ -38,9 +38,9 @@ func TestConvertInconvertibles(t *testing.T) {
 		IntMap      map[int]int
 		RandomId
 	}
-	inconvertiblesModels, err := testPool.Register(&inconvertiblesModel{})
+	inconvertiblesModels, err := testPool.NewCollection(&inconvertiblesModel{}, nil)
 	if err != nil {
-		t.Errorf("Unexpected error in testPool.Register: %s", err.Error())
+		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
 	model := &inconvertiblesModel{
 		Complex:     randomComplex(),
@@ -68,9 +68,9 @@ func TestConvertEmbeddedStruct(t *testing.T) {
 		embeddable
 		RandomId
 	}
-	embededStructModels, err := testPool.Register(&embeddedStructModel{})
+	embededStructModels, err := testPool.NewCollection(&embeddedStructModel{}, nil)
 	if err != nil {
-		t.Errorf("Unexpected error in testPool.Register: %s", err.Error())
+		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
 	model := &embeddedStructModel{
 		embeddable: embeddable{
@@ -90,9 +90,9 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 		*embeddable
 		RandomId
 	}
-	embededPointerToStructModels, err := testPool.Register(&embeddedPointerToStructModel{})
+	embededPointerToStructModels, err := testPool.NewCollection(&embeddedPointerToStructModel{}, nil)
 	if err != nil {
-		t.Errorf("Unexpected error in testPool.Register: %s", err.Error())
+		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
 	model := &embeddedPointerToStructModel{
 		embeddable: &embeddable{
@@ -106,17 +106,17 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 
 // testConvertType is a general test that uses reflection. It saves model to the databse then finds it. If
 // the found copy does not exactly match the original, it reports an error via t.Error or t.Errorf
-func testConvertType(t *testing.T, modelType *ModelType, model Model) {
+func testConvertType(t *testing.T, collection *Collection, model Model) {
 	// Make sure we can save the model without errors
-	if err := modelType.Save(model); err != nil {
+	if err := collection.Save(model); err != nil {
 		t.Errorf("Unexpected error in Save: %s", err.Error())
 	}
 	// Find the model from the database and scan it into a new copy
-	modelCopy, ok := reflect.New(modelType.spec.typ.Elem()).Interface().(Model)
+	modelCopy, ok := reflect.New(collection.spec.typ.Elem()).Interface().(Model)
 	if !ok {
-		t.Fatalf("Unexpected error: Could not convert type %s to Model", modelType.spec.typ.String())
+		t.Fatalf("Unexpected error: Could not convert type %s to Model", collection.spec.typ.String())
 	}
-	if err := modelType.Find(model.ModelId(), modelCopy); err != nil {
+	if err := collection.Find(model.ModelId(), modelCopy); err != nil {
 		t.Errorf("Unexpected error in Find: %s", err.Error())
 	}
 	// Make sure the copy equals the original
@@ -125,11 +125,11 @@ func testConvertType(t *testing.T, modelType *ModelType, model Model) {
 	}
 	// Make sure we can save a model with all nil fields. This should
 	// not cause an error.
-	emptyModel, ok := reflect.New(modelType.spec.typ.Elem()).Interface().(Model)
+	emptyModel, ok := reflect.New(collection.spec.typ.Elem()).Interface().(Model)
 	if !ok {
-		t.Fatalf("Unexpected error: Could not convert type %s to Model", modelType.spec.typ.String())
+		t.Fatalf("Unexpected error: Could not convert type %s to Model", collection.spec.typ.String())
 	}
-	if err := modelType.Save(emptyModel); err != nil {
+	if err := collection.Save(emptyModel); err != nil {
 		t.Errorf("Unexpected error saving an empty model: %s", err.Error())
 	}
 }

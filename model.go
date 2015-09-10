@@ -170,7 +170,7 @@ func setIndexKind(fs *fieldSpec, fieldType reflect.Type) error {
 
 // allIndexKey returns a key which is used in redis to store all the ids of every model of a
 // given type
-func (ms *modelSpec) allIndexKey() string {
+func (ms *modelSpec) indexKey() string {
 	return ms.name + ":all"
 }
 

@@ -9,17 +9,18 @@
 package zoom
 
 import (
-	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"time"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 // Pool represents a pool of connections. Each pool connects
 // to one database and manages its own set of registered models.
 type Pool struct {
-	// config is the fully parsed conifg, with defaults filling in any
+	// options is the fully parsed conifg, with defaults filling in any
 	// blanks from the poolConfig passed into NewPool.
-	config *PoolConfig
+	options *PoolOptions
 	// redisPool is a redis.Pool
 	redisPool *redis.Pool
 	// modelTypeToSpec maps a registered model type to a modelSpec
@@ -28,11 +29,26 @@ type Pool struct {
 	modelNameToSpec map[string]*modelSpec
 }
 
-// NewPool initializes and returns a pool with the given parameters
-func NewPool(config *PoolConfig) *Pool {
-	fullConfig := parseConfig(config)
+// PoolOptions contains various options for a pool.
+type PoolOptions struct {
+	// Address to connect to. Default: "localhost:6379"
+	Address string
+	// Network to use. Default: "tcp"
+	Network string
+	// Database id to use (using SELECT). Default: 0
+	Database int
+	// Password for a password-protected redis database. If not empty,
+	// every connection will use the AUTH command during initialization
+	// to authenticate with the database. Default: ""
+	Password string
+}
+
+// NewPool initializes and returns a pool with the given options. To use all
+// the default options, you can pass in nil.
+func NewPool(options *PoolOptions) *Pool {
+	fullOptions := parsePoolOptions(options)
 	pool := &Pool{
-		config:          fullConfig,
+		options:         fullOptions,
 		modelTypeToSpec: map[reflect.Type]*modelSpec{},
 		modelNameToSpec: map[string]*modelSpec{},
 	}
@@ -41,19 +57,19 @@ func NewPool(config *PoolConfig) *Pool {
 		MaxActive:   0,
 		IdleTimeout: 240 * time.Second,
 		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial(fullConfig.Network, fullConfig.Address)
+			c, err := redis.Dial(fullOptions.Network, fullOptions.Address)
 			if err != nil {
 				return nil, err
 			}
-			// If a config.Password was provided, use the AUTH command to authenticate
-			if fullConfig.Password != "" {
-				_, err = c.Do("AUTH", fullConfig.Password)
+			// If a options.Password was provided, use the AUTH command to authenticate
+			if fullOptions.Password != "" {
+				_, err = c.Do("AUTH", fullOptions.Password)
 				if err != nil {
 					return nil, err
 				}
 			}
-			// Select the database number provided by fullConfig.Database
-			if _, err := c.Do("Select", fullConfig.Database); err != nil {
+			// Select the database number provided by fullOptions.Database
+			if _, err := c.Do("Select", fullOptions.Database); err != nil {
 				c.Close()
 				return nil, err
 			}
@@ -77,47 +93,33 @@ func (p *Pool) Close() error {
 	return p.redisPool.Close()
 }
 
-// defaultPoolConfig holds the default values for each config option
+// defaultPoolOptions holds the default values for each config option
 // if the zero value is provided in the input configuration, the value
 // will fallback to the default value
-var defaultPoolConfig = PoolConfig{
+var defaultPoolOptions = PoolOptions{
 	Address:  "localhost:6379",
 	Network:  "tcp",
 	Database: 0,
 	Password: "",
 }
 
-// parseConfig returns a well-formed PoolConfig struct.
-// If the passedConfig is nil, returns defaultPoolConfig.
-// Else, for each zero value field in passedConfig,
+// parsePoolOptions returns a well-formed PoolOptions struct.
+// If the passedOptions is nil, returns defaultPoolOptions.
+// Else, for each zero value field in passedOptions,
 // use the default value for that field.
-func parseConfig(passedConfig *PoolConfig) *PoolConfig {
-	if passedConfig == nil {
-		return &defaultPoolConfig
+func parsePoolOptions(passedOptions *PoolOptions) *PoolOptions {
+	if passedOptions == nil {
+		return &defaultPoolOptions
 	}
-	// copy the passedConfig
-	newConfig := *passedConfig
-	if newConfig.Address == "" {
-		newConfig.Address = defaultPoolConfig.Address
+	// copy the passedOptions
+	newOptions := *passedOptions
+	if newOptions.Address == "" {
+		newOptions.Address = defaultPoolOptions.Address
 	}
-	if newConfig.Network == "" {
-		newConfig.Network = defaultPoolConfig.Network
+	if newOptions.Network == "" {
+		newOptions.Network = defaultPoolOptions.Network
 	}
 	// since the zero value for int is 0, we can skip config.Database
 	// since the zero value for string is "", we can skip config.Address
-	return &newConfig
-}
-
-// PoolConfig contains various options for a pool.
-type PoolConfig struct {
-	// Address to connect to. Default: "localhost:6379"
-	Address string
-	// Network to use. Default: "tcp"
-	Network string
-	// Database id to use (using SELECT). Default: 0
-	Database int
-	// Password for a password-protected redis database. If not empty,
-	// every connection will use the AUTH command during initialization
-	// to authenticate with the database. Default: ""
-	Password string
+	return &newOptions
 }
