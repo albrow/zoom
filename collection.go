@@ -20,8 +20,9 @@ import (
 // for saving, finding, and deleting models of a specific type. Use the
 // NewCollection method to create a new collection.
 type Collection struct {
-	spec *modelSpec
-	pool *Pool
+	spec  *modelSpec
+	pool  *Pool
+	index bool
 }
 
 // CollectionOptions contains various options for a pool.
@@ -31,8 +32,14 @@ type CollectionOptions struct {
 	// collection name as a prefix. If not provided, the default name will be the
 	// name of the model type without the package prefix or pointer declarations.
 	// So for example, the default name corresponding to *models.User would be
-	// "User".
+	// "User". If a custom name is provided, it cannot contain a colon.
 	Name string
+	// Iff Index is true, any model in the collection that is saved will be added
+	// to a set in redis which acts as an index. The default value is false. The
+	// key for the set is exposed via the IndexKey method. Queries and the
+	// FindAll, Count, and DeleteAll methods will not work for unindexed
+	// collections. This may change in future versions.
+	Index bool
 }
 
 // Name returns the name for the given collection. The name is a unique string
@@ -48,7 +55,10 @@ func (c *Collection) Name() string {
 // to a struct. To use the default options, pass in nil as the options argument.
 func (p *Pool) NewCollection(model Model, options *CollectionOptions) (*Collection, error) {
 	// Parse the options
-	fullOptions := parseCollectionOptions(model, options)
+	fullOptions, err := parseCollectionOptions(model, options)
+	if err != nil {
+		return nil, err
+	}
 
 	// Make sure the name and type have not been previously registered
 	typ := reflect.TypeOf(model)
@@ -72,26 +82,32 @@ func (p *Pool) NewCollection(model Model, options *CollectionOptions) (*Collecti
 
 	// Return the Collection
 	return &Collection{
-		spec: spec,
-		pool: p,
+		spec:  spec,
+		pool:  p,
+		index: fullOptions.Index,
 	}, nil
 }
 
 // parseCollectionOptions returns a well-formed CollectionOptions struct. If
 // passedOptions is nil, it uses all the default options. Else, for each zero
 // value field in passedOptions, it uses the default value for that field.
-func parseCollectionOptions(model Model, passedOptions *CollectionOptions) *CollectionOptions {
+func parseCollectionOptions(model Model, passedOptions *CollectionOptions) (*CollectionOptions, error) {
+	// If passedOptions is nil, use all the default values
 	if passedOptions == nil {
 		return &CollectionOptions{
 			Name: getDefaultCollectionName(reflect.TypeOf(model)),
-		}
+		}, nil
 	}
-	// copy the passedOptions
+	// Copy and validate the passedOptions
 	newOptions := *passedOptions
 	if newOptions.Name == "" {
 		newOptions.Name = getDefaultCollectionName(reflect.TypeOf(model))
+	} else if strings.Contains(newOptions.Name, ":") {
+		return nil, fmt.Errorf("zoom: CollectionOptions.Name cannot contain a colon. Got: %s", newOptions.Name)
 	}
-	return &newOptions
+	// NOTE: we don't need to modify the Index field becuase the default value,
+	// false, is also the zero value.
+	return &newOptions, nil
 }
 
 // getDefaultCollectionName returns the default collection name for the given
@@ -184,8 +200,10 @@ func (t *Transaction) Save(c *Collection, model Model) {
 		// 1.
 		t.Command("HMSET", hashArgs, nil)
 	}
-	// Add the model id to the set of all models of this type
-	t.Command("SADD", redis.Args{c.IndexKey(), model.ModelId()}, nil)
+	// Add the model id to the set of all models for this collection
+	if c.index {
+		t.Command("SADD", redis.Args{c.IndexKey(), model.ModelId()}, nil)
+	}
 }
 
 // saveFieldIndexes adds commands to the transaction for saving the indexes
@@ -320,6 +338,10 @@ func (c *Collection) FindAll(models interface{}) error {
 // Any errors encountered will be added to the transaction and returned as an error
 // when the transaction is executed.
 func (t *Transaction) FindAll(c *Collection, models interface{}) {
+	if !c.index {
+		t.setError(fmt.Errorf("zoom: error in FindAll: FindAll only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
+		return
+	}
 	// Since this is somewhat type-unsafe, we need to verify that
 	// models is the correct type
 	if err := c.checkModelsType(models); err != nil {
@@ -348,6 +370,10 @@ func (c *Collection) Count() (int, error) {
 // encountered will be added to the transaction and returned as an error when the
 // transaction is executed.
 func (t *Transaction) Count(c *Collection, count *int) {
+	if !c.index {
+		t.setError(fmt.Errorf("zoom: error in Count: Count only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
+		return
+	}
 	t.Command("SCARD", redis.Args{c.IndexKey()}, newScanIntHandler(count))
 }
 
@@ -427,6 +453,10 @@ func (c *Collection) DeleteAll() (int, error) {
 // when the transaction is executed. Any errors encountered will be added to the transaction
 // and returned as an error when the transaction is executed.
 func (t *Transaction) DeleteAll(c *Collection, count *int) {
+	if !c.index {
+		t.setError(fmt.Errorf("zoom: error in DeleteAll: DeleteAll only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
+		return
+	}
 	t.deleteModelsBySetIds(c.IndexKey(), c.Name(), newScanIntHandler(count))
 }
 

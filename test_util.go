@@ -237,26 +237,33 @@ func registerTestingTypes() {
 	testModelTypes := []struct {
 		collection **Collection
 		model      Model
+		index      bool
 	}{
 		{
 			collection: &testModels,
 			model:      &testModel{},
+			index:      true,
 		},
 		{
 			collection: &indexedTestModels,
 			model:      &indexedTestModel{},
+			index:      true,
 		},
 		{
 			collection: &indexedPrimativesModels,
 			model:      &indexedPrimativesModel{},
+			index:      true,
 		},
 		{
 			collection: &indexedPointersModels,
 			model:      &indexedPointersModel{},
+			index:      true,
 		},
 	}
 	for _, m := range testModelTypes {
-		collection, err := testPool.NewCollection(m.model, nil)
+		collection, err := testPool.NewCollection(m.model, &CollectionOptions{
+			Index: m.index,
+		})
 		if err != nil {
 			panic(err)
 		}
