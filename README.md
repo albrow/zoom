@@ -37,15 +37,22 @@ Zoom has been around for more than a year. It is well-tested and going forward t
 will be relatively stable. We are closing in on
 [Version 1.0.0-alpha](https://github.com/albrow/zoom/milestones).
 
-At this time, Zoom can be considered safe for use in low-traffic production applications. However,
-as with any relatively new package, it is possible that there are some undiscovered bugs. Therefore
-we would recommend writing good tests, reporting any bugs you may find, and avoiding using Zoom for
-mission-critical or high-traffic applications.
+At this time, Zoom can be considered safe for use in low-traffic production
+applications. However, as with any relatively new package, it is possible that
+there are some undiscovered bugs. Therefore we would recommend writing good
+tests, reporting any bugs you may find, and avoiding using Zoom for mission-
+critical or high-traffic applications.
 
-Zoom follows semantic versioning, but offers no guarantees of backwards compatibility until version
-1.0. However, starting with version 0.9.0,
-[migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide) will be provided for any
-non-trivial breaking changes, making it easier to stay up to date with the latest version.
+Zoom follows semantic versioning, but offers no guarantees of backwards
+compatibility until version 1.0. We recommend using a dependency manager such as
+[godep](https://github.com/tools/godep)
+or [glide](https://github.com/Masterminds/glide) to lock in a specific version
+of Zoom. You can also keep an eye on the
+[Releases page](https://github.com/albrow/zoom/releases) to see a full changelog
+for each release. In addition, starting with version 0.9.0,
+[migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide) will be
+provided for any non-trivial breaking changes, making it easier to stay up to
+date with the latest version.
 
 
 When is Zoom a Good Fit?
@@ -72,7 +79,7 @@ Zoom might ***not*** be a good fit if:
 1. **You are working with a lot of data.** Zoom stores all data in memory at all times, and does not
 	yet support sharding or Redis Cluster. Memory could be a hard constraint for larger applications.
 	Keep in mind that it is possible (if expensive) to run Redis on machines with up to 256GB of memory
-	on cloud providers such as Amazon EC2. This is probably plenty for all but the largest applications.
+	on cloud providers such as Amazon EC2.
 2. **You require the ability to run advanced queries.** Zoom currently only provides support for
 	basic queries and is not as powerful or flexible as something like SQL. For example, Zoom currently
 	lacks the equivalent of the `IN` or `OR` SQL keywords. See the
@@ -90,11 +97,9 @@ as Redis To Go, RedisLabs, Google Cloud Redis, or Amazon Elasticache.
 If you need to install Redis, see the [installation instructions](http://redis.io/download) on the official
 Redis website.
 
-To install Zoom itself, run `go get github.com/albrow/zoom`. This will pull the current master branch,
-which is relatively stable and well-tested. However, because Zoom has not yet hit version 1.0, sometimes
-the master branch will introduce breaking changes. Usually these changes are small, but for bigger
-breaking changes, you can check the [migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide)
-page for help migrating to newer versions. 
+To install Zoom itself, run `go get github.com/albrow/zoom` to pull down the
+current master branch, or install with the dependency manager of your choice to
+lock in a specific version.
 
 
 Initialization
@@ -259,7 +264,7 @@ There are a few important points to emphasize concerning collections:
    if Index is false. This may change in future versions.
 
 Convention is to name the `Collection` the plural of the corresponding
-registered type (e.g. "People"), but it's just a variable so you can name it
+model type (e.g. "People"), but it's just a variable so you can name it
 whatever you want. If you need to access a `Collection` in different parts of
 your application, it is sometimes a good idea to declare a top-level variable
 and then initialize it in the `init` function:
