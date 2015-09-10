@@ -1,4 +1,4 @@
-CoZoom
+Zoom
 ====
 
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
