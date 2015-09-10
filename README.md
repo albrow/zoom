@@ -233,6 +233,31 @@ It works similarly to `PoolOptions`. You can just pass nil to use all the
 default options. Additionally, any zero-valued fields in the struct indicate
 that the default value should be used for that field.
 
+
+``` go
+type CollectionOptions struct {
+	// Name is a unique string identifier to use for the collection in redis. All
+	// models in this collection that are saved in the database will use the
+	// collection name as a prefix. If not provided, the default name will be the
+	// name of the model type without the package prefix or pointer declarations.
+	// So for example, the default name corresponding to *models.User would be
+	// "User". If a custom name is provided, it cannot contain a colon.
+	Name string
+	// Iff Index is true, any model in the collection that is saved will be added
+	// to a set in redis which acts as an index. The default value is false. The
+	// key for the set is exposed via the IndexKey method. Queries and the
+	// FindAll, Count, and DeleteAll methods will not work for unindexed
+	// collections. This may change in future versions.
+	Index bool
+}
+```
+
+There are a few important points to emphasize concerning collections:
+
+1. The collection name cannot contain a colon.
+2. Queries, as well as the FindAll, DeleteAll, and Count methods will not work
+   if Index is false. This may change in future versions.
+
 Convention is to name the `Collection` the plural of the corresponding
 registered type (e.g. "People"), but it's just a variable so you can name it
 whatever you want. If you need to access a `Collection` in different parts of

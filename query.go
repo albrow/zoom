@@ -146,10 +146,16 @@ var filterOps = map[string]filterOp{
 // order. Queries use delated execution, so nothing touches the database until you
 // execute it.
 func (collection *Collection) NewQuery() *Query {
-	return &Query{
+	q := &Query{
 		collection: collection,
 		pool:       collection.pool,
 	}
+	// For now, only indexed collections are queryable. This might change in
+	// future versions.
+	if !collection.index {
+		q.setError(fmt.Errorf("zoom: error in NewQuery: Only indexed collections are queryable. To index the collection, pass CollectionOptions to the NewCollection method."))
+	}
+	return q
 }
 
 // setError sets the err property of q only if it has not already been set
@@ -343,6 +349,9 @@ func (filter filter) checkValType(value interface{}) error {
 // return the first error that occured during the lifetime of the query object
 // (if any). It will also return an error if models is the wrong type.
 func (q *Query) Run(models interface{}) error {
+	if q.hasError() {
+		return q.err
+	}
 	if err := q.collection.spec.checkModelsType(models); err != nil {
 		return err
 	}
@@ -375,6 +384,9 @@ func (q *Query) Run(models interface{}) error {
 // query criteria and scans the values into model. If no model fits the criteria,
 // an error will be returned.
 func (q *Query) RunOne(model Model) error {
+	if q.hasError() {
+		return q.err
+	}
 	if err := q.collection.spec.checkModelType(model); err != nil {
 		return err
 	}
@@ -397,6 +409,9 @@ func (q *Query) RunOne(model Model) error {
 // error that occured during the lifetime of the query object (if any).
 // Otherwise, the second return value will be nil.
 func (q *Query) Count() (uint, error) {
+	if q.hasError() {
+		return 0, q.err
+	}
 	if !q.hasFilters() {
 		// Just return the number of ids in the all index set
 		conn := q.pool.NewConn()
@@ -435,6 +450,9 @@ func (q *Query) Count() (uint, error) {
 // models themselves. Ids will return the first error that occured
 // during the lifetime of the query object (if any).
 func (q *Query) Ids() ([]string, error) {
+	if q.hasError() {
+		return nil, q.err
+	}
 	q.tx = q.pool.NewTransaction()
 	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {

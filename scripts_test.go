@@ -81,7 +81,10 @@ func TestDeleteStringIndexScript(t *testing.T) {
 		String string `zoom:"index"`
 		RandomId
 	}
-	stringIndexModels, err := testPool.NewCollection(&stringIndexModel{}, nil)
+	stringIndexModels, err := testPool.NewCollection(&stringIndexModel{},
+		&CollectionOptions{
+			Index: true,
+		})
 	if err != nil {
 		t.Errorf("Unexpected error registering stringIndexModel: %s", err.Error())
 	}
