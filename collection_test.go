@@ -31,7 +31,7 @@ func TestNewCollection(t *testing.T) {
 	}
 	expectedName := "collectionTestModel"
 	expectedType := reflect.TypeOf(&collectionTestModel{})
-	testRegisteredModelType(t, col, expectedName, expectedType)
+	testRegisteredCollectionType(t, col, expectedName, expectedType)
 
 	// Effectively unregister the type by removing it from the map
 	delete(testPool.modelNameToSpec, col.Name())
@@ -51,14 +51,14 @@ func TestNewCollectionWithName(t *testing.T) {
 		t.Fatalf("Unexpected error in Register: %s", err.Error())
 	}
 	expectedType := reflect.TypeOf(&collectionTestModel{})
-	testRegisteredModelType(t, col, expectedName, expectedType)
+	testRegisteredCollectionType(t, col, expectedName, expectedType)
 
 	// Effectively unregister the type by removing it from the map
 	delete(testPool.modelNameToSpec, col.Name())
 	delete(testPool.modelTypeToSpec, col.spec.typ)
 }
 
-func testRegisteredModelType(t *testing.T, collection *Collection, expectedName string, expectedType reflect.Type) {
+func testRegisteredCollectionType(t *testing.T, collection *Collection, expectedName string, expectedType reflect.Type) {
 	// Check that the name and type are correct
 	if collection.Name() != expectedName {
 		t.Errorf("Registered name was incorrect. Expected %s but got %s", expectedName, collection.Name())
