@@ -95,32 +95,19 @@ func parseCollectionOptions(model Model, passedOptions *CollectionOptions) (*Col
 	// If passedOptions is nil, use all the default values
 	if passedOptions == nil {
 		return &CollectionOptions{
-			Name: getDefaultCollectionName(reflect.TypeOf(model)),
+			Name: getDefaultModelSpecName(reflect.TypeOf(model)),
 		}, nil
 	}
 	// Copy and validate the passedOptions
 	newOptions := *passedOptions
 	if newOptions.Name == "" {
-		newOptions.Name = getDefaultCollectionName(reflect.TypeOf(model))
+		newOptions.Name = getDefaultModelSpecName(reflect.TypeOf(model))
 	} else if strings.Contains(newOptions.Name, ":") {
 		return nil, fmt.Errorf("zoom: CollectionOptions.Name cannot contain a colon. Got: %s", newOptions.Name)
 	}
 	// NOTE: we don't need to modify the Index field becuase the default value,
 	// false, is also the zero value.
 	return &newOptions, nil
-}
-
-// getDefaultCollectionName returns the default collection name for the given
-// type, which is simply the name of the type without the package prefix or
-// dereference operators.
-func getDefaultCollectionName(typ reflect.Type) string {
-	// Strip any dereference operators
-	for typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-	nameWithPackage := typ.String()
-	// Strip the package name
-	return strings.Join(strings.Split(nameWithPackage, ".")[1:], "")
 }
 
 func (p *Pool) typeIsRegistered(typ reflect.Type) bool {

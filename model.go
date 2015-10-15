@@ -9,9 +9,10 @@ package zoom
 
 import (
 	"fmt"
-	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"strings"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 // RandomId can be embedded in any model struct in order to satisfy
@@ -62,13 +63,13 @@ type fieldSpec struct {
 	indexKind indexKind
 }
 
-// fieldKind is the kind of a particular field, and is either a primative,
+// fieldKind is the kind of a particular field, and is either a primitive,
 // a pointer, or an inconvertible.
 type fieldKind int
 
 const (
-	primativeField     fieldKind = iota // any primative type
-	pointerField                        // pointer to any primative type
+	primativeField     fieldKind = iota // any primitive type
+	pointerField                        // pointer to any primitive type
 	inconvertibleField                  // all other types
 )
 
@@ -86,13 +87,22 @@ const (
 // compilesModelSpec examines typ using reflection, parses its fields,
 // and returns a modelSpec.
 func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
-	ms := &modelSpec{fieldsByName: map[string]*fieldSpec{}, typ: typ}
+	ms := &modelSpec{
+		name:         getDefaultModelSpecName(typ),
+		fieldsByName: map[string]*fieldSpec{},
+		typ:          typ,
+	}
 
 	// Iterate through fields
 	elem := typ.Elem()
 	numFields := elem.NumField()
 	for i := 0; i < numFields; i++ {
 		field := elem.Field(i)
+		// Skip unexported fields
+		if field.PkgPath != "" {
+			continue
+		}
+
 		// Skip the RandomId field
 		if field.Type == reflect.TypeOf(RandomId{}) {
 			continue
@@ -130,7 +140,7 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 
 		// Detect the kind of the field and (if applicable) the kind of the index
 		if typeIsPrimative(field.Type) {
-			// Primative
+			// Primitive
 			fs.kind = primativeField
 			if shouldIndex {
 				if err := setIndexKind(fs, field.Type); err != nil {
@@ -138,7 +148,7 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 				}
 			}
 		} else if field.Type.Kind() == reflect.Ptr && typeIsPrimative(field.Type.Elem()) {
-			// Pointer to a primative
+			// Pointer to a primitive
 			fs.kind = pointerField
 			if shouldIndex {
 				if err := setIndexKind(fs, field.Type.Elem()); err != nil {
@@ -151,6 +161,19 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 		}
 	}
 	return ms, nil
+}
+
+// getDefaultModelSpecName returns the default name for the given type, which is
+// simply the name of the type without the package prefix or dereference
+// operators.
+func getDefaultModelSpecName(typ reflect.Type) string {
+	// Strip any dereference operators
+	for typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	nameWithPackage := typ.String()
+	// Strip the package name
+	return strings.Join(strings.Split(nameWithPackage, ".")[1:], "")
 }
 
 // setIndexKind sets the indexKind field of fs based on fieldType
