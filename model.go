@@ -337,9 +337,19 @@ func (mr *modelRef) key() string {
 // mainHashArgs returns the args for the main hash for this model. Typically
 // these args should part of an HMSET command.
 func (mr *modelRef) mainHashArgs() (redis.Args, error) {
+	return mr.mainHashArgsForFields(mr.spec.fieldNames())
+}
+
+// mainHashArgsForFields is like mainHashArgs but only returns the hash
+// fields which match the given fieldNames.
+func (mr *modelRef) mainHashArgsForFields(fieldNames []string) (redis.Args, error) {
 	args := redis.Args{mr.key()}
 	ms := mr.spec
 	for _, fs := range ms.fields {
+		// Skip fields whose names do not appear in fieldNames.
+		if !stringSliceContains(fieldNames, fs.name) {
+			continue
+		}
 		fieldVal := mr.fieldValue(fs.name)
 		switch fs.kind {
 		case primativeField:

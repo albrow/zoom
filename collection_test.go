@@ -135,6 +135,31 @@ func TestSave(t *testing.T) {
 	expectFieldEquals(t, key, "Bool", model.Bool)
 }
 
+func TestUpdate(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Create and save a test model
+	model := createTestModels(1)[0]
+	if err := testModels.Save(model); err != nil {
+		t.Errorf("Unexpected error in testModels.Save: %s", err.Error())
+	}
+
+	// Update the Int and String fields
+	model.Int = model.Int + 1
+	model.String = "new" + model.String
+	if err := testModels.UpdateFields([]string{"Int", "String"}, model); err != nil {
+		t.Errorf("Unexpected error in testModels.UpdateFields: %s", err.Error())
+	}
+
+	// Make sure the model was saved correctly
+	expectModelExists(t, testModels, model)
+	key, _ := testModels.ModelKey(model.ModelId())
+	expectFieldEquals(t, key, "Int", model.Int)
+	expectFieldEquals(t, key, "String", model.String)
+	expectFieldEquals(t, key, "Bool", model.Bool)
+}
+
 func TestFind(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()

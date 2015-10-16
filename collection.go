@@ -141,7 +141,7 @@ func (c *Collection) FieldIndexKey(fieldName string) (string, error) {
 }
 
 // Save writes a model (a struct which satisfies the Model interface) to the
-// redis database. Save throws an error if the type of model does not match the
+// redis database. Save returns an error if the type of model does not match the
 // registered Collection. To make a struct satisfy the Model interface, you can
 // embed zoom.RandomId, which will generate pseudo-random ids for each model.
 func (c *Collection) Save(model Model) error {
@@ -155,7 +155,7 @@ func (c *Collection) Save(model Model) error {
 
 // Save writes a model (a struct which satisfies the Model interface) to the
 // redis database inside an existing transaction. save will set the err property
-// of the transaction if the type of model does not matched the registered
+// of the transaction if the type of model does not match the registered
 // Collection, which will cause exec to fail immediately and return the error.
 // To make a struct satisfy the Model interface, you can embed zoom.RandomId,
 // which will generate pseudo-random ids for each model. Any errors encountered
@@ -196,7 +196,17 @@ func (t *Transaction) Save(c *Collection, model Model) {
 // saveFieldIndexes adds commands to the transaction for saving the indexes
 // for all indexed fields.
 func (t *Transaction) saveFieldIndexes(mr *modelRef) {
+	t.saveFieldIndexesForFields(mr.spec.fieldNames(), mr)
+}
+
+// saveFieldIndexesForFields works like saveFieldIndexes, but only saves the
+// indexes for the given fieldNames.
+func (t *Transaction) saveFieldIndexesForFields(fieldNames []string, mr *modelRef) {
 	for _, fs := range mr.spec.fields {
+		// Skip fields whose names do not appear in fieldNames.
+		if !stringSliceContains(fieldNames, fs.name) {
+			continue
+		}
 		switch fs.indexKind {
 		case noIndex:
 			continue
@@ -258,6 +268,69 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 		t.setError(err)
 	}
 	t.Command("ZADD", redis.Args{indexKey, 0, member}, nil)
+}
+
+// UpdateFields updates only the given fields of the model. UpdateFields uses
+// "last write wins" semantics. If another caller updates the the same fields
+// concurrently, your updates may be overwritten. It will return an error if
+// the type of model does not match the registered Collection, or if any of
+// the given fieldNames are not found in the registered Collection. If
+// UpdateFields is called on a model that has not yet been saved, it will not
+// return an error. Instead, only the given fields will be saved in the
+// database.
+func (c *Collection) UpdateFields(fieldNames []string, model Model) error {
+	t := c.pool.NewTransaction()
+	t.UpdateFields(c, fieldNames, model)
+	if err := t.Exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// UpdateFields updates only the given fields of the model inside an existing
+// transaction. UpdateFields will set the err property of the transaction if the
+// type of model does not match the registered Collection, or if any of the
+// given fieldNames are not found in the model type. In either case, the
+// transaction will return the error when you call Exec. UpdateFields uses "last
+// write wins" semantics. If another caller updates the the same fields
+// concurrently, your updates may be overwritten. If UpdateFields is called on a
+// model that has not yet been saved, it will not return an error. Instead, only
+// the given fields will be saved in the database.
+func (t *Transaction) UpdateFields(c *Collection, fieldNames []string, model Model) {
+	// Check the model type
+	if err := c.checkModelType(model); err != nil {
+		t.setError(fmt.Errorf("zoom: Error in UpdateFields or Transaction.UpdateFields: %s", err.Error()))
+		return
+	}
+	// Check the given field names
+	for _, fieldName := range fieldNames {
+		if !stringSliceContains(c.spec.fieldNames(), fieldName) {
+			t.setError(fmt.Errorf("zoom: Error in UpdateFields or Transaction.UpdateFields: Collection %s does not have field named %s", c.Name(), fieldName))
+			return
+		}
+	}
+	// Create a modelRef and start a transaction
+	mr := &modelRef{
+		spec:  c.spec,
+		model: model,
+	}
+	// Update indexes
+	// This must happen first, because it relies on reading the old field values
+	// from the hash for string indexes (if any)
+	t.saveFieldIndexesForFields(fieldNames, mr)
+	// Get the main hash args.
+	hashArgs, err := mr.mainHashArgs()
+	if err != nil {
+		t.setError(err)
+	}
+	//
+	if len(hashArgs) > 1 {
+		// Only save the main hash if there are any fields
+		// The first element in hashArgs is the model key,
+		// so there are fields if the length is greater than
+		// 1.
+		t.Command("HMSET", hashArgs, nil)
+	}
 }
 
 // Find retrieves a model with the given id from redis and scans its values
