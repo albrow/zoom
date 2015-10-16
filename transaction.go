@@ -9,8 +9,9 @@ package zoom
 
 import (
 	"fmt"
-	"github.com/garyburd/redigo/redis"
 	"reflect"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 // Transaction is an abstraction layer around a redis transaction.
@@ -226,16 +227,10 @@ func newScanModelHandler(fieldNames []string, mr *modelRef) ReplyHandler {
 	return func(reply interface{}) error {
 		fieldValues, err := redis.Values(reply, nil)
 		if err != nil {
-			return err
-		}
-		if len(fieldValues) == 0 {
-			var msg string
-			if mr.model.ModelId() != "" {
-				msg = fmt.Sprintf("Could not find %s with id = %s", mr.spec.name, mr.model.ModelId())
-			} else {
-				msg = fmt.Sprintf("Could not find %s with the given criteria", mr.spec.name)
+			if err == redis.ErrNil {
+				return newModelNotFoundError(mr)
 			}
-			return ModelNotFoundError{Msg: msg}
+			return err
 		}
 		if err := scanModel(fieldNames, fieldValues, mr); err != nil {
 			return err
@@ -269,6 +264,11 @@ func newScanModelsHandler(spec *modelSpec, fieldNames []string, models interface
 	return func(reply interface{}) error {
 		allFields, err := redis.Values(reply, nil)
 		if err != nil {
+			if err == redis.ErrNil {
+				return ModelNotFoundError{
+					Msg: fmt.Sprintf("Could not find %s with the given criteria", spec.name),
+				}
+			}
 			return err
 		}
 		numFields := len(fieldNames)

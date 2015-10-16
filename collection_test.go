@@ -181,6 +181,18 @@ func TestFind(t *testing.T) {
 	}
 }
 
+func TestFindModelNotFound(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Try to find a model with an id that doesn't exist and check the error.
+	if err := testModels.Find("fake-id", &testModel{}); err == nil {
+		t.Errorf("Expected error in testModels.Find but got none")
+	} else if _, ok := err.(ModelNotFoundError); !ok {
+		t.Errorf("Expected error to be a ModelNotFoundError but got: %T: %s", err, err.Error())
+	}
+}
+
 func TestFindAll(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()

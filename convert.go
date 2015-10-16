@@ -9,9 +9,10 @@ package zoom
 
 import (
 	"fmt"
-	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"strconv"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 // scanModel iterates through fieldValues, converts each value to the correct type, and
@@ -27,6 +28,9 @@ func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) err
 		fieldName := fieldNames[i]
 		replyBytes, err := redis.Bytes(reply, nil)
 		if err != nil {
+			if err == redis.ErrNil {
+				return newModelNotFoundError(mr)
+			}
 			return err
 		}
 		if fieldName == "-" {
