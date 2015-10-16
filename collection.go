@@ -457,14 +457,21 @@ func (c *Collection) Delete(id string) (bool, error) {
 // transaction is executed. If the no model with the given type and id existed,
 // the value of deleted will be set to false. Any errors encountered will be
 // added to the transaction and returned as an error when the transaction is
-// executed.
+// executed. You may pass in nil for deleted if you do not care whether or not
+// the model was deleted.
 func (t *Transaction) Delete(c *Collection, id string, deleted *bool) {
 	// Delete any field indexes
 	// This must happen first, because it relies on reading the old field values
 	// from the hash for string indexes (if any)
 	t.deleteFieldIndexes(c, id)
+	var handler ReplyHandler
+	if deleted == nil {
+		handler = nil
+	} else {
+		handler = newScanBoolHandler(deleted)
+	}
 	// Delete the main hash
-	t.Command("DEL", redis.Args{c.Name() + ":" + id}, newScanBoolHandler(deleted))
+	t.Command("DEL", redis.Args{c.Name() + ":" + id}, handler)
 	// Remvoe the id from the index of all models for the given type
 	t.Command("SREM", redis.Args{c.IndexKey(), id}, nil)
 }
@@ -511,13 +518,20 @@ func (c *Collection) DeleteAll() (int, error) {
 // DeleteAll delets all models for the given model type in an existing transaction.
 // The value of count will be set to the number of models that were successfully deleted
 // when the transaction is executed. Any errors encountered will be added to the transaction
-// and returned as an error when the transaction is executed.
+// and returned as an error when the transaction is executed. You may pass in nil
+// for count if you do not care about the number of models that were deleted.
 func (t *Transaction) DeleteAll(c *Collection, count *int) {
 	if !c.index {
 		t.setError(fmt.Errorf("zoom: error in DeleteAll: DeleteAll only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
 		return
 	}
-	t.deleteModelsBySetIds(c.IndexKey(), c.Name(), newScanIntHandler(count))
+	var handler ReplyHandler
+	if count == nil {
+		handler = nil
+	} else {
+		handler = newScanIntHandler(count)
+	}
+	t.deleteModelsBySetIds(c.IndexKey(), c.Name(), handler)
 }
 
 // checkModelType returns an error iff model is not of the registered type that

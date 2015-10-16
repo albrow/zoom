@@ -408,7 +408,8 @@ t := pool.NewTransaction()
 t.Save(People, &Person{Name: "Foo"})
 t.Save(People, &Person{Name: "Bar"})
 // Count expects a pointer to an integer, which it will change the value of
-// when the transaction is executed.
+// when the transaction is executed. If you don't care about the number of
+// models deleted, you can pass in nil.
 t.Count(People, &numPeople)
 if err := t.Exec(); err != nil {
   // handle error
