@@ -108,6 +108,10 @@ func scanPrimativeVal(src []byte, dest reflect.Value) error {
 // scanPointerVal works like scanVal but expects dest to be a pointer to some primative
 // type
 func scanPointerVal(src []byte, dest reflect.Value) error {
+	// Skip empty or nil fields
+	if string(src) == "NULL" {
+		return nil
+	}
 	dest.Set(reflect.New(dest.Type().Elem()))
 	return scanPrimativeVal(src, dest.Elem())
 }
@@ -115,8 +119,9 @@ func scanPointerVal(src []byte, dest reflect.Value) error {
 // scanIncovertibleVal unmarshals src into dest. For now it uses the defaultMarshalerUnmarshaler,
 // but in the future users may be able to specify a custom MarshalerUnmarshaler.
 func scanInconvertibleVal(src []byte, dest reflect.Value) error {
-	if len(src) == 0 {
-		return nil // skip blanks
+	// Skip empty or nil fields
+	if len(src) == 0 || string(src) == "NULL" {
+		return nil
 	}
 	// TODO: account for json, msgpack or other custom fallbacks
 	if err := defaultMarshalerUnmarshaler.Unmarshal(src, dest.Addr().Interface()); err != nil {

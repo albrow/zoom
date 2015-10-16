@@ -361,16 +361,21 @@ func (mr *modelRef) mainHashArgsForFields(fieldNames []string) (redis.Args, erro
 				args = args.Add(fs.redisName, "NULL")
 			}
 		case inconvertibleField:
-			if fieldVal.Type().Kind() == reflect.Ptr && fieldVal.IsNil() {
-				args = args.Add(fs.redisName, "NULL")
-			} else {
-				// For inconvertibles, we convert the value to bytes using the gob package.
-				valBytes, err := defaultMarshalerUnmarshaler.Marshal(fieldVal.Interface())
-				if err != nil {
-					return nil, err
+			switch fieldVal.Type().Kind() {
+			// For nilable types that are nil store NULL
+			case reflect.Ptr, reflect.Slice, reflect.Map, reflect.Interface:
+				if fieldVal.IsNil() {
+					args = args.Add(fs.redisName, "NULL")
+					continue
 				}
-				args = args.Add(fs.redisName, valBytes)
 			}
+			// For inconvertibles, that are not nil, convert the value to bytes
+			// using the gob package.
+			valBytes, err := defaultMarshalerUnmarshaler.Marshal(fieldVal.Interface())
+			if err != nil {
+				return nil, err
+			}
+			args = args.Add(fs.redisName, valBytes)
 		}
 	}
 	return args, nil
