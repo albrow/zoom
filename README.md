@@ -2,8 +2,9 @@ Zoom
 ====
 
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
+[![Circle CI](https://circleci.com/gh/albrow/zoom.svg?style=svg)](https://circleci.com/gh/albrow/zoom)
 
-Version: 0.11.0
+Version: 0.12.0
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
@@ -303,6 +304,24 @@ suitable for Redis and stores them as a Redis hash. There is a wiki page
 describing
 [how zoom works under the hood](https://github.com/albrow/zoom/wiki/Under-the-Hood) in more detail.
 
+### Updating Models
+
+Sometimes, it is preferable to only update certain fields of the model instead
+of saving them all again. It is more efficient and in some scenarios can allow
+safer simultaneous changes to the same model (as long as no two clients update
+the same field at the same time). In such cases, you can use `UpdateFields`.
+
+``` go
+if err := People.UpdateFields([]string{"Name"}, person); err != nil {
+	// handle error
+}
+```
+
+`UpdateFields` uses "last write wins" semantics, so if another caller updates
+the same field, your changes may be overwritten. That means it is not safe for
+"read before write" updates. See the section on
+[Concurrent Updates](#concurrent-updates) for more information.
+
 ### Finding a Single Model
 
 To retrieve a model by id, use the `Find` method:
@@ -390,7 +409,8 @@ t := pool.NewTransaction()
 t.Save(People, &Person{Name: "Foo"})
 t.Save(People, &Person{Name: "Bar"})
 // Count expects a pointer to an integer, which it will change the value of
-// when the transaction is executed.
+// when the transaction is executed. If you don't care about the number of
+// models deleted, you can pass in nil.
 t.Count(People, &numPeople)
 if err := t.Exec(); err != nil {
   // handle error
@@ -509,10 +529,14 @@ Read more about:
 - [Redis scripts](http://redis.io/commands/eval)
 - [Redis transactions](http://redis.io/topics/transactions)
 
-### Thread-Safe Updates
+### Concurrent Updates
 
-Currently, Zoom does not support thread-safe or cross-machine updates on models. Consider the
-following code:
+Currently, Zoom does not support concurrent "read before write" updates on
+models. The `UpdateFields` method introduced in version 0.12 offers some
+additional safety for concurrent updates, as long as no concurrent callers
+update the same fields (or if you are okay with updates overwriting previous
+changes). However, cases where you need to do a "read before write" update are
+still not safe by default. For example, consider the following code:
 
 ``` go
 func likePost(postId string) error {
@@ -530,11 +554,17 @@ func likePost(postId string) error {
 }
 ```
 
-This can cause a bug if the function is called across multiple threads or multiple machines
-concurrently, because the `Post` model can change in between the time we retrieved it from the
-database with `Find` and saved it again with `Save`. Future versions of Zoom will provide optimistic
-locking or other means to avoid these kinds of errors. In the meantime, you could fix this code
-by using an `HINCRBY` command directly like so:
+The line `post.Likes += 1` is a "read before write" operation. That's because
+the `+=` operator implicitly reads the current value of `post.Likes` and then
+adds to it.
+
+This can cause a bug if the function is called across multiple threads or
+multiple machines concurrently, because the `Post` model can change in between
+the time we retrieved it from the database with `Find` and saved it again with
+`Save`. Future versions of Zoom may provide
+[optimistic locking](https://github.com/albrow/zoom/issues/13) or other means to
+avoid these kinds of errors. In the meantime, you could fix this code by using
+an `HINCRBY` command directly like so:
 
 ``` go
 func likePost(postId string) error {
@@ -552,7 +582,8 @@ func likePost(postId string) error {
 }
 ```
 
-You could also use a lua script for more complicated thread-safe updates.
+You could also use a lua script, which have full transactional support in Zoom,
+for more complicated "read before write" updates.
 
 
 Testing & Benchmarking

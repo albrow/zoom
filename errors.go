@@ -7,6 +7,8 @@
 
 package zoom
 
+import "fmt"
+
 // ModelNotFoundError is returned from Find and Query methods if a model
 // that fits the given criteria is not found.
 type ModelNotFoundError struct {
@@ -15,4 +17,14 @@ type ModelNotFoundError struct {
 
 func (e ModelNotFoundError) Error() string {
 	return "zoom: ModelNotFoundError: " + e.Msg
+}
+
+func newModelNotFoundError(mr *modelRef) error {
+	var msg string
+	if mr.model.ModelId() != "" {
+		msg = fmt.Sprintf("Could not find %s with id = %s", mr.spec.name, mr.model.ModelId())
+	} else {
+		msg = fmt.Sprintf("Could not find %s with the given criteria", mr.spec.name)
+	}
+	return ModelNotFoundError{Msg: msg}
 }

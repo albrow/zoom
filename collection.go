@@ -95,32 +95,19 @@ func parseCollectionOptions(model Model, passedOptions *CollectionOptions) (*Col
 	// If passedOptions is nil, use all the default values
 	if passedOptions == nil {
 		return &CollectionOptions{
-			Name: getDefaultCollectionName(reflect.TypeOf(model)),
+			Name: getDefaultModelSpecName(reflect.TypeOf(model)),
 		}, nil
 	}
 	// Copy and validate the passedOptions
 	newOptions := *passedOptions
 	if newOptions.Name == "" {
-		newOptions.Name = getDefaultCollectionName(reflect.TypeOf(model))
+		newOptions.Name = getDefaultModelSpecName(reflect.TypeOf(model))
 	} else if strings.Contains(newOptions.Name, ":") {
 		return nil, fmt.Errorf("zoom: CollectionOptions.Name cannot contain a colon. Got: %s", newOptions.Name)
 	}
 	// NOTE: we don't need to modify the Index field becuase the default value,
 	// false, is also the zero value.
 	return &newOptions, nil
-}
-
-// getDefaultCollectionName returns the default collection name for the given
-// type, which is simply the name of the type without the package prefix or
-// dereference operators.
-func getDefaultCollectionName(typ reflect.Type) string {
-	// Strip any dereference operators
-	for typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-	nameWithPackage := typ.String()
-	// Strip the package name
-	return strings.Join(strings.Split(nameWithPackage, ".")[1:], "")
 }
 
 func (p *Pool) typeIsRegistered(typ reflect.Type) bool {
@@ -154,7 +141,7 @@ func (c *Collection) FieldIndexKey(fieldName string) (string, error) {
 }
 
 // Save writes a model (a struct which satisfies the Model interface) to the
-// redis database. Save throws an error if the type of model does not match the
+// redis database. Save returns an error if the type of model does not match the
 // registered Collection. To make a struct satisfy the Model interface, you can
 // embed zoom.RandomId, which will generate pseudo-random ids for each model.
 func (c *Collection) Save(model Model) error {
@@ -168,7 +155,7 @@ func (c *Collection) Save(model Model) error {
 
 // Save writes a model (a struct which satisfies the Model interface) to the
 // redis database inside an existing transaction. save will set the err property
-// of the transaction if the type of model does not matched the registered
+// of the transaction if the type of model does not match the registered
 // Collection, which will cause exec to fail immediately and return the error.
 // To make a struct satisfy the Model interface, you can embed zoom.RandomId,
 // which will generate pseudo-random ids for each model. Any errors encountered
@@ -209,7 +196,17 @@ func (t *Transaction) Save(c *Collection, model Model) {
 // saveFieldIndexes adds commands to the transaction for saving the indexes
 // for all indexed fields.
 func (t *Transaction) saveFieldIndexes(mr *modelRef) {
+	t.saveFieldIndexesForFields(mr.spec.fieldNames(), mr)
+}
+
+// saveFieldIndexesForFields works like saveFieldIndexes, but only saves the
+// indexes for the given fieldNames.
+func (t *Transaction) saveFieldIndexesForFields(fieldNames []string, mr *modelRef) {
 	for _, fs := range mr.spec.fields {
+		// Skip fields whose names do not appear in fieldNames.
+		if !stringSliceContains(fieldNames, fs.name) {
+			continue
+		}
 		switch fs.indexKind {
 		case noIndex:
 			continue
@@ -271,6 +268,69 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 		t.setError(err)
 	}
 	t.Command("ZADD", redis.Args{indexKey, 0, member}, nil)
+}
+
+// UpdateFields updates only the given fields of the model. UpdateFields uses
+// "last write wins" semantics. If another caller updates the the same fields
+// concurrently, your updates may be overwritten. It will return an error if
+// the type of model does not match the registered Collection, or if any of
+// the given fieldNames are not found in the registered Collection. If
+// UpdateFields is called on a model that has not yet been saved, it will not
+// return an error. Instead, only the given fields will be saved in the
+// database.
+func (c *Collection) UpdateFields(fieldNames []string, model Model) error {
+	t := c.pool.NewTransaction()
+	t.UpdateFields(c, fieldNames, model)
+	if err := t.Exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// UpdateFields updates only the given fields of the model inside an existing
+// transaction. UpdateFields will set the err property of the transaction if the
+// type of model does not match the registered Collection, or if any of the
+// given fieldNames are not found in the model type. In either case, the
+// transaction will return the error when you call Exec. UpdateFields uses "last
+// write wins" semantics. If another caller updates the the same fields
+// concurrently, your updates may be overwritten. If UpdateFields is called on a
+// model that has not yet been saved, it will not return an error. Instead, only
+// the given fields will be saved in the database.
+func (t *Transaction) UpdateFields(c *Collection, fieldNames []string, model Model) {
+	// Check the model type
+	if err := c.checkModelType(model); err != nil {
+		t.setError(fmt.Errorf("zoom: Error in UpdateFields or Transaction.UpdateFields: %s", err.Error()))
+		return
+	}
+	// Check the given field names
+	for _, fieldName := range fieldNames {
+		if !stringSliceContains(c.spec.fieldNames(), fieldName) {
+			t.setError(fmt.Errorf("zoom: Error in UpdateFields or Transaction.UpdateFields: Collection %s does not have field named %s", c.Name(), fieldName))
+			return
+		}
+	}
+	// Create a modelRef and start a transaction
+	mr := &modelRef{
+		spec:  c.spec,
+		model: model,
+	}
+	// Update indexes
+	// This must happen first, because it relies on reading the old field values
+	// from the hash for string indexes (if any)
+	t.saveFieldIndexesForFields(fieldNames, mr)
+	// Get the main hash args.
+	hashArgs, err := mr.mainHashArgs()
+	if err != nil {
+		t.setError(err)
+	}
+	//
+	if len(hashArgs) > 1 {
+		// Only save the main hash if there are any fields
+		// The first element in hashArgs is the model key,
+		// so there are fields if the length is greater than
+		// 1.
+		t.Command("HMSET", hashArgs, nil)
+	}
 }
 
 // Find retrieves a model with the given id from redis and scans its values
@@ -397,14 +457,21 @@ func (c *Collection) Delete(id string) (bool, error) {
 // transaction is executed. If the no model with the given type and id existed,
 // the value of deleted will be set to false. Any errors encountered will be
 // added to the transaction and returned as an error when the transaction is
-// executed.
+// executed. You may pass in nil for deleted if you do not care whether or not
+// the model was deleted.
 func (t *Transaction) Delete(c *Collection, id string, deleted *bool) {
 	// Delete any field indexes
 	// This must happen first, because it relies on reading the old field values
 	// from the hash for string indexes (if any)
 	t.deleteFieldIndexes(c, id)
+	var handler ReplyHandler
+	if deleted == nil {
+		handler = nil
+	} else {
+		handler = newScanBoolHandler(deleted)
+	}
 	// Delete the main hash
-	t.Command("DEL", redis.Args{c.Name() + ":" + id}, newScanBoolHandler(deleted))
+	t.Command("DEL", redis.Args{c.Name() + ":" + id}, handler)
 	// Remvoe the id from the index of all models for the given type
 	t.Command("SREM", redis.Args{c.IndexKey(), id}, nil)
 }
@@ -451,13 +518,20 @@ func (c *Collection) DeleteAll() (int, error) {
 // DeleteAll delets all models for the given model type in an existing transaction.
 // The value of count will be set to the number of models that were successfully deleted
 // when the transaction is executed. Any errors encountered will be added to the transaction
-// and returned as an error when the transaction is executed.
+// and returned as an error when the transaction is executed. You may pass in nil
+// for count if you do not care about the number of models that were deleted.
 func (t *Transaction) DeleteAll(c *Collection, count *int) {
 	if !c.index {
 		t.setError(fmt.Errorf("zoom: error in DeleteAll: DeleteAll only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
 		return
 	}
-	t.deleteModelsBySetIds(c.IndexKey(), c.Name(), newScanIntHandler(count))
+	var handler ReplyHandler
+	if count == nil {
+		handler = nil
+	} else {
+		handler = newScanIntHandler(count)
+	}
+	t.deleteModelsBySetIds(c.IndexKey(), c.Name(), handler)
 }
 
 // checkModelType returns an error iff model is not of the registered type that
