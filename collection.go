@@ -384,6 +384,51 @@ func (t *Transaction) Find(c *Collection, id string, model Model) {
 	t.Command("HMGET", args, newScanModelHandler(mr.spec.fieldNames(), mr))
 }
 
+// FindFields is like Find but finds and sets only the specified fields. Any
+// fields of the model which are not in the given fieldNames are not mutated.
+// FindFields will return an error if any of the given fieldNames are not found
+// in the model type.
+func (c *Collection) FindFields(id string, fieldNames []string, model Model) error {
+	t := c.pool.NewTransaction()
+	t.FindFields(c, id, fieldNames, model)
+	if err := t.Exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// FindFields is like Find but finds and sets only the specified fields. Any
+// fields of the model which are not in the given fieldNames are not mutated.
+// FindFields will return an error if any of the given fieldNames are not found
+// in the model type.
+func (t *Transaction) FindFields(c *Collection, id string, fieldNames []string, model Model) {
+	if err := c.checkModelType(model); err != nil {
+		t.setError(fmt.Errorf("zoom: Error in FindFields or Transaction.FindFields: %s", err.Error()))
+		return
+	}
+	// Set the model id and create a modelRef
+	model.SetModelId(id)
+	mr := &modelRef{
+		spec:  c.spec,
+		model: model,
+	}
+	// Check the given field names and append the corresponding redis field names
+	// to args.
+	args := redis.Args{mr.key()}
+	for _, fieldName := range fieldNames {
+		if !stringSliceContains(c.spec.fieldNames(), fieldName) {
+			t.setError(fmt.Errorf("zoom: Error in FindFields or Transaction.FindFields: Collection %s does not have field named %s", c.Name(), fieldName))
+			return
+		}
+		// args is an array of arguments passed to the HMGET command. We want to
+		// use the redis names corresponding to each field name. The redis names
+		// may be customized via struct tags.
+		args = append(args, c.spec.fieldsByName[fieldName].redisName)
+	}
+	// Get the fields from the main hash for this model
+	t.Command("HMGET", args, newScanModelHandler(fieldNames, mr))
+}
+
 // FindAll finds all the models of the given type. It executes the commands needed
 // to retrieve the models in a single transaction. See http://redis.io/topics/transactions.
 // models must be a pointer to a slice of models with a type corresponding to the Collection.
