@@ -38,7 +38,9 @@ func TestGobFallback(t *testing.T) {
 		IntMap      map[int]int
 		RandomId
 	}
-	gobModels, err := testPool.NewCollection(&gobModel{}, nil)
+	gobModels, err := testPool.NewCollection(&gobModel{}, &CollectionOptions{
+		FallbackMarshalerUnmarshaler: GobMarshalerUnmarshaler,
+	})
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
@@ -68,7 +70,7 @@ func TestJSONFallback(t *testing.T) {
 		RandomId
 	}
 	jsonModels, err := testPool.NewCollection(&jsonModel{}, &CollectionOptions{
-		FallbackMarshalerUnmarshaler: JSONMarshalerUnmarshaler{},
+		FallbackMarshalerUnmarshaler: JSONMarshalerUnmarshaler,
 	})
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())

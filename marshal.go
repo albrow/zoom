@@ -28,30 +28,29 @@ type MarshalerUnmarshaler interface {
 	Unmarshal(data []byte, v interface{}) error
 }
 
-// GobMarshalerUnmarshaler is an implementation of MarshalerUnmarshaler that
+var (
+	// GobMarshalerUnmarshaler is an object that implements MarshalerUnmarshaler
+	// and uses uses the builtin gob package. Note that not all types are
+	// supported by the gob package. See https://golang.org/pkg/encoding/gob/
+	GobMarshalerUnmarshaler MarshalerUnmarshaler = gobMarshalerUnmarshaler{}
+	// JSONMarshalerUnmarshaler is an object that implements MarshalerUnmarshaler
+	// and uses the builtin json package. Note that not all types are supported
+	// by the json package. See https://golang.org/pkg/encoding/json/#Marshal
+	JSONMarshalerUnmarshaler MarshalerUnmarshaler = jsonMarshalerUnmarshaler{}
+)
+
+// gobMarshalerUnmarshaler is an implementation of MarshalerUnmarshaler that
 // uses the builtin gob encoding. Note that not all types are supported by
 // the gob package. See https://golang.org/pkg/encoding/gob/
-type GobMarshalerUnmarshaler struct{}
+type gobMarshalerUnmarshaler struct{}
 
-// Make the compiler enforce that GobMarshalerUnmarshaler implements
-// MarshalerUnmarshaler
-var _ MarshalerUnmarshaler = GobMarshalerUnmarshaler{}
-
-// JSONMarshalerUnmarshaler is an implementation of MarshalerUnmarshaler that
+// jsonMarshalerUnmarshaler is an implementation of MarshalerUnmarshaler that
 // use the builtin json package. Note that not all types are supported by the
 // json package. See https://golang.org/pkg/encoding/json/#Marshal
-type JSONMarshalerUnmarshaler struct{}
-
-// Make the compiler enforce that JSONMarshalerUnmarshaler implements
-// MarshalerUnmarshaler
-var _ MarshalerUnmarshaler = JSONMarshalerUnmarshaler{}
-
-// defaultMarshalerUnmarshaler is used to marshal and unmarshal inconvertible
-// fields whenever a custom MarshalerUnmarshaler is not provided.
-var defaultMarshalerUnmarshaler MarshalerUnmarshaler = GobMarshalerUnmarshaler{}
+type jsonMarshalerUnmarshaler struct{}
 
 // Marshal returns the gob encoding of v.
-func (GobMarshalerUnmarshaler) Marshal(v interface{}) ([]byte, error) {
+func (gobMarshalerUnmarshaler) Marshal(v interface{}) ([]byte, error) {
 	var buff bytes.Buffer
 	enc := gob.NewEncoder(&buff)
 	if err := enc.Encode(v); err != nil {
@@ -62,7 +61,7 @@ func (GobMarshalerUnmarshaler) Marshal(v interface{}) ([]byte, error) {
 
 // Unmarshal parses the gob-encoded data and stores the result in the value
 // pointed to by v.
-func (GobMarshalerUnmarshaler) Unmarshal(data []byte, v interface{}) error {
+func (gobMarshalerUnmarshaler) Unmarshal(data []byte, v interface{}) error {
 	buff := bytes.NewBuffer(data)
 	dec := gob.NewDecoder(buff)
 	if err := dec.Decode(v); err != nil {
@@ -72,12 +71,12 @@ func (GobMarshalerUnmarshaler) Unmarshal(data []byte, v interface{}) error {
 }
 
 // Marshal returns the json encoding of v.
-func (JSONMarshalerUnmarshaler) Marshal(v interface{}) ([]byte, error) {
+func (jsonMarshalerUnmarshaler) Marshal(v interface{}) ([]byte, error) {
 	return json.Marshal(v)
 }
 
 // Unmarshal parses the json-encoded data and stores the result in the value
 // pointed to by v.
-func (JSONMarshalerUnmarshaler) Unmarshal(data []byte, v interface{}) error {
+func (jsonMarshalerUnmarshaler) Unmarshal(data []byte, v interface{}) error {
 	return json.Unmarshal(data, v)
 }

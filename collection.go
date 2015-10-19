@@ -103,7 +103,7 @@ func parseCollectionOptions(model Model, passedOptions *CollectionOptions) (*Col
 	// If passedOptions is nil, use all the default values
 	if passedOptions == nil {
 		return &CollectionOptions{
-			FallbackMarshalerUnmarshaler: defaultMarshalerUnmarshaler,
+			FallbackMarshalerUnmarshaler: GobMarshalerUnmarshaler,
 			Name: getDefaultModelSpecName(reflect.TypeOf(model)),
 		}, nil
 	}
@@ -115,7 +115,7 @@ func parseCollectionOptions(model Model, passedOptions *CollectionOptions) (*Col
 		return nil, fmt.Errorf("zoom: CollectionOptions.Name cannot contain a colon. Got: %s", newOptions.Name)
 	}
 	if newOptions.FallbackMarshalerUnmarshaler == nil {
-		newOptions.FallbackMarshalerUnmarshaler = defaultMarshalerUnmarshaler
+		newOptions.FallbackMarshalerUnmarshaler = GobMarshalerUnmarshaler
 	}
 	// NOTE: we don't need to modify the Index field because the default value,
 	// false, is also the zero value.
