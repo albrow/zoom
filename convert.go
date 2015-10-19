@@ -54,7 +54,7 @@ func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) err
 				return err
 			}
 		default:
-			if err := scanInconvertibleVal(replyBytes, fieldVal); err != nil {
+			if err := scanInconvertibleVal(mr.spec.fallback, replyBytes, fieldVal); err != nil {
 				return err
 			}
 		}
@@ -116,15 +116,15 @@ func scanPointerVal(src []byte, dest reflect.Value) error {
 	return scanPrimativeVal(src, dest.Elem())
 }
 
-// scanIncovertibleVal unmarshals src into dest. For now it uses the defaultMarshalerUnmarshaler,
-// but in the future users may be able to specify a custom MarshalerUnmarshaler.
-func scanInconvertibleVal(src []byte, dest reflect.Value) error {
+// scanIncovertibleVal unmarshals src into dest using the given
+// MarshalerUnmarshaler
+func scanInconvertibleVal(marshalerUnmarshaler MarshalerUnmarshaler, src []byte, dest reflect.Value) error {
 	// Skip empty or nil fields
 	if len(src) == 0 || string(src) == "NULL" {
 		return nil
 	}
 	// TODO: account for json, msgpack or other custom fallbacks
-	if err := defaultMarshalerUnmarshaler.Unmarshal(src, dest.Addr().Interface()); err != nil {
+	if err := marshalerUnmarshaler.Unmarshal(src, dest.Addr().Interface()); err != nil {
 		return err
 	}
 	return nil

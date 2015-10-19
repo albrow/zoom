@@ -24,11 +24,11 @@ func TestConvertPointers(t *testing.T) {
 	testConvertType(t, indexedPointersModels, createIndexedPointersModel())
 }
 
-func TestConvertInconvertibles(t *testing.T) {
+func TestGobFallback(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	type inconvertiblesModel struct {
+	type gobModel struct {
 		Complex     complex128
 		IntSlice    []int
 		StringSlice []string
@@ -38,11 +38,11 @@ func TestConvertInconvertibles(t *testing.T) {
 		IntMap      map[int]int
 		RandomId
 	}
-	inconvertiblesModels, err := testPool.NewCollection(&inconvertiblesModel{}, nil)
+	gobModels, err := testPool.NewCollection(&gobModel{}, nil)
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
-	model := &inconvertiblesModel{
+	model := &gobModel{
 		Complex:     randomComplex(),
 		IntSlice:    []int{randomInt(), randomInt(), randomInt()},
 		StringSlice: []string{randomString(), randomString(), randomString()},
@@ -51,7 +51,37 @@ func TestConvertInconvertibles(t *testing.T) {
 		StringMap:   map[string]string{randomString(): randomString(), randomString(): randomString()},
 		IntMap:      map[int]int{randomInt(): randomInt(), randomInt(): randomInt()},
 	}
-	testConvertType(t, inconvertiblesModels, model)
+	testConvertType(t, gobModels, model)
+}
+
+func TestJSONFallback(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	type jsonModel struct {
+		IntSlice       []int
+		StringSlice    []string
+		IntArray       [3]int
+		StringArray    [3]string
+		StringMap      map[string]string
+		EmptyInterface interface{}
+		RandomId
+	}
+	jsonModels, err := testPool.NewCollection(&jsonModel{}, &CollectionOptions{
+		FallbackMarshalerUnmarshaler: JSONMarshalerUnmarshaler{},
+	})
+	if err != nil {
+		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
+	}
+	model := &jsonModel{
+		IntSlice:       []int{randomInt(), randomInt(), randomInt()},
+		StringSlice:    []string{randomString(), randomString(), randomString()},
+		IntArray:       [3]int{randomInt(), randomInt(), randomInt()},
+		StringArray:    [3]string{randomString(), randomString(), randomString()},
+		StringMap:      map[string]string{randomString(): randomString(), randomString(): randomString()},
+		EmptyInterface: "This satisfies empty interface",
+	}
+	testConvertType(t, jsonModels, model)
 }
 
 type embeddable struct {

@@ -52,6 +52,7 @@ type modelSpec struct {
 	name         string
 	fieldsByName map[string]*fieldSpec
 	fields       []*fieldSpec
+	fallback     MarshalerUnmarshaler
 }
 
 // fieldSpec contains parsed information about a particular field
@@ -371,7 +372,7 @@ func (mr *modelRef) mainHashArgsForFields(fieldNames []string) (redis.Args, erro
 			}
 			// For inconvertibles, that are not nil, convert the value to bytes
 			// using the gob package.
-			valBytes, err := defaultMarshalerUnmarshaler.Marshal(fieldVal.Interface())
+			valBytes, err := mr.spec.fallback.Marshal(fieldVal.Interface())
 			if err != nil {
 				return nil, err
 			}

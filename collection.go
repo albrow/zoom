@@ -27,6 +27,19 @@ type Collection struct {
 
 // CollectionOptions contains various options for a pool.
 type CollectionOptions struct {
+	// FallbackMarshalerUnmarshaler is used to marshal/unmarshal any type
+	// into a slice of bytes which is suitable for storing in the database. If
+	// Zoom does not know how to directly encode a certain type into bytes, it
+	// will use the FallbackMarshalerUnmarshaler. By default, the value is
+	// GobMarshalerUnmarshaler which uses the builtin gob package. Zoom also
+	// provides JSONMarshalerUnmarshaler to support json encoding out of the box.
+	FallbackMarshalerUnmarshaler MarshalerUnmarshaler
+	// Iff Index is true, any model in the collection that is saved will be added
+	// to a set in redis which acts as an index. The default value is false. The
+	// key for the set is exposed via the IndexKey method. Queries and the
+	// FindAll, Count, and DeleteAll methods will not work for unindexed
+	// collections. This may change in future versions.
+	Index bool
 	// Name is a unique string identifier to use for the collection in redis. All
 	// models in this collection that are saved in the database will use the
 	// collection name as a prefix. If not provided, the default name will be the
@@ -34,12 +47,6 @@ type CollectionOptions struct {
 	// So for example, the default name corresponding to *models.User would be
 	// "User". If a custom name is provided, it cannot contain a colon.
 	Name string
-	// Iff Index is true, any model in the collection that is saved will be added
-	// to a set in redis which acts as an index. The default value is false. The
-	// key for the set is exposed via the IndexKey method. Queries and the
-	// FindAll, Count, and DeleteAll methods will not work for unindexed
-	// collections. This may change in future versions.
-	Index bool
 }
 
 // Name returns the name for the given collection. The name is a unique string
@@ -77,6 +84,7 @@ func (p *Pool) NewCollection(model Model, options *CollectionOptions) (*Collecti
 		return nil, err
 	}
 	spec.name = fullOptions.Name
+	spec.fallback = fullOptions.FallbackMarshalerUnmarshaler
 	p.modelTypeToSpec[typ] = spec
 	p.modelNameToSpec[fullOptions.Name] = spec
 
@@ -95,6 +103,7 @@ func parseCollectionOptions(model Model, passedOptions *CollectionOptions) (*Col
 	// If passedOptions is nil, use all the default values
 	if passedOptions == nil {
 		return &CollectionOptions{
+			FallbackMarshalerUnmarshaler: defaultMarshalerUnmarshaler,
 			Name: getDefaultModelSpecName(reflect.TypeOf(model)),
 		}, nil
 	}
@@ -105,7 +114,10 @@ func parseCollectionOptions(model Model, passedOptions *CollectionOptions) (*Col
 	} else if strings.Contains(newOptions.Name, ":") {
 		return nil, fmt.Errorf("zoom: CollectionOptions.Name cannot contain a colon. Got: %s", newOptions.Name)
 	}
-	// NOTE: we don't need to modify the Index field becuase the default value,
+	if newOptions.FallbackMarshalerUnmarshaler == nil {
+		newOptions.FallbackMarshalerUnmarshaler = defaultMarshalerUnmarshaler
+	}
+	// NOTE: we don't need to modify the Index field because the default value,
 	// false, is also the zero value.
 	return &newOptions, nil
 }

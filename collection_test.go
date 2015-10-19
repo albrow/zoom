@@ -130,9 +130,10 @@ func TestSave(t *testing.T) {
 	// Make sure the model was saved correctly
 	expectModelExists(t, testModels, model)
 	key, _ := testModels.ModelKey(model.ModelId())
-	expectFieldEquals(t, key, "Int", model.Int)
-	expectFieldEquals(t, key, "String", model.String)
-	expectFieldEquals(t, key, "Bool", model.Bool)
+	mu := testModels.spec.fallback
+	expectFieldEquals(t, key, "Int", mu, model.Int)
+	expectFieldEquals(t, key, "String", mu, model.String)
+	expectFieldEquals(t, key, "Bool", mu, model.Bool)
 }
 
 func TestUpdate(t *testing.T) {
@@ -155,9 +156,10 @@ func TestUpdate(t *testing.T) {
 	// Make sure the model was saved correctly
 	expectModelExists(t, testModels, model)
 	key, _ := testModels.ModelKey(model.ModelId())
-	expectFieldEquals(t, key, "Int", model.Int)
-	expectFieldEquals(t, key, "String", model.String)
-	expectFieldEquals(t, key, "Bool", model.Bool)
+	mu := testModels.spec.fallback
+	expectFieldEquals(t, key, "Int", mu, model.Int)
+	expectFieldEquals(t, key, "String", mu, model.String)
+	expectFieldEquals(t, key, "Bool", mu, model.Bool)
 }
 
 func TestFind(t *testing.T) {
