@@ -130,12 +130,13 @@ func TestSave(t *testing.T) {
 	// Make sure the model was saved correctly
 	expectModelExists(t, testModels, model)
 	key, _ := testModels.ModelKey(model.ModelId())
-	expectFieldEquals(t, key, "Int", model.Int)
-	expectFieldEquals(t, key, "String", model.String)
-	expectFieldEquals(t, key, "Bool", model.Bool)
+	mu := testModels.spec.fallback
+	expectFieldEquals(t, key, "Int", mu, model.Int)
+	expectFieldEquals(t, key, "String", mu, model.String)
+	expectFieldEquals(t, key, "Bool", mu, model.Bool)
 }
 
-func TestUpdate(t *testing.T) {
+func TestUpdateFields(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -155,9 +156,10 @@ func TestUpdate(t *testing.T) {
 	// Make sure the model was saved correctly
 	expectModelExists(t, testModels, model)
 	key, _ := testModels.ModelKey(model.ModelId())
-	expectFieldEquals(t, key, "Int", model.Int)
-	expectFieldEquals(t, key, "String", model.String)
-	expectFieldEquals(t, key, "Bool", model.Bool)
+	mu := testModels.spec.fallback
+	expectFieldEquals(t, key, "Int", mu, model.Int)
+	expectFieldEquals(t, key, "String", mu, model.String)
+	expectFieldEquals(t, key, "Bool", mu, model.Bool)
 }
 
 func TestFind(t *testing.T) {
@@ -178,6 +180,32 @@ func TestFind(t *testing.T) {
 	}
 	if !reflect.DeepEqual(model, modelCopy) {
 		t.Errorf("Found model was incorrect.\n\tExpected: %+v\n\tBut got:  %+v", model, modelCopy)
+	}
+}
+
+func TestFindFields(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Create and save some test models
+	models, err := createAndSaveTestModels(1)
+	if err != nil {
+		t.Errorf("Unexpected error saving test models: %s", err.Error())
+	}
+	model := models[0]
+
+	// Find only certain fields for the model in the database and store it in
+	// modelCopy
+	modelCopy := &testModel{}
+	if err := testModels.FindFields(model.ModelId(), []string{"Int", "Bool"}, modelCopy); err != nil {
+		t.Errorf("Unexpected error in testModels.FindFields: %s", err.Error())
+	}
+	// Since we did not specify the String field in FindFields, we expect it to
+	// be an empty string.
+	expectedModel := *model
+	expectedModel.String = ""
+	if !reflect.DeepEqual(&expectedModel, modelCopy) {
+		t.Errorf("Found model was incorrect.\n\tExpected: %+v\n\tBut got:  %+v", expectedModel, modelCopy)
 	}
 }
 
