@@ -4,7 +4,7 @@ Zoom
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 [![Circle CI](https://circleci.com/gh/albrow/zoom.svg?style=svg)](https://circleci.com/gh/albrow/zoom)
 
-Version: X.X.X
+Version: 0.13.0
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
