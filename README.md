@@ -35,14 +35,13 @@ Development Status
 ------------------
 
 Zoom has been around for more than a year. It is well-tested and going forward the API
-will be relatively stable. We are closing in on
-[Version 1.0.0-alpha](https://github.com/albrow/zoom/milestones).
+will be relatively stable. We are closing in on Version 1.0.0-alpha.
 
 At this time, Zoom can be considered safe for use in low-traffic production
 applications. However, as with any relatively new package, it is possible that
 there are some undiscovered bugs. Therefore we would recommend writing good
-tests, reporting any bugs you may find, and avoiding using Zoom for mission-
-critical or high-traffic applications.
+tests, reporting any bugs you may find, and avoiding using Zoom for
+mission-critical or high-traffic applications.
 
 Zoom follows semantic versioning, but offers no guarantees of backwards
 compatibility until version 1.0. We recommend using a dependency manager such as
@@ -115,10 +114,12 @@ import (
 )
 ```
 
-Then, you must create a new pool with `zoom.NewPool`. Since you may need access to the pool in different parts
-of your application, it is sometimes a good idea to declare a top-level variable and then initialize it
-in the `main` or `init` function. You must also call `pool.Close` when your application exits, so it's a good
-idea to use defer.
+Then, you must create a new pool with `zoom.NewPool`. A pool represents a pool
+of connections to the database. Since you may need access to the pool in
+different parts of your application, it is sometimes a good idea to declare a
+top-level variable and then initialize it in the `main` or `init` function. You
+must also call `pool.Close` when your application exits, so it's a good idea to
+use defer.
 
 ``` go
 var pool *zoom.Pool
@@ -242,19 +243,29 @@ that the default value should be used for that field.
 
 ``` go
 type CollectionOptions struct {
+	// FallbackMarshalerUnmarshaler is used to marshal/unmarshal any type
+	// into a slice of bytes which is suitable for storing in the database. If
+	// Zoom does not know how to directly encode a certain type into bytes, it
+	// will use the FallbackMarshalerUnmarshaler. By default, the value is
+	// GobMarshalerUnmarshaler which uses the builtin gob package. Zoom also
+	// provides JSONMarshalerUnmarshaler to support json encoding out of the box.
+	// Default: GobMarshalerUnmarshaler.
+	FallbackMarshalerUnmarshaler MarshalerUnmarshaler
+	// Iff Index is true, any model in the collection that is saved will be added
+	// to a set in redis which acts as an index. The default value is false. The
+	// key for the set is exposed via the IndexKey method. Queries and the
+	// FindAll, Count, and DeleteAll methods will not work for unindexed
+	// collections. This may change in future versions. Default: false.
+	Index bool
 	// Name is a unique string identifier to use for the collection in redis. All
 	// models in this collection that are saved in the database will use the
 	// collection name as a prefix. If not provided, the default name will be the
 	// name of the model type without the package prefix or pointer declarations.
 	// So for example, the default name corresponding to *models.User would be
 	// "User". If a custom name is provided, it cannot contain a colon.
+	// Default: The name of the model type, excluding package prefix and pointer
+	// declarations.
 	Name string
-	// Iff Index is true, any model in the collection that is saved will be added
-	// to a set in redis which acts as an index. The default value is false. The
-	// key for the set is exposed via the IndexKey method. Queries and the
-	// FindAll, Count, and DeleteAll methods will not work for unindexed
-	// collections. This may change in future versions.
-	Index bool
 }
 ```
 
@@ -339,6 +350,25 @@ collection. `Find` will mutate `p` by setting all its fields. Using `Find` in th
 safety and avoid type casting. If Zoom couldn't find a model of type `Person` with the given id, it will return a
 `ModelNotFoundError`.
 
+### Finding Only Certain Fields
+
+If you only want to find certain fields in the model instead of retrieving all
+of them, you can use `FindFields`, which works similarly to `UpdateFields`.
+
+``` go
+p := &Person{}
+if err := People.FindFields("a_valid_person_id", []string{"Name"}, p); err != nil {
+	// handle error
+}
+fmt.Println(p.Name, p.Age)
+// Output:
+// Alice 0
+```
+
+Fields that are not included in the given field names will not be mutated. In
+the above example, `p.Age` is `0` because `p` was just initialized and that's
+the zero value for the `int` type.
+
 ### Finding All Models
 
 To find all models of a given type, use the `FindAll` method:
@@ -353,6 +383,9 @@ if err := People.FindAll(&people); err != nil {
 `FindAll` expects a pointer to a slice of some registered type that implements `Model`. It grows or shrinks the slice as needed,
 filling in all the fields of the elements inside of the slice. So the result of the call is that `people` will be a slice of
 all models in the `People` collection.
+
+`FindAll` only works on indexed collections. To index a collection, you need to
+include `Index: true` in the `CollectionOptions`.
 
 ### Deleting Models
 
@@ -378,6 +411,8 @@ if err != nil {
 ```
 
 `DeleteAll` will return the number of models that were successfully deleted.
+`DeleteAll` only works on indexed collections. To index a collection, you need
+to include `Index: true` in the `CollectionOptions`.
 
 ### Counting the Number of Models
 
@@ -389,6 +424,9 @@ if err != nil {
   // handle err
 }
 ```
+
+`Count` only works on indexed collections. To index a collection, you need
+to include `Index: true` in the `CollectionOptions`.
 
 
 Transactions
@@ -417,6 +455,8 @@ if err := t.Exec(); err != nil {
 }
 // numPeople will now equal the number of *Person models in the database
 fmt.Println(numPeople)
+// Output:
+// 2
 ```
 
 You can also execute custom Redis commands or run lua scripts with the

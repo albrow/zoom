@@ -33,12 +33,13 @@ type CollectionOptions struct {
 	// will use the FallbackMarshalerUnmarshaler. By default, the value is
 	// GobMarshalerUnmarshaler which uses the builtin gob package. Zoom also
 	// provides JSONMarshalerUnmarshaler to support json encoding out of the box.
+	// Default: GobMarshalerUnmarshaler.
 	FallbackMarshalerUnmarshaler MarshalerUnmarshaler
 	// Iff Index is true, any model in the collection that is saved will be added
 	// to a set in redis which acts as an index. The default value is false. The
 	// key for the set is exposed via the IndexKey method. Queries and the
 	// FindAll, Count, and DeleteAll methods will not work for unindexed
-	// collections. This may change in future versions.
+	// collections. This may change in future versions. Default: false.
 	Index bool
 	// Name is a unique string identifier to use for the collection in redis. All
 	// models in this collection that are saved in the database will use the
@@ -46,6 +47,8 @@ type CollectionOptions struct {
 	// name of the model type without the package prefix or pointer declarations.
 	// So for example, the default name corresponding to *models.User would be
 	// "User". If a custom name is provided, it cannot contain a colon.
+	// Default: The name of the model type, excluding package prefix and pointer
+	// declarations.
 	Name string
 }
 
