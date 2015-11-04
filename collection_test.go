@@ -146,10 +146,13 @@ func TestUpdateFields(t *testing.T) {
 		t.Errorf("Unexpected error in testModels.Save: %s", err.Error())
 	}
 
-	// Update the Int and String fields
+	// Update the Int and Bool fields, but keep track of the original String for
+	// comparison.
 	model.Int = model.Int + 1
+	originalString := model.String
 	model.String = "new" + model.String
-	if err := testModels.UpdateFields([]string{"Int", "String"}, model); err != nil {
+	model.Bool = !model.Bool
+	if err := testModels.UpdateFields([]string{"Int", "Bool"}, model); err != nil {
 		t.Errorf("Unexpected error in testModels.UpdateFields: %s", err.Error())
 	}
 
@@ -158,7 +161,7 @@ func TestUpdateFields(t *testing.T) {
 	key, _ := testModels.ModelKey(model.ModelId())
 	mu := testModels.spec.fallback
 	expectFieldEquals(t, key, "Int", mu, model.Int)
-	expectFieldEquals(t, key, "String", mu, model.String)
+	expectFieldEquals(t, key, "String", mu, originalString)
 	expectFieldEquals(t, key, "Bool", mu, model.Bool)
 }
 
