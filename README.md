@@ -1,10 +1,9 @@
 Zoom
 ====
 
+[![Version](https://img.shields.io/badge/version-develop-5272B4.svg)](https://github.com/albrow/zoom/releases)
+[![Circle CI](https://img.shields.io/circleci/project/albrow/zoom.svg)](https://circleci.com/gh/albrow/zoom)
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
-[![Circle CI](https://circleci.com/gh/albrow/zoom.svg?style=svg)](https://circleci.com/gh/albrow/zoom)
-
-Version: X.X.X
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
