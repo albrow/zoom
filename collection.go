@@ -334,7 +334,7 @@ func (t *Transaction) UpdateFields(c *Collection, fieldNames []string, model Mod
 	// from the hash for string indexes (if any)
 	t.saveFieldIndexesForFields(fieldNames, mr)
 	// Get the main hash args.
-	hashArgs, err := mr.mainHashArgs()
+	hashArgs, err := mr.mainHashArgsForFields(fieldNames)
 	if err != nil {
 		t.setError(err)
 	}
