@@ -7,7 +7,8 @@ Zoom
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
-Requires Redis version >= 2.8.9 and Go version >= 1.2. The latest version of both is recommended.
+Requires Redis version >= 2.8.9 and Go version >= 1.5 with
+`GO15VENDOREXPERIMENT=1`. The latest version of both is recommended.
 
 Full documentation is available on
 [godoc.org](http://godoc.org/github.com/albrow/zoom).
@@ -96,9 +97,17 @@ as Redis To Go, RedisLabs, Google Cloud Redis, or Amazon Elasticache.
 If you need to install Redis, see the [installation instructions](http://redis.io/download) on the official
 Redis website.
 
-To install Zoom itself, run `go get github.com/albrow/zoom` to pull down the
+To install Zoom itself, run `go get -u github.com/albrow/zoom` to pull down the
 current master branch, or install with the dependency manager of your choice to
 lock in a specific version.
+
+Zoom supports the
+[Go 1.5 vendor experiment](https://docs.google.com/document/d/1Bz5-UB7g2uPBdOx-rw5t9MxJwkfpx90cqG9AFL0JAYo/edit)
+and all dependencies are installed into the vendor folder, which is checked into
+version control. To use Zoom, you must use Go version >= 1.5 and set
+`GO15VENDOREXPERIMENT=1`. (Internally, Zoom uses 
+[Glide](https://github.com/Masterminds/glide) to manage dependencies,
+but you do not need to install Glide to use Zoom).
 
 
 Initialization

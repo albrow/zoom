@@ -24,3 +24,20 @@ If you plan on submitting a pull request, you should:
 3. Make your changes in the feature branch.
 4. Run the tests to make sure that they still pass. Updated the tests if needed.
 5. Submit a pull request to merge your feature branch into the **develop** branch. Please do not request to merge directly into master.
+
+### Third-Party Dependencies
+
+Zoom uses [Glide](https://github.com/Masterminds/glide) to manage dependencies.
+If you update or add any new dependencies, make sure you edit glide.yaml
+appropriately. All dependencies should be locked to a specific version in
+glide.yaml.
+
+1. If the project supports semantic versioning and the current version is
+   greater than or equal to 1.0, the version should be pinned to the current
+   major version. E.g., `version: 2.x`.
+2. If the project supports semantic versioning and the current version is less
+	than 1.0, the version should be pinned to the latest patch. E.g.,
+	`version: 0.4.2`.
+3. If the project does not support semantic versioning, then the version should
+   be pinned to the latest commit hash. E.g.,
+   `ref: 2b2c4ccb8692bb9d0ac6411c1fe47bb04be0ee05`.
