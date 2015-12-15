@@ -1,13 +1,14 @@
 Zoom
 ====
 
-[![Version](https://img.shields.io/badge/version-0.13.1-5272B4.svg)](https://github.com/albrow/zoom/releases)
+[![Version](https://img.shields.io/badge/version-0.14.0-5272B4.svg)](https://github.com/albrow/zoom/releases)
 [![Circle CI](https://img.shields.io/circleci/project/albrow/zoom.svg)](https://circleci.com/gh/albrow/zoom)
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
-Requires Redis version >= 2.8.9 and Go version >= 1.2. The latest version of both is recommended.
+Requires Redis version >= 2.8.9 and Go version >= 1.5 with
+`GO15VENDOREXPERIMENT=1`. The latest version of both is recommended.
 
 Full documentation is available on
 [godoc.org](http://godoc.org/github.com/albrow/zoom).
@@ -96,9 +97,17 @@ as Redis To Go, RedisLabs, Google Cloud Redis, or Amazon Elasticache.
 If you need to install Redis, see the [installation instructions](http://redis.io/download) on the official
 Redis website.
 
-To install Zoom itself, run `go get github.com/albrow/zoom` to pull down the
+To install Zoom itself, run `go get -u github.com/albrow/zoom` to pull down the
 current master branch, or install with the dependency manager of your choice to
 lock in a specific version.
+
+Zoom supports the
+[Go 1.5 vendor experiment](https://docs.google.com/document/d/1Bz5-UB7g2uPBdOx-rw5t9MxJwkfpx90cqG9AFL0JAYo/edit)
+and all dependencies are installed into the vendor folder, which is checked into
+version control. To use Zoom, you must use Go version >= 1.5 and set
+`GO15VENDOREXPERIMENT=1`. (Internally, Zoom uses 
+[Glide](https://github.com/Masterminds/glide) to manage dependencies,
+but you do not need to install Glide to use Zoom).
 
 
 Initialization
@@ -668,53 +677,52 @@ network, address, and database used.
 You should see some runtimes for various operations. If you see an error or if the build fails, please
 [open an issue](https://github.com/albrow/zoom/issues/new).
 
-Here are the results from my laptop (2.3GHz quad-core i7, 8GB RAM) using a socket connection with Redis set
+Here are the results from my laptop (2.8GHz quad-core i7 CPU, 16GB 1600MHz RAM) using a socket connection with Redis set
 to append-only mode:
 
 ```
-BenchmarkConnection  2000000         656 ns/op
-BenchmarkPing          50000       26627 ns/op
-BenchmarkSet           50000       36452 ns/op
-BenchmarkGet           50000       27864 ns/op
-BenchmarkSave          20000       58962 ns/op
-BenchmarkSave100        2000      960483 ns/op
-BenchmarkFind          30000       43054 ns/op
-BenchmarkFind100        3000      562743 ns/op
-BenchmarkFindAll100     2000      665035 ns/op
-BenchmarkFindAll10000     20    68657190 ns/op
-BenchmarkDelete        20000       61379 ns/op
-BenchmarkDelete100      2000     1031886 ns/op
-BenchmarkDeleteAll100   2000      968367 ns/op
-BenchmarkDeleteAll1000   100    11857145 ns/op
-BenchmarkCount100      50000       28340 ns/op
-BenchmarkCount10000    50000       29746 ns/op
-BenchmarkQueryFilterInt1From1         10000      149719 ns/op
-BenchmarkQueryFilterInt1From10        10000      148245 ns/op
-BenchmarkQueryFilterInt10From100       5000      264959 ns/op
-BenchmarkQueryFilterInt100From1000     1000     1654756 ns/op
-BenchmarkQueryFilterString1From1      10000      152185 ns/op
-BenchmarkQueryFilterString1From10     10000      154507 ns/op
-BenchmarkQueryFilterString10From100    5000      287958 ns/op
-BenchmarkQueryFilterString100From1000  1000     1862549 ns/op
-BenchmarkQueryFilterBool1From1        10000      146349 ns/op
-BenchmarkQueryFilterBool1From10       10000      147950 ns/op
-BenchmarkQueryFilterBool10From100      5000      276740 ns/op
-BenchmarkQueryFilterBool100From1000    1000     1641239 ns/op
-BenchmarkQueryOrderInt100       2000      681141 ns/op
-BenchmarkQueryOrderInt10000       20    72602768 ns/op
-BenchmarkQueryOrderString100    1000     1662290 ns/op
-BenchmarkQueryOrderString10000    10   118660109 ns/op
-BenchmarkQueryOrderBool100      2000      681808 ns/op
-BenchmarkQueryOrderBool10000      20    71249344 ns/op
-BenchmarkComplexQuery          10000      142476 ns/op
+BenchmarkConnection-8                  	 5000000	       318 ns/op
+BenchmarkPing-8                        	  100000	     15146 ns/op
+BenchmarkSet-8                         	  100000	     18782 ns/op
+BenchmarkGet-8                         	  100000	     15556 ns/op
+BenchmarkSave-8                        	   50000	     29307 ns/op
+BenchmarkSave100-8                     	    3000	    546427 ns/op
+BenchmarkFind-8                        	   50000	     24767 ns/op
+BenchmarkFind100-8                     	    5000	    374947 ns/op
+BenchmarkFindAll100-8                  	    5000	    383919 ns/op
+BenchmarkFindAll10000-8                	      30	  47267433 ns/op
+BenchmarkDelete-8                      	   50000	     29902 ns/op
+BenchmarkDelete100-8                   	    3000	    530866 ns/op
+BenchmarkDeleteAll100-8                	    2000	    730934 ns/op
+BenchmarkDeleteAll1000-8               	     200	   9185093 ns/op
+BenchmarkCount100-8                    	  100000	     16411 ns/op
+BenchmarkCount10000-8                  	  100000	     16454 ns/op
+BenchmarkQueryFilterInt1From1-8        	   20000	     82152 ns/op
+BenchmarkQueryFilterInt1From10-8       	   20000	     83816 ns/op
+BenchmarkQueryFilterInt10From100-8     	   10000	    144206 ns/op
+BenchmarkQueryFilterInt100From1000-8   	    2000	   1010463 ns/op
+BenchmarkQueryFilterString1From1-8     	   20000	     87347 ns/op
+BenchmarkQueryFilterString1From10-8    	   20000	     88031 ns/op
+BenchmarkQueryFilterString10From100-8  	   10000	    158968 ns/op
+BenchmarkQueryFilterString100From1000-8	    2000	   1088961 ns/op
+BenchmarkQueryFilterBool1From1-8       	   20000	     82537 ns/op
+BenchmarkQueryFilterBool1From10-8      	   20000	     84556 ns/op
+BenchmarkQueryFilterBool10From100-8    	   10000	    149463 ns/op
+BenchmarkQueryFilterBool100From1000-8  	    2000	   1017342 ns/op
+BenchmarkQueryOrderInt100-8            	    3000	    386156 ns/op
+BenchmarkQueryOrderInt10000-8          	      30	  50011375 ns/op
+BenchmarkQueryOrderString100-8         	    2000	   1004530 ns/op
+BenchmarkQueryOrderString10000-8       	      20	  77855970 ns/op
+BenchmarkQueryOrderBool100-8           	    3000	    387056 ns/op
+BenchmarkQueryOrderBool10000-8         	      30	  49116863 ns/op
+BenchmarkComplexQuery-8                	   20000	     84614 ns/op
 ```
 
 The results of these benchmarks can vary widely from system to system, and so the benchmarks
 here are really only useful for comparing across versions of Zoom, and for identifying possible
 performance regressions or improvements during development. You should run your own benchmarks that
 are closer to your use case to get a real sense of how Zoom will perform for you. High performance
-is one of the top priorities for this project, because without that you are better off using an ORM
-designed for SQL databases.
+is one of the top priorities for this project.
 
 
 Contributing

@@ -2,7 +2,7 @@
 // Use of this source code is governed by the MIT
 // license, which can be found in the LICENSE file.
 
-// File model_type.go contains code related to the Collection type.
+// File collection.go contains code related to the Collection type.
 // This includes all of the most basic operations like Save and Find.
 // The Register method and associated methods are also included here.
 
@@ -52,13 +52,6 @@ type CollectionOptions struct {
 	Name string
 }
 
-// Name returns the name for the given collection. The name is a unique string
-// identifier to use for the collection in redis. All models in this collection
-// that are saved in the database will use the collection name as a prefix.
-func (c *Collection) Name() string {
-	return c.spec.name
-}
-
 // NewCollection registers and returns a new collection of the given model type.
 // You must create a collection for each model type you want to save. The type
 // of model must be unique, i.e., not already registered, and must be a pointer
@@ -97,6 +90,13 @@ func (p *Pool) NewCollection(model Model, options *CollectionOptions) (*Collecti
 		pool:  p,
 		index: fullOptions.Index,
 	}, nil
+}
+
+// Name returns the name for the given collection. The name is a unique string
+// identifier to use for the collection in redis. All models in this collection
+// that are saved in the database will use the collection name as a prefix.
+func (c *Collection) Name() string {
+	return c.spec.name
 }
 
 // parseCollectionOptions returns a well-formed CollectionOptions struct. If
@@ -155,6 +155,19 @@ func (c *Collection) FieldIndexKey(fieldName string) (string, error) {
 	return c.spec.fieldIndexKey(fieldName)
 }
 
+// newNilCollectionError returns an error with a message describing that
+// methodName was called on a nil collection.
+func newNilCollectionError(methodName string) error {
+	return fmt.Errorf("zoom: Called %s on nil collection. You must initialize the collection with Pool.NewCollection", methodName)
+}
+
+// newUnindexedCollectionError returns an error with a message describing that
+// methodName was called on a collection that was not indexed. Certain methods
+// can only be called on indexed collections.
+func newUnindexedCollectionError(methodName string) error {
+	return fmt.Errorf("zoom: %s only works for indexed collections. To index the collection, set the Index property to true in CollectionOptions when calling Pool.NewCollection", methodName)
+}
+
 // Save writes a model (a struct which satisfies the Model interface) to the
 // redis database. Save returns an error if the type of model does not match the
 // registered Collection. To make a struct satisfy the Model interface, you can
@@ -177,6 +190,10 @@ func (c *Collection) Save(model Model) error {
 // will be added to the transaction and returned as an error when the
 // transaction is executed.
 func (t *Transaction) Save(c *Collection, model Model) {
+	if c == nil {
+		t.setError(newNilCollectionError("Save"))
+		return
+	}
 	if err := c.checkModelType(model); err != nil {
 		t.setError(fmt.Errorf("zoom: Error in Save or Transaction.Save: %s", err.Error()))
 		return
@@ -370,6 +387,10 @@ func (c *Collection) Find(id string, model Model) error {
 // will be added to the transaction and returned as an error when the transaction is
 // executed.
 func (t *Transaction) Find(c *Collection, id string, model Model) {
+	if c == nil {
+		t.setError(newNilCollectionError("Find"))
+		return
+	}
 	if err := c.checkModelType(model); err != nil {
 		t.setError(fmt.Errorf("zoom: Error in Find or Transaction.Find: %s", err.Error()))
 		return
@@ -458,8 +479,12 @@ func (c *Collection) FindAll(models interface{}) error {
 // Any errors encountered will be added to the transaction and returned as an error
 // when the transaction is executed.
 func (t *Transaction) FindAll(c *Collection, models interface{}) {
+	if c == nil {
+		t.setError(newNilCollectionError("FindAll"))
+		return
+	}
 	if !c.index {
-		t.setError(fmt.Errorf("zoom: error in FindAll: FindAll only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
+		t.setError(newUnindexedCollectionError("FindAll"))
 		return
 	}
 	// Since this is somewhat type-unsafe, we need to verify that
@@ -490,8 +515,12 @@ func (c *Collection) Count() (int, error) {
 // encountered will be added to the transaction and returned as an error when the
 // transaction is executed.
 func (t *Transaction) Count(c *Collection, count *int) {
+	if c == nil {
+		t.setError(newNilCollectionError("Count"))
+		return
+	}
 	if !c.index {
-		t.setError(fmt.Errorf("zoom: error in Count: Count only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
+		t.setError(newUnindexedCollectionError("Count"))
 		return
 	}
 	t.Command("SCARD", redis.Args{c.IndexKey()}, newScanIntHandler(count))
@@ -520,6 +549,10 @@ func (c *Collection) Delete(id string) (bool, error) {
 // executed. You may pass in nil for deleted if you do not care whether or not
 // the model was deleted.
 func (t *Transaction) Delete(c *Collection, id string, deleted *bool) {
+	if c == nil {
+		t.setError(newNilCollectionError("Delete"))
+		return
+	}
 	// Delete any field indexes
 	// This must happen first, because it relies on reading the old field values
 	// from the hash for string indexes (if any)
@@ -581,8 +614,12 @@ func (c *Collection) DeleteAll() (int, error) {
 // and returned as an error when the transaction is executed. You may pass in nil
 // for count if you do not care about the number of models that were deleted.
 func (t *Transaction) DeleteAll(c *Collection, count *int) {
+	if c == nil {
+		t.setError(newNilCollectionError("DeleteAll"))
+		return
+	}
 	if !c.index {
-		t.setError(fmt.Errorf("zoom: error in DeleteAll: DeleteAll only works for indexed collections. To index the collection, pass CollectionOptions to the NewCollection method."))
+		t.setError(newUnindexedCollectionError("DeleteAll"))
 		return
 	}
 	var handler ReplyHandler
