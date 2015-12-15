@@ -1,7 +1,7 @@
 Zoom
 ====
 
-[![Version](https://img.shields.io/badge/version-develop-5272B4.svg)](https://github.com/albrow/zoom/releases)
+[![Version](https://img.shields.io/badge/version-0.14.0-5272B4.svg)](https://github.com/albrow/zoom/releases)
 [![Circle CI](https://img.shields.io/circleci/project/albrow/zoom.svg)](https://circleci.com/gh/albrow/zoom)
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
