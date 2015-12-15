@@ -9,9 +9,10 @@ package zoom
 
 import (
 	"fmt"
-	"github.com/garyburd/redigo/redis"
 	"reflect"
 	"strings"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 // RandomId can be embedded in any model struct in order to satisfy
@@ -51,6 +52,7 @@ type modelSpec struct {
 	name         string
 	fieldsByName map[string]*fieldSpec
 	fields       []*fieldSpec
+	fallback     MarshalerUnmarshaler
 }
 
 // fieldSpec contains parsed information about a particular field
@@ -62,13 +64,13 @@ type fieldSpec struct {
 	indexKind indexKind
 }
 
-// fieldKind is the kind of a particular field, and is either a primative,
+// fieldKind is the kind of a particular field, and is either a primitive,
 // a pointer, or an inconvertible.
 type fieldKind int
 
 const (
-	primativeField     fieldKind = iota // any primative type
-	pointerField                        // pointer to any primative type
+	primativeField     fieldKind = iota // any primitive type
+	pointerField                        // pointer to any primitive type
 	inconvertibleField                  // all other types
 )
 
@@ -86,13 +88,22 @@ const (
 // compilesModelSpec examines typ using reflection, parses its fields,
 // and returns a modelSpec.
 func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
-	ms := &modelSpec{fieldsByName: map[string]*fieldSpec{}, typ: typ}
+	ms := &modelSpec{
+		name:         getDefaultModelSpecName(typ),
+		fieldsByName: map[string]*fieldSpec{},
+		typ:          typ,
+	}
 
 	// Iterate through fields
 	elem := typ.Elem()
 	numFields := elem.NumField()
 	for i := 0; i < numFields; i++ {
 		field := elem.Field(i)
+		// Skip unexported fields
+		if field.PkgPath != "" {
+			continue
+		}
+
 		// Skip the RandomId field
 		if field.Type == reflect.TypeOf(RandomId{}) {
 			continue
@@ -130,7 +141,7 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 
 		// Detect the kind of the field and (if applicable) the kind of the index
 		if typeIsPrimative(field.Type) {
-			// Primative
+			// Primitive
 			fs.kind = primativeField
 			if shouldIndex {
 				if err := setIndexKind(fs, field.Type); err != nil {
@@ -138,7 +149,7 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 				}
 			}
 		} else if field.Type.Kind() == reflect.Ptr && typeIsPrimative(field.Type.Elem()) {
-			// Pointer to a primative
+			// Pointer to a primitive
 			fs.kind = pointerField
 			if shouldIndex {
 				if err := setIndexKind(fs, field.Type.Elem()); err != nil {
@@ -151,6 +162,19 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 		}
 	}
 	return ms, nil
+}
+
+// getDefaultModelSpecName returns the default name for the given type, which is
+// simply the name of the type without the package prefix or dereference
+// operators.
+func getDefaultModelSpecName(typ reflect.Type) string {
+	// Strip any dereference operators
+	for typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+	nameWithPackage := typ.String()
+	// Strip the package name
+	return strings.Join(strings.Split(nameWithPackage, ".")[1:], "")
 }
 
 // setIndexKind sets the indexKind field of fs based on fieldType
@@ -314,9 +338,19 @@ func (mr *modelRef) key() string {
 // mainHashArgs returns the args for the main hash for this model. Typically
 // these args should part of an HMSET command.
 func (mr *modelRef) mainHashArgs() (redis.Args, error) {
+	return mr.mainHashArgsForFields(mr.spec.fieldNames())
+}
+
+// mainHashArgsForFields is like mainHashArgs but only returns the hash
+// fields which match the given fieldNames.
+func (mr *modelRef) mainHashArgsForFields(fieldNames []string) (redis.Args, error) {
 	args := redis.Args{mr.key()}
 	ms := mr.spec
 	for _, fs := range ms.fields {
+		// Skip fields whose names do not appear in fieldNames.
+		if !stringSliceContains(fieldNames, fs.name) {
+			continue
+		}
 		fieldVal := mr.fieldValue(fs.name)
 		switch fs.kind {
 		case primativeField:
@@ -328,16 +362,21 @@ func (mr *modelRef) mainHashArgs() (redis.Args, error) {
 				args = args.Add(fs.redisName, "NULL")
 			}
 		case inconvertibleField:
-			if fieldVal.Type().Kind() == reflect.Ptr && fieldVal.IsNil() {
-				args = args.Add(fs.redisName, "NULL")
-			} else {
-				// For inconvertibles, we convert the value to bytes using the gob package.
-				valBytes, err := defaultMarshalerUnmarshaler.Marshal(fieldVal.Interface())
-				if err != nil {
-					return nil, err
+			switch fieldVal.Type().Kind() {
+			// For nilable types that are nil store NULL
+			case reflect.Ptr, reflect.Slice, reflect.Map, reflect.Interface:
+				if fieldVal.IsNil() {
+					args = args.Add(fs.redisName, "NULL")
+					continue
 				}
-				args = args.Add(fs.redisName, valBytes)
 			}
+			// For inconvertibles, that are not nil, convert the value to bytes
+			// using the gob package.
+			valBytes, err := mr.spec.fallback.Marshal(fieldVal.Interface())
+			if err != nil {
+				return nil, err
+			}
+			args = args.Add(fs.redisName, valBytes)
 		}
 	}
 	return args, nil

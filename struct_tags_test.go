@@ -91,7 +91,7 @@ func TestRedisNameOption(t *testing.T) {
 		t.Errorf("Unexpected error in Save: %s", err.Error())
 	}
 	modelKey, _ := customFieldModels.ModelKey(model.ModelId())
-	expectFieldEquals(t, modelKey, "a", "test")
+	expectFieldEquals(t, modelKey, "a", customFieldModels.spec.fallback, "test")
 }
 
 func TestInvalidOptionThrowsError(t *testing.T) {

@@ -130,9 +130,39 @@ func TestSave(t *testing.T) {
 	// Make sure the model was saved correctly
 	expectModelExists(t, testModels, model)
 	key, _ := testModels.ModelKey(model.ModelId())
-	expectFieldEquals(t, key, "Int", model.Int)
-	expectFieldEquals(t, key, "String", model.String)
-	expectFieldEquals(t, key, "Bool", model.Bool)
+	mu := testModels.spec.fallback
+	expectFieldEquals(t, key, "Int", mu, model.Int)
+	expectFieldEquals(t, key, "String", mu, model.String)
+	expectFieldEquals(t, key, "Bool", mu, model.Bool)
+}
+
+func TestUpdateFields(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Create and save a test model
+	model := createTestModels(1)[0]
+	if err := testModels.Save(model); err != nil {
+		t.Errorf("Unexpected error in testModels.Save: %s", err.Error())
+	}
+
+	// Update the Int and Bool fields, but keep track of the original String for
+	// comparison.
+	model.Int = model.Int + 1
+	originalString := model.String
+	model.String = "new" + model.String
+	model.Bool = !model.Bool
+	if err := testModels.UpdateFields([]string{"Int", "Bool"}, model); err != nil {
+		t.Errorf("Unexpected error in testModels.UpdateFields: %s", err.Error())
+	}
+
+	// Make sure the model was saved correctly
+	expectModelExists(t, testModels, model)
+	key, _ := testModels.ModelKey(model.ModelId())
+	mu := testModels.spec.fallback
+	expectFieldEquals(t, key, "Int", mu, model.Int)
+	expectFieldEquals(t, key, "String", mu, originalString)
+	expectFieldEquals(t, key, "Bool", mu, model.Bool)
 }
 
 func TestFind(t *testing.T) {
@@ -153,6 +183,44 @@ func TestFind(t *testing.T) {
 	}
 	if !reflect.DeepEqual(model, modelCopy) {
 		t.Errorf("Found model was incorrect.\n\tExpected: %+v\n\tBut got:  %+v", model, modelCopy)
+	}
+}
+
+func TestFindFields(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Create and save some test models
+	models, err := createAndSaveTestModels(1)
+	if err != nil {
+		t.Errorf("Unexpected error saving test models: %s", err.Error())
+	}
+	model := models[0]
+
+	// Find only certain fields for the model in the database and store it in
+	// modelCopy
+	modelCopy := &testModel{}
+	if err := testModels.FindFields(model.ModelId(), []string{"Int", "Bool"}, modelCopy); err != nil {
+		t.Errorf("Unexpected error in testModels.FindFields: %s", err.Error())
+	}
+	// Since we did not specify the String field in FindFields, we expect it to
+	// be an empty string.
+	expectedModel := *model
+	expectedModel.String = ""
+	if !reflect.DeepEqual(&expectedModel, modelCopy) {
+		t.Errorf("Found model was incorrect.\n\tExpected: %+v\n\tBut got:  %+v", expectedModel, modelCopy)
+	}
+}
+
+func TestFindModelNotFound(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Try to find a model with an id that doesn't exist and check the error.
+	if err := testModels.Find("fake-id", &testModel{}); err == nil {
+		t.Errorf("Expected error in testModels.Find but got none")
+	} else if _, ok := err.(ModelNotFoundError); !ok {
+		t.Errorf("Expected error to be a ModelNotFoundError but got: %T: %s", err, err.Error())
 	}
 }
 

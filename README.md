@@ -1,9 +1,9 @@
 Zoom
 ====
 
+[![Version](https://img.shields.io/badge/version-develop-5272B4.svg)](https://github.com/albrow/zoom/releases)
+[![Circle CI](https://img.shields.io/circleci/project/albrow/zoom.svg)](https://circleci.com/gh/albrow/zoom)
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
-
-Version: X.X.X
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
@@ -34,14 +34,13 @@ Development Status
 ------------------
 
 Zoom has been around for more than a year. It is well-tested and going forward the API
-will be relatively stable. We are closing in on
-[Version 1.0.0-alpha](https://github.com/albrow/zoom/milestones).
+will be relatively stable. We are closing in on Version 1.0.0-alpha.
 
 At this time, Zoom can be considered safe for use in low-traffic production
 applications. However, as with any relatively new package, it is possible that
 there are some undiscovered bugs. Therefore we would recommend writing good
-tests, reporting any bugs you may find, and avoiding using Zoom for mission-
-critical or high-traffic applications.
+tests, reporting any bugs you may find, and avoiding using Zoom for
+mission-critical or high-traffic applications.
 
 Zoom follows semantic versioning, but offers no guarantees of backwards
 compatibility until version 1.0. We recommend using a dependency manager such as
@@ -114,10 +113,12 @@ import (
 )
 ```
 
-Then, you must create a new pool with `zoom.NewPool`. Since you may need access to the pool in different parts
-of your application, it is sometimes a good idea to declare a top-level variable and then initialize it
-in the `main` or `init` function. You must also call `pool.Close` when your application exits, so it's a good
-idea to use defer.
+Then, you must create a new pool with `zoom.NewPool`. A pool represents a pool
+of connections to the database. Since you may need access to the pool in
+different parts of your application, it is sometimes a good idea to declare a
+top-level variable and then initialize it in the `main` or `init` function. You
+must also call `pool.Close` when your application exits, so it's a good idea to
+use defer.
 
 ``` go
 var pool *zoom.Pool
@@ -241,19 +242,29 @@ that the default value should be used for that field.
 
 ``` go
 type CollectionOptions struct {
+	// FallbackMarshalerUnmarshaler is used to marshal/unmarshal any type
+	// into a slice of bytes which is suitable for storing in the database. If
+	// Zoom does not know how to directly encode a certain type into bytes, it
+	// will use the FallbackMarshalerUnmarshaler. By default, the value is
+	// GobMarshalerUnmarshaler which uses the builtin gob package. Zoom also
+	// provides JSONMarshalerUnmarshaler to support json encoding out of the box.
+	// Default: GobMarshalerUnmarshaler.
+	FallbackMarshalerUnmarshaler MarshalerUnmarshaler
+	// Iff Index is true, any model in the collection that is saved will be added
+	// to a set in redis which acts as an index. The default value is false. The
+	// key for the set is exposed via the IndexKey method. Queries and the
+	// FindAll, Count, and DeleteAll methods will not work for unindexed
+	// collections. This may change in future versions. Default: false.
+	Index bool
 	// Name is a unique string identifier to use for the collection in redis. All
 	// models in this collection that are saved in the database will use the
 	// collection name as a prefix. If not provided, the default name will be the
 	// name of the model type without the package prefix or pointer declarations.
 	// So for example, the default name corresponding to *models.User would be
 	// "User". If a custom name is provided, it cannot contain a colon.
+	// Default: The name of the model type, excluding package prefix and pointer
+	// declarations.
 	Name string
-	// Iff Index is true, any model in the collection that is saved will be added
-	// to a set in redis which acts as an index. The default value is false. The
-	// key for the set is exposed via the IndexKey method. Queries and the
-	// FindAll, Count, and DeleteAll methods will not work for unindexed
-	// collections. This may change in future versions.
-	Index bool
 }
 ```
 
@@ -303,6 +314,24 @@ suitable for Redis and stores them as a Redis hash. There is a wiki page
 describing
 [how zoom works under the hood](https://github.com/albrow/zoom/wiki/Under-the-Hood) in more detail.
 
+### Updating Models
+
+Sometimes, it is preferable to only update certain fields of the model instead
+of saving them all again. It is more efficient and in some scenarios can allow
+safer simultaneous changes to the same model (as long as no two clients update
+the same field at the same time). In such cases, you can use `UpdateFields`.
+
+``` go
+if err := People.UpdateFields([]string{"Name"}, person); err != nil {
+	// handle error
+}
+```
+
+`UpdateFields` uses "last write wins" semantics, so if another caller updates
+the same field, your changes may be overwritten. That means it is not safe for
+"read before write" updates. See the section on
+[Concurrent Updates](#concurrent-updates) for more information.
+
 ### Finding a Single Model
 
 To retrieve a model by id, use the `Find` method:
@@ -320,6 +349,25 @@ collection. `Find` will mutate `p` by setting all its fields. Using `Find` in th
 safety and avoid type casting. If Zoom couldn't find a model of type `Person` with the given id, it will return a
 `ModelNotFoundError`.
 
+### Finding Only Certain Fields
+
+If you only want to find certain fields in the model instead of retrieving all
+of them, you can use `FindFields`, which works similarly to `UpdateFields`.
+
+``` go
+p := &Person{}
+if err := People.FindFields("a_valid_person_id", []string{"Name"}, p); err != nil {
+	// handle error
+}
+fmt.Println(p.Name, p.Age)
+// Output:
+// Alice 0
+```
+
+Fields that are not included in the given field names will not be mutated. In
+the above example, `p.Age` is `0` because `p` was just initialized and that's
+the zero value for the `int` type.
+
 ### Finding All Models
 
 To find all models of a given type, use the `FindAll` method:
@@ -334,6 +382,9 @@ if err := People.FindAll(&people); err != nil {
 `FindAll` expects a pointer to a slice of some registered type that implements `Model`. It grows or shrinks the slice as needed,
 filling in all the fields of the elements inside of the slice. So the result of the call is that `people` will be a slice of
 all models in the `People` collection.
+
+`FindAll` only works on indexed collections. To index a collection, you need to
+include `Index: true` in the `CollectionOptions`.
 
 ### Deleting Models
 
@@ -359,6 +410,8 @@ if err != nil {
 ```
 
 `DeleteAll` will return the number of models that were successfully deleted.
+`DeleteAll` only works on indexed collections. To index a collection, you need
+to include `Index: true` in the `CollectionOptions`.
 
 ### Counting the Number of Models
 
@@ -370,6 +423,9 @@ if err != nil {
   // handle err
 }
 ```
+
+`Count` only works on indexed collections. To index a collection, you need
+to include `Index: true` in the `CollectionOptions`.
 
 
 Transactions
@@ -390,13 +446,16 @@ t := pool.NewTransaction()
 t.Save(People, &Person{Name: "Foo"})
 t.Save(People, &Person{Name: "Bar"})
 // Count expects a pointer to an integer, which it will change the value of
-// when the transaction is executed.
+// when the transaction is executed. If you don't care about the number of
+// models deleted, you can pass in nil.
 t.Count(People, &numPeople)
 if err := t.Exec(); err != nil {
   // handle error
 }
 // numPeople will now equal the number of *Person models in the database
 fmt.Println(numPeople)
+// Output:
+// 2
 ```
 
 You can also execute custom Redis commands or run lua scripts with the
@@ -509,10 +568,14 @@ Read more about:
 - [Redis scripts](http://redis.io/commands/eval)
 - [Redis transactions](http://redis.io/topics/transactions)
 
-### Thread-Safe Updates
+### Concurrent Updates
 
-Currently, Zoom does not support thread-safe or cross-machine updates on models. Consider the
-following code:
+Currently, Zoom does not support concurrent "read before write" updates on
+models. The `UpdateFields` method introduced in version 0.12 offers some
+additional safety for concurrent updates, as long as no concurrent callers
+update the same fields (or if you are okay with updates overwriting previous
+changes). However, cases where you need to do a "read before write" update are
+still not safe by default. For example, consider the following code:
 
 ``` go
 func likePost(postId string) error {
@@ -530,11 +593,17 @@ func likePost(postId string) error {
 }
 ```
 
-This can cause a bug if the function is called across multiple threads or multiple machines
-concurrently, because the `Post` model can change in between the time we retrieved it from the
-database with `Find` and saved it again with `Save`. Future versions of Zoom will provide optimistic
-locking or other means to avoid these kinds of errors. In the meantime, you could fix this code
-by using an `HINCRBY` command directly like so:
+The line `post.Likes += 1` is a "read before write" operation. That's because
+the `+=` operator implicitly reads the current value of `post.Likes` and then
+adds to it.
+
+This can cause a bug if the function is called across multiple threads or
+multiple machines concurrently, because the `Post` model can change in between
+the time we retrieved it from the database with `Find` and saved it again with
+`Save`. Future versions of Zoom may provide
+[optimistic locking](https://github.com/albrow/zoom/issues/13) or other means to
+avoid these kinds of errors. In the meantime, you could fix this code by using
+an `HINCRBY` command directly like so:
 
 ``` go
 func likePost(postId string) error {
@@ -552,7 +621,8 @@ func likePost(postId string) error {
 }
 ```
 
-You could also use a lua script for more complicated thread-safe updates.
+You could also use a lua script, which have full transactional support in Zoom,
+for more complicated "read before write" updates.
 
 
 Testing & Benchmarking

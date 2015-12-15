@@ -27,19 +27,29 @@ type Collection struct {
 
 // CollectionOptions contains various options for a pool.
 type CollectionOptions struct {
+	// FallbackMarshalerUnmarshaler is used to marshal/unmarshal any type
+	// into a slice of bytes which is suitable for storing in the database. If
+	// Zoom does not know how to directly encode a certain type into bytes, it
+	// will use the FallbackMarshalerUnmarshaler. By default, the value is
+	// GobMarshalerUnmarshaler which uses the builtin gob package. Zoom also
+	// provides JSONMarshalerUnmarshaler to support json encoding out of the box.
+	// Default: GobMarshalerUnmarshaler.
+	FallbackMarshalerUnmarshaler MarshalerUnmarshaler
+	// Iff Index is true, any model in the collection that is saved will be added
+	// to a set in redis which acts as an index. The default value is false. The
+	// key for the set is exposed via the IndexKey method. Queries and the
+	// FindAll, Count, and DeleteAll methods will not work for unindexed
+	// collections. This may change in future versions. Default: false.
+	Index bool
 	// Name is a unique string identifier to use for the collection in redis. All
 	// models in this collection that are saved in the database will use the
 	// collection name as a prefix. If not provided, the default name will be the
 	// name of the model type without the package prefix or pointer declarations.
 	// So for example, the default name corresponding to *models.User would be
 	// "User". If a custom name is provided, it cannot contain a colon.
+	// Default: The name of the model type, excluding package prefix and pointer
+	// declarations.
 	Name string
-	// Iff Index is true, any model in the collection that is saved will be added
-	// to a set in redis which acts as an index. The default value is false. The
-	// key for the set is exposed via the IndexKey method. Queries and the
-	// FindAll, Count, and DeleteAll methods will not work for unindexed
-	// collections. This may change in future versions.
-	Index bool
 }
 
 // NewCollection registers and returns a new collection of the given model type.
@@ -70,6 +80,7 @@ func (p *Pool) NewCollection(model Model, options *CollectionOptions) (*Collecti
 		return nil, err
 	}
 	spec.name = fullOptions.Name
+	spec.fallback = fullOptions.FallbackMarshalerUnmarshaler
 	p.modelTypeToSpec[typ] = spec
 	p.modelNameToSpec[fullOptions.Name] = spec
 
@@ -95,32 +106,23 @@ func parseCollectionOptions(model Model, passedOptions *CollectionOptions) (*Col
 	// If passedOptions is nil, use all the default values
 	if passedOptions == nil {
 		return &CollectionOptions{
-			Name: getDefaultCollectionName(reflect.TypeOf(model)),
+			FallbackMarshalerUnmarshaler: GobMarshalerUnmarshaler,
+			Name: getDefaultModelSpecName(reflect.TypeOf(model)),
 		}, nil
 	}
 	// Copy and validate the passedOptions
 	newOptions := *passedOptions
 	if newOptions.Name == "" {
-		newOptions.Name = getDefaultCollectionName(reflect.TypeOf(model))
+		newOptions.Name = getDefaultModelSpecName(reflect.TypeOf(model))
 	} else if strings.Contains(newOptions.Name, ":") {
 		return nil, fmt.Errorf("zoom: CollectionOptions.Name cannot contain a colon. Got: %s", newOptions.Name)
 	}
-	// NOTE: we don't need to modify the Index field becuase the default value,
+	if newOptions.FallbackMarshalerUnmarshaler == nil {
+		newOptions.FallbackMarshalerUnmarshaler = GobMarshalerUnmarshaler
+	}
+	// NOTE: we don't need to modify the Index field because the default value,
 	// false, is also the zero value.
 	return &newOptions, nil
-}
-
-// getDefaultCollectionName returns the default collection name for the given
-// type, which is simply the name of the type without the package prefix or
-// dereference operators.
-func getDefaultCollectionName(typ reflect.Type) string {
-	// Strip any dereference operators
-	for typ.Kind() == reflect.Ptr {
-		typ = typ.Elem()
-	}
-	nameWithPackage := typ.String()
-	// Strip the package name
-	return strings.Join(strings.Split(nameWithPackage, ".")[1:], "")
 }
 
 func (p *Pool) typeIsRegistered(typ reflect.Type) bool {
@@ -167,7 +169,7 @@ func newUnindexedCollectionError(methodName string) error {
 }
 
 // Save writes a model (a struct which satisfies the Model interface) to the
-// redis database. Save throws an error if the type of model does not match the
+// redis database. Save returns an error if the type of model does not match the
 // registered Collection. To make a struct satisfy the Model interface, you can
 // embed zoom.RandomId, which will generate pseudo-random ids for each model.
 func (c *Collection) Save(model Model) error {
@@ -181,7 +183,7 @@ func (c *Collection) Save(model Model) error {
 
 // Save writes a model (a struct which satisfies the Model interface) to the
 // redis database inside an existing transaction. save will set the err property
-// of the transaction if the type of model does not matched the registered
+// of the transaction if the type of model does not match the registered
 // Collection, which will cause exec to fail immediately and return the error.
 // To make a struct satisfy the Model interface, you can embed zoom.RandomId,
 // which will generate pseudo-random ids for each model. Any errors encountered
@@ -226,7 +228,17 @@ func (t *Transaction) Save(c *Collection, model Model) {
 // saveFieldIndexes adds commands to the transaction for saving the indexes
 // for all indexed fields.
 func (t *Transaction) saveFieldIndexes(mr *modelRef) {
+	t.saveFieldIndexesForFields(mr.spec.fieldNames(), mr)
+}
+
+// saveFieldIndexesForFields works like saveFieldIndexes, but only saves the
+// indexes for the given fieldNames.
+func (t *Transaction) saveFieldIndexesForFields(fieldNames []string, mr *modelRef) {
 	for _, fs := range mr.spec.fields {
+		// Skip fields whose names do not appear in fieldNames.
+		if !stringSliceContains(fieldNames, fs.name) {
+			continue
+		}
 		switch fs.indexKind {
 		case noIndex:
 			continue
@@ -290,6 +302,69 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 	t.Command("ZADD", redis.Args{indexKey, 0, member}, nil)
 }
 
+// UpdateFields updates only the given fields of the model. UpdateFields uses
+// "last write wins" semantics. If another caller updates the the same fields
+// concurrently, your updates may be overwritten. It will return an error if
+// the type of model does not match the registered Collection, or if any of
+// the given fieldNames are not found in the registered Collection. If
+// UpdateFields is called on a model that has not yet been saved, it will not
+// return an error. Instead, only the given fields will be saved in the
+// database.
+func (c *Collection) UpdateFields(fieldNames []string, model Model) error {
+	t := c.pool.NewTransaction()
+	t.UpdateFields(c, fieldNames, model)
+	if err := t.Exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// UpdateFields updates only the given fields of the model inside an existing
+// transaction. UpdateFields will set the err property of the transaction if the
+// type of model does not match the registered Collection, or if any of the
+// given fieldNames are not found in the model type. In either case, the
+// transaction will return the error when you call Exec. UpdateFields uses "last
+// write wins" semantics. If another caller updates the the same fields
+// concurrently, your updates may be overwritten. If UpdateFields is called on a
+// model that has not yet been saved, it will not return an error. Instead, only
+// the given fields will be saved in the database.
+func (t *Transaction) UpdateFields(c *Collection, fieldNames []string, model Model) {
+	// Check the model type
+	if err := c.checkModelType(model); err != nil {
+		t.setError(fmt.Errorf("zoom: Error in UpdateFields or Transaction.UpdateFields: %s", err.Error()))
+		return
+	}
+	// Check the given field names
+	for _, fieldName := range fieldNames {
+		if !stringSliceContains(c.spec.fieldNames(), fieldName) {
+			t.setError(fmt.Errorf("zoom: Error in UpdateFields or Transaction.UpdateFields: Collection %s does not have field named %s", c.Name(), fieldName))
+			return
+		}
+	}
+	// Create a modelRef and start a transaction
+	mr := &modelRef{
+		spec:  c.spec,
+		model: model,
+	}
+	// Update indexes
+	// This must happen first, because it relies on reading the old field values
+	// from the hash for string indexes (if any)
+	t.saveFieldIndexesForFields(fieldNames, mr)
+	// Get the main hash args.
+	hashArgs, err := mr.mainHashArgsForFields(fieldNames)
+	if err != nil {
+		t.setError(err)
+	}
+	//
+	if len(hashArgs) > 1 {
+		// Only save the main hash if there are any fields
+		// The first element in hashArgs is the model key,
+		// so there are fields if the length is greater than
+		// 1.
+		t.Command("HMSET", hashArgs, nil)
+	}
+}
+
 // Find retrieves a model with the given id from redis and scans its values
 // into model. model should be a pointer to a struct of a registered type
 // corresponding to the Collection. Find will mutate the struct, filling in its
@@ -331,6 +406,51 @@ func (t *Transaction) Find(c *Collection, id string, model Model) {
 		args = append(args, fieldName)
 	}
 	t.Command("HMGET", args, newScanModelHandler(mr.spec.fieldNames(), mr))
+}
+
+// FindFields is like Find but finds and sets only the specified fields. Any
+// fields of the model which are not in the given fieldNames are not mutated.
+// FindFields will return an error if any of the given fieldNames are not found
+// in the model type.
+func (c *Collection) FindFields(id string, fieldNames []string, model Model) error {
+	t := c.pool.NewTransaction()
+	t.FindFields(c, id, fieldNames, model)
+	if err := t.Exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// FindFields is like Find but finds and sets only the specified fields. Any
+// fields of the model which are not in the given fieldNames are not mutated.
+// FindFields will return an error if any of the given fieldNames are not found
+// in the model type.
+func (t *Transaction) FindFields(c *Collection, id string, fieldNames []string, model Model) {
+	if err := c.checkModelType(model); err != nil {
+		t.setError(fmt.Errorf("zoom: Error in FindFields or Transaction.FindFields: %s", err.Error()))
+		return
+	}
+	// Set the model id and create a modelRef
+	model.SetModelId(id)
+	mr := &modelRef{
+		spec:  c.spec,
+		model: model,
+	}
+	// Check the given field names and append the corresponding redis field names
+	// to args.
+	args := redis.Args{mr.key()}
+	for _, fieldName := range fieldNames {
+		if !stringSliceContains(c.spec.fieldNames(), fieldName) {
+			t.setError(fmt.Errorf("zoom: Error in FindFields or Transaction.FindFields: Collection %s does not have field named %s", c.Name(), fieldName))
+			return
+		}
+		// args is an array of arguments passed to the HMGET command. We want to
+		// use the redis names corresponding to each field name. The redis names
+		// may be customized via struct tags.
+		args = append(args, c.spec.fieldsByName[fieldName].redisName)
+	}
+	// Get the fields from the main hash for this model
+	t.Command("HMGET", args, newScanModelHandler(fieldNames, mr))
 }
 
 // FindAll finds all the models of the given type. It executes the commands needed
@@ -426,7 +546,8 @@ func (c *Collection) Delete(id string) (bool, error) {
 // transaction is executed. If the no model with the given type and id existed,
 // the value of deleted will be set to false. Any errors encountered will be
 // added to the transaction and returned as an error when the transaction is
-// executed.
+// executed. You may pass in nil for deleted if you do not care whether or not
+// the model was deleted.
 func (t *Transaction) Delete(c *Collection, id string, deleted *bool) {
 	if c == nil {
 		t.setError(newNilCollectionError("Delete"))
@@ -436,8 +557,14 @@ func (t *Transaction) Delete(c *Collection, id string, deleted *bool) {
 	// This must happen first, because it relies on reading the old field values
 	// from the hash for string indexes (if any)
 	t.deleteFieldIndexes(c, id)
+	var handler ReplyHandler
+	if deleted == nil {
+		handler = nil
+	} else {
+		handler = newScanBoolHandler(deleted)
+	}
 	// Delete the main hash
-	t.Command("DEL", redis.Args{c.Name() + ":" + id}, newScanBoolHandler(deleted))
+	t.Command("DEL", redis.Args{c.Name() + ":" + id}, handler)
 	// Remvoe the id from the index of all models for the given type
 	t.Command("SREM", redis.Args{c.IndexKey(), id}, nil)
 }
@@ -484,7 +611,8 @@ func (c *Collection) DeleteAll() (int, error) {
 // DeleteAll delets all models for the given model type in an existing transaction.
 // The value of count will be set to the number of models that were successfully deleted
 // when the transaction is executed. Any errors encountered will be added to the transaction
-// and returned as an error when the transaction is executed.
+// and returned as an error when the transaction is executed. You may pass in nil
+// for count if you do not care about the number of models that were deleted.
 func (t *Transaction) DeleteAll(c *Collection, count *int) {
 	if c == nil {
 		t.setError(newNilCollectionError("DeleteAll"))
@@ -494,7 +622,13 @@ func (t *Transaction) DeleteAll(c *Collection, count *int) {
 		t.setError(newUnindexedCollectionError("DeleteAll"))
 		return
 	}
-	t.deleteModelsBySetIds(c.IndexKey(), c.Name(), newScanIntHandler(count))
+	var handler ReplyHandler
+	if count == nil {
+		handler = nil
+	} else {
+		handler = newScanIntHandler(count)
+	}
+	t.deleteModelsBySetIds(c.IndexKey(), c.Name(), handler)
 }
 
 // checkModelType returns an error iff model is not of the registered type that

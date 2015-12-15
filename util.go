@@ -9,8 +9,6 @@ package zoom
 
 import (
 	"fmt"
-	"github.com/dchest/uniuri"
-	"github.com/tv42/base58"
 	"hash/crc32"
 	"math/big"
 	"math/cmplx"
@@ -19,6 +17,9 @@ import (
 	"reflect"
 	"sync/atomic"
 	"time"
+
+	"github.com/dchest/uniuri"
+	"github.com/tv42/base58"
 )
 
 var (
@@ -239,9 +240,6 @@ func modelIds(models []Model) []string {
 //      current machine
 //   4. A pseudo-randomly generated sequence of 6 characters
 func generateRandomId() string {
-	// str := getTimeString() + getAtomicCounter() + getHardwareId() + uniuri.NewLen(4)
-	// fmt.Println(str)
-	// return str
 	return getTimeString() + getAtomicCounter() + getHardwareId() + uniuri.NewLen(6)
 }
 

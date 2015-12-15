@@ -326,7 +326,7 @@ func expectSetDoesNotContain(t *testing.T, setName string, member interface{}) {
 
 // expectFieldEquals sets an error via t.Errorf if the the field identified by fieldName does
 // not equal expected according to the database.
-func expectFieldEquals(t *testing.T, key string, fieldName string, expected interface{}) {
+func expectFieldEquals(t *testing.T, key string, fieldName string, marshalerUnmarshaler MarshalerUnmarshaler, expected interface{}) {
 	conn := testPool.NewConn()
 	defer conn.Close()
 	reply, err := conn.Do("HGET", key, fieldName)
@@ -345,7 +345,7 @@ func expectFieldEquals(t *testing.T, key string, fieldName string, expected inte
 	case typ.Kind() == reflect.Ptr:
 		err = scanPointerVal(srcBytes, dest)
 	default:
-		err = scanInconvertibleVal(srcBytes, dest)
+		err = scanInconvertibleVal(marshalerUnmarshaler, srcBytes, dest)
 	}
 	if err != nil {
 		t.Errorf("Unexpected error scanning value for field %s: %s", fieldName, err)
