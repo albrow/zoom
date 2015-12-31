@@ -41,3 +41,10 @@ glide.yaml.
 3. If the project does not support semantic versioning, then the version should
    be pinned to the latest commit hash. E.g.,
    `ref: 2b2c4ccb8692bb9d0ac6411c1fe47bb04be0ee05`.
+
+After you have added/updated a dependency, be sure to run `glide install` to
+have Glide install the appropriate version to the `vendor` directory. Then run
+`git add -f vendor` to have add the dependency to version control as a
+submodule. Submodules are certainly confusing and not ideal, but this is the
+only way we know of to install dependencies in the `vendor` folder in a way that
+will work with `go get` for users who do not have Glide. 
