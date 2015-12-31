@@ -8,7 +8,7 @@
 // atomic transactions, lua scripts, and running Redis commands
 // directly if needed.
 //
-// Version 0.14.1
+// Version 0.14.2
 //
 // For installation instructions, examples, and more information
 // visit https://github.com/albrow/zoom.
