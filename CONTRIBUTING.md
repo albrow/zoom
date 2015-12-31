@@ -41,3 +41,15 @@ glide.yaml.
 3. If the project does not support semantic versioning, then the version should
    be pinned to the latest commit hash. E.g.,
    `ref: 2b2c4ccb8692bb9d0ac6411c1fe47bb04be0ee05`.
+
+After you have added or updated the dependency, run `glide install` to have
+Glide get the appropriate version and put it in the `vendor` folder.
+
+For Zoom, we commit all third-party dependencies in the `vendor` folder to
+version control. That way, you don't have to use Glide (or even know that Glide
+exists) in order to use Zoom. In order to get this to work properly, you must
+remove the `.git` file from the project in the `vendor` folder. If you don't do
+this, git will either ignore the directory where the dependency was installed or
+use submodules, which is not desirable (the exact behavior depends on how you
+added the directories). After you have removed the `.git`, run `git add` as you
+would normally.
