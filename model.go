@@ -99,8 +99,12 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 	numFields := elem.NumField()
 	for i := 0; i < numFields; i++ {
 		field := elem.Field(i)
-		// Skip unexported fields
-		if field.PkgPath != "" {
+		// Skip unexported fields. Prior to go 1.6, field.PkgPath won't give us
+		// the behavior we want. Unlike packages such as encoding/json and
+		// encoding/gob, Zoom does not save unexported embedded structs with
+		// exported fields. So instead, we check if the first character of the
+		// field name is lowercase.
+		if strings.ToLower(field.Name[0:1]) == field.Name[0:1] {
 			continue
 		}
 

@@ -1,7 +1,7 @@
 Zoom
 ====
 
-[![Version](https://img.shields.io/badge/version-0.14.2-5272B4.svg)](https://github.com/albrow/zoom/releases)
+[![Version](https://img.shields.io/badge/version-0.15.0-5272B4.svg)](https://github.com/albrow/zoom/releases)
 [![Circle CI](https://img.shields.io/circleci/project/albrow/zoom/master.svg)](https://circleci.com/gh/albrow/zoom/tree/master)
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
@@ -204,7 +204,10 @@ type Person struct {
 }
 ```
 
-Because of the way Zoom uses reflection, all the fields you want to save need to be public. Almost
+Because of the way Zoom uses reflection, all the fields you want to save need to be exported.
+Unexported fields (including unexported embedded structs with exported fields) will not
+be saved. This is a departure from how the  encoding/json and  encoding/xml packages
+behave. See [issue #25](https://github.com/albrow/zoom/issues/25) for discussion. Almost
 any type of field is supported, including custom types, slices, maps, complex types, and embedded
 structs. The only things that are not supported are recursive data structures and functions.
 
