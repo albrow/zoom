@@ -44,6 +44,15 @@ func TestCompileModelSpec(t *testing.T) {
 		String string `redis:"myString"`
 		Bool   bool   `redis:"myBool"`
 	}
+	type Embedded struct {
+		Primative
+	}
+	type private struct {
+		Int int
+	}
+	type EmbeddedPrivate struct {
+		private
+	}
 	testCases := []struct {
 		model        interface{}
 		expectedSpec *modelSpec
@@ -274,6 +283,39 @@ func TestCompileModelSpec(t *testing.T) {
 						indexKind: noIndex,
 					},
 				},
+			},
+		},
+		{
+			model: &Embedded{},
+			expectedSpec: &modelSpec{
+				typ:  reflect.TypeOf(&Embedded{}),
+				name: "Embedded",
+				fieldsByName: map[string]*fieldSpec{
+					"Primative": {
+						kind:      inconvertibleField,
+						name:      "Primative",
+						redisName: "Primative",
+						typ:       reflect.TypeOf(Primative{}),
+						indexKind: noIndex,
+					},
+				},
+				fields: []*fieldSpec{
+					{
+						kind:      inconvertibleField,
+						name:      "Primative",
+						redisName: "Primative",
+						typ:       reflect.TypeOf(Primative{}),
+						indexKind: noIndex,
+					},
+				},
+			},
+		},
+		{
+			model: &EmbeddedPrivate{},
+			expectedSpec: &modelSpec{
+				typ:          reflect.TypeOf(&EmbeddedPrivate{}),
+				name:         "EmbeddedPrivate",
+				fieldsByName: map[string]*fieldSpec{},
 			},
 		},
 	}

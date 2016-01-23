@@ -86,7 +86,7 @@ func TestJSONFallback(t *testing.T) {
 	testConvertType(t, jsonModels, model)
 }
 
-type embeddable struct {
+type Embeddable struct {
 	Int    int
 	String string
 	Bool   bool
@@ -97,7 +97,7 @@ func TestConvertEmbeddedStruct(t *testing.T) {
 	defer testingTearDown()
 
 	type embeddedStructModel struct {
-		embeddable
+		Embeddable
 		RandomId
 	}
 	embededStructModels, err := testPool.NewCollection(&embeddedStructModel{}, nil)
@@ -105,7 +105,7 @@ func TestConvertEmbeddedStruct(t *testing.T) {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
 	model := &embeddedStructModel{
-		embeddable: embeddable{
+		Embeddable: Embeddable{
 			Int:    randomInt(),
 			String: randomString(),
 			Bool:   randomBool(),
@@ -119,7 +119,7 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 	defer testingTearDown()
 
 	type embeddedPointerToStructModel struct {
-		*embeddable
+		*Embeddable
 		RandomId
 	}
 	embededPointerToStructModels, err := testPool.NewCollection(&embeddedPointerToStructModel{}, nil)
@@ -127,7 +127,7 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
 	model := &embeddedPointerToStructModel{
-		embeddable: &embeddable{
+		Embeddable: &Embeddable{
 			Int:    randomInt(),
 			String: randomString(),
 			Bool:   randomBool(),
