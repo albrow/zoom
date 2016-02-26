@@ -7,8 +7,8 @@ Zoom
 
 A blazing-fast datastore and querying engine for Go built on Redis.
 
-Requires Redis version >= 2.8.9 and Go version >= 1.5 with
-`GO15VENDOREXPERIMENT=1`. The latest version of both is recommended.
+Requires Redis version >= 2.8.9 and Go version >= 1.2. The latest version of
+both is recommended.
 
 Full documentation is available on
 [godoc.org](http://godoc.org/github.com/albrow/zoom).
@@ -34,7 +34,7 @@ Table of Contents
 Development Status
 ------------------
 
-Zoom has been around for more than a year. It is well-tested and going forward the API
+Zoom was first started in 2013. It is well-tested and going forward the API
 will be relatively stable. We are closing in on Version 1.0.0-alpha.
 
 At this time, Zoom can be considered safe for use in low-traffic production
@@ -207,14 +207,16 @@ type Person struct {
 Because of the way Zoom uses reflection, all the fields you want to save need to be exported.
 Unexported fields (including unexported embedded structs with exported fields) will not
 be saved. This is a departure from how the  encoding/json and  encoding/xml packages
-behave. See [issue #25](https://github.com/albrow/zoom/issues/25) for discussion. Almost
-any type of field is supported, including custom types, slices, maps, complex types, and embedded
-structs. The only things that are not supported are recursive data structures and functions.
+behave. See [issue #25](https://github.com/albrow/zoom/issues/25) for discussion.
+
+Almost any type of field is supported, including custom types, slices, maps, complex types,
+and embedded structs. The only things that are not supported are recursive data structures and
+functions.
 
 ### Customizing Field Names
 
 You can change the name used to store the field in Redis with the `redis:"<name>"` struct tag. So
-for example, if you wanted the fields to be stored as lowercase fields in redis, you could use the
+for example, if you wanted the fields to be stored as lowercase fields in Redis, you could use the
 following struct definition:
 
 ``` go
@@ -262,13 +264,13 @@ type CollectionOptions struct {
 	// provides JSONMarshalerUnmarshaler to support json encoding out of the box.
 	// Default: GobMarshalerUnmarshaler.
 	FallbackMarshalerUnmarshaler MarshalerUnmarshaler
-	// Iff Index is true, any model in the collection that is saved will be added
-	// to a set in redis which acts as an index. The default value is false. The
+	// If Index is true, any model in the collection that is saved will be added
+	// to a set in Redis which acts as an index. The default value is false. The
 	// key for the set is exposed via the IndexKey method. Queries and the
 	// FindAll, Count, and DeleteAll methods will not work for unindexed
 	// collections. This may change in future versions. Default: false.
 	Index bool
-	// Name is a unique string identifier to use for the collection in redis. All
+	// Name is a unique string identifier to use for the collection in Redis. All
 	// models in this collection that are saved in the database will use the
 	// collection name as a prefix. If not provided, the default name will be the
 	// name of the model type without the package prefix or pointer declarations.
@@ -464,7 +466,7 @@ t.Count(People, &numPeople)
 if err := t.Exec(); err != nil {
   // handle error
 }
-// numPeople will now equal the number of *Person models in the database
+// numPeople will now equal the number of `Person` models in the database
 fmt.Println(numPeople)
 // Output:
 // 2
@@ -546,10 +548,10 @@ More Information
 ### Persistence
 
 Zoom is as persistent as the underlying Redis database. If you intend to use Redis as a permanent
-datastore, it is recommended that you turn on both AOF and RDB persistence options and set fsync to
-everysec. This will give you good performance while making data loss highly unlikely.
+datastore, it is recommended that you turn on both AOF and RDB persistence options and set `fsync` to
+`everysec`. This will give you good performance while making data loss highly unlikely.
 
-If you want greater protections against data loss, you can set fsync to always. This will hinder performance
+If you want greater protections against data loss, you can set `fsync` to `always`. This will hinder performance
 but give you persistence guarantees
 [very similar to SQL databases such as PostgreSQL](http://redis.io/topics/persistence#ok-so-what-should-i-use).
 
@@ -558,13 +560,13 @@ but give you persistence guarantees
 ### Atomicity
 
 All methods and functions in Zoom that touch the database do so atomically. This is accomplished using
-Redis transactions and lua scripts when necessary. What this means is that Zoom will not
+Redis transactions and Lua scripts when necessary. What this means is that Zoom will not
 put Redis into an inconsistent state (e.g. where indexes to not match the rest of the data).
 
 However, it should be noted that there is a caveat with Redis atomicity guarantees. If Redis crashes
 in the middle of a transaction or script execution, it is possible that your AOF file can become
 corrupted. If this happens, Redis will refuse to start until the AOF file is fixed. It is relatively
-easy to fix the problem with the redis-check-aof tool, which will remove the partial transaction
+easy to fix the problem with the `redis-check-aof` tool, which will remove the partial transaction
 from the AOF file.
 
 If you intend to issue custom Redis commands or run custom scripts, it is highly recommended that
@@ -609,7 +611,7 @@ The line `post.Likes += 1` is a "read before write" operation. That's because
 the `+=` operator implicitly reads the current value of `post.Likes` and then
 adds to it.
 
-This can cause a bug if the function is called across multiple threads or
+This can cause a bug if the function is called across multiple goroutines or
 multiple machines concurrently, because the `Post` model can change in between
 the time we retrieved it from the database with `Find` and saved it again with
 `Save`. Future versions of Zoom may provide
@@ -633,7 +635,7 @@ func likePost(postId string) error {
 }
 ```
 
-You could also use a lua script, which have full transactional support in Zoom,
+You could also use a Lua script, which have full transactional support in Zoom,
 for more complicated "read before write" updates.
 
 
