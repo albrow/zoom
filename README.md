@@ -739,10 +739,10 @@ See [CONTRIBUTING.md](https://github.com/albrow/zoom/blob/master/CONTRIBUTING.md
 Example Usage
 -------------
 
-There is an [example json/rest application](https://github.com/albrow/peeps-negroni)
-which uses the latest version of Zoom. It is a simple example that doesn't use all of
-Zoom's features, but should be good enough for understanding how zoom can work in a
-real application.
+[albrow/people](https://github.com/albrow/people) is an example HTTP/JSON API
+which uses the latest version of Zoom. It is a simple example that doesn't use
+all of Zoom's features, but should be good enough for understanding how Zoom can
+work in a real application.
 
 
 License
