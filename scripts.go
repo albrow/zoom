@@ -84,7 +84,7 @@ end`)
 -- 	1) setKey: The key of a sorted set for a field index (either numeric or bool)
 -- 	2) destKey: The key of a sorted set where the resulting ids will be stored
 --		3) min: The min argument for the ZRANGEBYSCORE command
--- 	4) max: The end argument for the ZRANGEBYSCORE command
+-- 	4) max: The max argument for the ZRANGEBYSCORE command
 -- The script then calls ZRANGEBYSCORE on setKey with the given min and max arguments,
 -- and then stores the resulting set in destKey. It does not preserve the existing
 -- scores, and instead just replaces scores with sequential numbers to keep the members
@@ -114,7 +114,7 @@ end
 --			value of 0.
 --		2) destKey: The key of a sorted set where the resulting ids will be stored
 -- 	3) min: The min argument for the ZRANGEBYLEX command
--- 	4) max: The end argument for the ZRANGEBYLEX command
+-- 	4) max: The max argument for the ZRANGEBYLEX command
 -- The script then extracts the ids from setKey using the given min and max arguments,
 -- and then stores them destKey with the appropriate scores in ascending order.
 
@@ -136,5 +136,6 @@ if #members > 0 then
 		local id = string.sub(member, idStart+1)
 		redis.call('ZADD', destKey, i, id)
 	end
-end`)
+end
+`)
 )

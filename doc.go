@@ -13,3 +13,5 @@
 // For installation instructions, examples, and more information
 // visit https://github.com/albrow/zoom.
 package zoom
+
+//go:generate markdown-toc -i README.md

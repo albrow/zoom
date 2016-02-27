@@ -7,12 +7,7 @@
 
 package zoom
 
-import (
-	"fmt"
-	"reflect"
-
-	"github.com/garyburd/redigo/redis"
-)
+import "github.com/garyburd/redigo/redis"
 
 // Transaction is an abstraction layer around a redis transaction.
 // Transactions consist of a set of actions which are either redis
@@ -41,10 +36,6 @@ const (
 	CommandAction ActionKind = iota
 	ScriptAction
 )
-
-// ReplyHandler is a function which does something with the reply from a redis
-// command or script.
-type ReplyHandler func(interface{}) error
 
 // NewTransaction instantiates and returns a new transaction.
 func (p *Pool) NewTransaction() *Transaction {
@@ -161,153 +152,6 @@ func (t *Transaction) Exec() error {
 		}
 	}
 	return nil
-}
-
-// newScanIntHandler returns a ReplyHandler which will set the value of i to the
-// converted value of reply.
-func newScanIntHandler(i *int) ReplyHandler {
-	return func(reply interface{}) error {
-		var err error
-		(*i), err = redis.Int(reply, nil)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
-// newScanIntHandler returns a ReplyHandler which will set the value of b to the
-// converted value of reply.
-func newScanBoolHandler(b *bool) ReplyHandler {
-	return func(reply interface{}) error {
-		var err error
-		(*b), err = redis.Bool(reply, nil)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
-// newScanIntHandler returns a ReplyHandler which will set the value of s to the
-// converted value of reply.
-func newScanStringHandler(s *string) ReplyHandler {
-	return func(reply interface{}) error {
-		var err error
-		(*s), err = redis.String(reply, nil)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
-// newScanStringsHandler returns a reply handler which will scan all the replies
-// in reply into strings. strings should be a pointer to a slice of some strings.
-// The returned replyHandler will grow or shrink strings as needed.
-func newScanStringsHandler(strings interface{}) ReplyHandler {
-	return func(reply interface{}) error {
-		replyStrings, err := redis.Strings(reply, nil)
-		if err != nil {
-			return err
-		}
-		stringsVal := reflect.ValueOf(strings).Elem()
-		stringsVal.Set(reflect.ValueOf(replyStrings))
-		return nil
-	}
-}
-
-// newScanModelHandler returns a ReplyHandler which will scan all the fields in
-// in the reply which are also in fieldNames into the fields of mr.model. It expects
-// a reply that looks like the output of an HMGET command, without the field names
-// included. The order of fieldNames must correspond to the order of the values in the
-// reply. fieldNames should be the actual field names as they appear in the struct
-// definition, not the redis names which may be custom.
-func newScanModelHandler(fieldNames []string, mr *modelRef) ReplyHandler {
-	return func(reply interface{}) error {
-		fieldValues, err := redis.Values(reply, nil)
-		if err != nil {
-			if err == redis.ErrNil {
-				return newModelNotFoundError(mr)
-			}
-			return err
-		}
-		if err := scanModel(fieldNames, fieldValues, mr); err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
-// newScanModelsHandler returns a reply handler which will scan all the replies
-// in reply into models. It only scans the fields which are in fieldNames. models
-// should be a pointer to a slice of some registered model type. The returned
-// replyHandler will grow or shrink models as needed. It expects a reply which is
-// a flat array of field values, with no separation between the fields for each
-// model. The order of fieldNames must correspond to the order of the values in the
-// reply. fieldNames should be the actual field names as they appear in the struct
-// definition, not the redis names which may be custom. It will use the length of
-// fieldNames to determine which fields belong to which models. For example, if
-// fieldNames is ["Int", "String", "-"] and the reply from redis looks like this:
-//
-//   1) "5"
-//   2) "Bob"
-//   3) "b1C7B0yETtXFYuKinndqoa"
-//   4) "7"
-//   5) "Alice"
-//   6) "NmjzzzDyNJpsCpPKnndqoa"
-//
-// newScanModelsHandler will recognize that there are three fields and assign the
-// first three to the first model, the next three to the second model, etc. This
-// is the kind of reply we expect from a SORT command with multiple GET options.
-func newScanModelsHandler(spec *modelSpec, fieldNames []string, models interface{}) ReplyHandler {
-	return func(reply interface{}) error {
-		allFields, err := redis.Values(reply, nil)
-		if err != nil {
-			if err == redis.ErrNil {
-				return ModelNotFoundError{
-					Msg: fmt.Sprintf("Could not find %s with the given criteria", spec.name),
-				}
-			}
-			return err
-		}
-		numFields := len(fieldNames)
-		numModels := len(allFields) / numFields
-		modelsVal := reflect.ValueOf(models).Elem()
-		for i := 0; i < numModels; i++ {
-			start := i * numFields
-			stop := i*numFields + numFields
-			fieldValues := allFields[start:stop]
-			var modelVal reflect.Value
-			if modelsVal.Len() > i {
-				// Use the pre-existing value at index i
-				modelVal = modelsVal.Index(i)
-				if modelVal.IsNil() {
-					// If the value is nil, allocate space for it
-					modelsVal.Index(i).Set(reflect.New(spec.typ.Elem()))
-				}
-			} else {
-				// Index i is out of range of the existing slice. Create a
-				// new modelVal and append it to modelsVal
-				modelVal = reflect.New(spec.typ.Elem())
-				modelsVal.Set(reflect.Append(modelsVal, modelVal))
-			}
-			mr := &modelRef{
-				spec:  spec,
-				model: modelVal.Interface().(Model),
-			}
-			if err := scanModel(fieldNames, fieldValues, mr); err != nil {
-				return err
-			}
-		}
-		// Trim the slice if it is longer than the number of models we scanned
-		// in.
-		if numModels < modelsVal.Len() {
-			modelsVal.SetLen(numModels)
-			modelsVal.SetCap(numModels)
-		}
-		return nil
-	}
 }
 
 //go:generate go run scripts/main.go

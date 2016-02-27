@@ -39,6 +39,8 @@ Table of Contents
   * [The Query Object](#the-query-object)
   * [Using Query Modifiers](#using-query-modifiers)
   * [A Note About String Indexes](#a-note-about-string-indexes)
+- [Advanced Features](#advanced-features)
+  * [Custom Redis Commands](#custom-redis-commands)
 - [More Information](#more-information)
   * [Persistence](#persistence)
   * [Atomicity](#atomicity)
@@ -493,13 +495,6 @@ fmt.Println(numPeople)
 // 2
 ```
 
-You can also execute custom Redis commands or run lua scripts with the
-[`Command`](http://godoc.org/github.com/albrow/zoom/#Transaction.Command) and
-[`Script`](http://godoc.org/github.com/albrow/zoom/#Transaction.Script) methods. Both methods expect a
-[`ReplyHandler`](http://godoc.org/github.com/albrow/zoom/#ReplyHandler) as an argument. A `ReplyHandler` is
-simply a function that will do something with the reply from Redis corresponding to the script or command
-that was run. `ReplyHandler`'s are executed in order when you call `Exec`.
-
 
 Queries
 -------
@@ -561,6 +556,71 @@ here are some caveats to keep in mind:
   not alphabetically. This can have surprising effects, for example 'Z' is considered less than 'a'.
 - Indexed string values may not contain the NULL or DEL characters (the characters with ASCII codepoints
   of 0 and 127 respectively). Zoom uses NULL as a separator and DEL as a suffix for range queries.
+
+
+Advanced Features
+-----------------
+
+Zoom offers a number advanced features to help cover use cases that are not
+easily implementable in a general way. You can use these features to run custom,
+more powerful queries in a way that is performant, convenient, and
+goroutine-safe.
+
+### Custom Redis Commands
+
+You can execute custom Redis commands or run custom Lua scripts inside a
+[`Transaction`](http://godoc.org/github.com/albrow/zoom/#Transaction) using the
+[`Command`](http://godoc.org/github.com/albrow/zoom/#Transaction.Command) and
+[`Script`](http://godoc.org/github.com/albrow/zoom/#Transaction.Script) methods.
+Both methods expect a
+[`ReplyHandler`](http://godoc.org/github.com/albrow/zoom/#ReplyHandler) as an
+argument. A `ReplyHandler` is simply a function that will do something with the
+reply from Redis. `ReplyHandler`'s are executed in order when you call `Exec`.
+
+Right out of the box, Zoom exports a few useful `ReplyHandler`s. These include
+handlers for the primitive types `int`, `string`, `bool`, and `float64`, as well
+as handlers for scanning a reply into a `Model` or a slice of `Model`s. You can
+also write your own custom `ReplyHandler`s if needed.
+
+Here's an example which uses the Redis `HINCRBY` command to increment and return
+the number of likes for a `Post`.
+
+```go
+myPost := Post{
+	Content: "Something rather poignant",
+	Likes:   0,
+}
+if err := Posts.Save(&myPost); err != nil {
+	// Handle err
+}
+// Get the key which is used to store myPost in Redis
+postKey, err := Posts.ModelKey(myPost.Id)
+if err != nil {
+	// Handle err
+}
+// Start a new transaction
+tx := pool.NewTransaction()
+// Add a command to increment the number of Likes. The HINCRBY command returns
+// an integer which we will scan into numLikes.
+var numLikes int
+tx.Command(
+	"HINCRBY",
+	redis.Args{postKey, "Likes", 1},
+	zoom.NewScanIntHandler(&numLikes),
+)
+if err := tx.Exec(); err != nil {
+	// Handle err
+}
+fmt.Println(numLikes)
+// Output:
+//   1
+```
+
+Read more about:
+- [Redis Commands](http://redis.io/commands)
+- [Redigo](https://github.com/garyburd/redigo), the Redis Driver used by Zoom
+- [`ReplyHandler`s provided by Zoom](https://godoc.org/github.com/albrow/zoom)
+- [How Zoom works Under the Hood](https://github.com/albrow/zoom/wiki/Under-the-Hood)
 
 
 More Information
@@ -637,28 +697,11 @@ multiple machines concurrently, because the `Post` model can change in between
 the time we retrieved it from the database with `Find` and saved it again with
 `Save`. Future versions of Zoom may provide
 [optimistic locking](https://github.com/albrow/zoom/issues/13) or other means to
-avoid these kinds of errors. In the meantime, you could fix this code by using
-an `HINCRBY` command directly like so:
+avoid these kinds of errors.
 
-``` go
-func likePost(postId string) error {
-  // modelKey is the key of the main hash for the model, which
-  // stores the struct fields as hash fields in Redis.
-  modelKey, err := Posts.ModelKey(postId)
-  if err != nil {
-	 return err
-  }
-  conn := zoom.NewConn()
-  defer conn.Close()
-  if _, err := conn.Do("HINCRBY", modelKey, 1); err != nil {
-	 return err
-  }
-}
-```
-
-You could also use a Lua script, which have full transactional support in Zoom,
-for more complicated "read before write" updates.
-
+In the meantime, take a look at the example code in the
+[Custom Redis Commands](#custom-redis-commands) section for a way to increment
+the number of likes in a way that is goroutine-safe.
 
 Testing & Benchmarking
 ----------------------

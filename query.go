@@ -469,7 +469,7 @@ func (q *Query) Ids() ([]string, error) {
 	}
 	sortArgs := q.collection.spec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind)
 	ids := []string{}
-	q.tx.Command("SORT", sortArgs, newScanStringsHandler(&ids))
+	q.tx.Command("SORT", sortArgs, NewScanStringsHandler(&ids))
 	if len(tmpKeys) > 0 {
 		q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
 	}
