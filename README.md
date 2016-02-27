@@ -17,19 +17,40 @@ Full documentation is available on
 Table of Contents
 -----------------
 
+<!-- toc -->
+
 - [Development Status](#development-status)
-- [When is Zoom a Good Fit?](#when-is-zoom-a-good-fit)
+- [When is Zoom a Good Fit?](#when-is-zoom-a-good-fit-)
 - [Installation](#installation)
 - [Initialization](#initialization)
 - [Models](#models)
+  * [What is a Model?](#what-is-a-model-)
+  * [Customizing Field Names](#customizing-field-names)
+  * [Creating Collections](#creating-collections)
+  * [Saving Models](#saving-models)
+  * [Updating Models](#updating-models)
+  * [Finding a Single Model](#finding-a-single-model)
+  * [Finding Only Certain Fields](#finding-only-certain-fields)
+  * [Finding All Models](#finding-all-models)
+  * [Deleting Models](#deleting-models)
+  * [Counting the Number of Models](#counting-the-number-of-models)
 - [Transactions](#transactions)
 - [Queries](#queries)
+  * [The Query Object](#the-query-object)
+  * [Using Query Modifiers](#using-query-modifiers)
+  * [A Note About String Indexes](#a-note-about-string-indexes)
 - [More Information](#more-information)
-- [Testing & Benchmarking](#testing--benchmarking)
+  * [Persistence](#persistence)
+  * [Atomicity](#atomicity)
+  * [Concurrent Updates](#concurrent-updates)
+- [Testing & Benchmarking](#testing---benchmarking)
+  * [Running the Tests:](#running-the-tests-)
+  * [Running the Benchmarks:](#running-the-benchmarks-)
 - [Contributing](#contributing)
 - [Example Usage](#example-usage)
 - [License](#license)
 
+<!-- tocstop -->
 
 Development Status
 ------------------
