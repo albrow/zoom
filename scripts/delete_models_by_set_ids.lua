@@ -13,7 +13,7 @@
 
 -- Assign keys to variables for easy access
 local setKey = ARGV[1]
-local modelName = ARGV[2]
+local collectionName = ARGV[2]
 -- Get all the ids from the set name
 local ids = redis.call('SMEMBERS', setKey)
 local count = 0
@@ -21,12 +21,12 @@ if #ids > 0 then
 	-- Iterate over the ids
 	for i, id in ipairs(ids) do
 		-- Delete the main hash for each model
-		local key = modelName .. ':' .. id
+		local key = collectionName .. ':' .. id
 		count = count + redis.call('DEL', key)
 		-- Remove the model id from the set of all ids
 		-- NOTE: this is not necessarily the same as the
 		-- setName we were given
-		local setKey = modelName .. ':all'
+		local setKey = collectionName .. ':all'
 		redis.call('SREM', setKey, id)
 	end
 end

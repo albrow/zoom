@@ -644,7 +644,7 @@ func (t *Transaction) DeleteAll(c *Collection, count *int) {
 	} else {
 		handler = NewScanIntHandler(count)
 	}
-	t.deleteModelsBySetIds(c.IndexKey(), c.Name(), handler)
+	t.DeleteModelsBySetIds(c.IndexKey(), c.Name(), handler)
 }
 
 // checkModelType returns an error iff model is not of the registered type that

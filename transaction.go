@@ -156,33 +156,45 @@ func (t *Transaction) Exec() error {
 
 //go:generate go run scripts/main.go
 
-// deleteModelsBySetIds is a small function wrapper around deleteModelsBySetIdsScript.
-// It offers some type safety and helps make sure the arguments you pass through to the are correct.
-// The script will delete the models corresponding to the ids in the given set and return the number
-// of models that were deleted. You can use the handler to capture the return value.
-func (t *Transaction) deleteModelsBySetIds(setKey string, modelName string, handler ReplyHandler) {
-	t.Script(deleteModelsBySetIdsScript, redis.Args{setKey, modelName}, handler)
+// DeleteModelsBySetIds is a small function wrapper around a Lua script. The
+// script will atomically delete the models corresponding to the ids in set
+// (not sorted set) identified by setKey and return the number of models that
+// were deleted. You can pass in a handler (e.g. NewScanIntHandler) to capture
+// the return value of the script. You can use the Name method of a Collection
+// to get the name.
+func (t *Transaction) DeleteModelsBySetIds(setKey string, collectionName string, handler ReplyHandler) {
+	t.Script(deleteModelsBySetIdsScript, redis.Args{setKey, collectionName}, handler)
 }
 
-// deleteStringIndex is a small function wrapper around deleteStringIndexScript.
-// It offers some type safety and helps make sure the arguments you pass through to the are correct.
-// The script will atomically remove the existing index, if any, on the given field name.
-func (t *Transaction) deleteStringIndex(modelName, modelId, fieldName string) {
-	t.Script(deleteStringIndexScript, redis.Args{modelName, modelId, fieldName}, nil)
+// deleteStringIndex is a small function wrapper around a Lua script. The script
+// will atomically remove the existing string index, if any, on the given
+// fieldName for the model with the given modelId. You can use the Name method
+// of a Collection to get its name. fieldName should be the name as it is stored
+// in Redis.
+func (t *Transaction) deleteStringIndex(collectionName, modelId, fieldName string) {
+	t.Script(deleteStringIndexScript, redis.Args{collectionName, modelId, fieldName}, nil)
 }
 
-// extractIdsFromFieldIndex is a small function wrapper around extractIdsFromFieldIndexScript.
-// It offers some type safety and helps make sure the arguments you pass through to the are correct.
-// The script will get all the ids from setKey using ZRANGEBYSCORE with the given min and max, and then
-// store them in a sorted set identified by destKey.
-func (t *Transaction) extractIdsFromFieldIndex(setKey string, destKey string, min interface{}, max interface{}) {
+// ExtractIdsFromFieldIndex is a small function wrapper around a Lua script. The
+// script will get all the ids from the sorted set identified by setKey using
+// ZRANGEBYSCORE with the given min and max, and then store them in a sorted set
+// identified by destKey. The members of the sorted set should be model ids.
+// Note that this method will not work on sorted sets that represents string
+// indexes because they are stored differently.
+func (t *Transaction) ExtractIdsFromFieldIndex(setKey string, destKey string, min interface{}, max interface{}) {
 	t.Script(extractIdsFromFieldIndexScript, redis.Args{setKey, destKey, min, max}, nil)
 }
 
-// extractIdsFromStringIndex is a small function wrapper around extractIdsFromStringIndexScript.
-// It offers some type safety and helps make sure the arguments you pass through to the are correct.
-// The script will extract the ids from setKey using ZRANGEBYLEX with the given min and max, and then
-// store them in a sorted set identified by destKey.
-func (t *Transaction) extractIdsFromStringIndex(setKey, destKey, min, max string) {
+// ExtractIdsFromStringIndex is a small function wrapper around a Lua script.
+// The script will extract the ids from a sorted set identified by setKey using
+// ZRANGEBYLEX with the given min and max, and then store them in a sorted set
+// identified by destKey. All the scores for the sorted set should be 0, and the
+// members should follow the format <value>\x00<id>, where <value> is the string
+// value, \x000 is the NULL ASCII character and <id> is the id of the model
+// with that value. As with all string indexes in Zoom, the value cannot contain
+// the NULL ASCII character or the DEL character (codepoints 0 and 127
+// respectively). Note that the stored ids are sorted in ASCII order according
+// to their corresponding string values.
+func (t *Transaction) ExtractIdsFromStringIndex(setKey, destKey, min, max string) {
 	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, destKey, min, max}, nil)
 }

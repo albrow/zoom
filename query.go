@@ -501,9 +501,9 @@ func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err erro
 			orderedIdsKey := generateRandomKey("order:" + q.order.fieldName)
 			tmpKeys = append(tmpKeys, orderedIdsKey)
 			idsKey = orderedIdsKey
-			// TODO: if there is a filter on the same field, pass the start and stop
-			// parameters to the script
-			q.tx.extractIdsFromStringIndex(fieldIndexKey, orderedIdsKey, "-", "+")
+			// TODO: as an optimization, if there is a filter on the same field,
+			// pass the start and stop parameters to the script.
+			q.tx.ExtractIdsFromStringIndex(fieldIndexKey, orderedIdsKey, "-", "+")
 		} else {
 			idsKey = fieldIndexKey
 		}
@@ -560,9 +560,9 @@ func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey st
 		valueExclusive := fmt.Sprintf("(%v", filter.value.Interface())
 		filterKey := generateRandomKey("filter:" + fieldIndexKey)
 		// ZADD all ids greater than filter.value
-		q.tx.extractIdsFromFieldIndex(fieldIndexKey, filterKey, valueExclusive, "+inf")
+		q.tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, valueExclusive, "+inf")
 		// ZADD all ids less than filter.value
-		q.tx.extractIdsFromFieldIndex(fieldIndexKey, filterKey, "-inf", valueExclusive)
+		q.tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, "-inf", valueExclusive)
 		// Intersect filterKey with origKey and store result in destKey
 		q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
 		// Delete the temporary key
@@ -588,7 +588,7 @@ func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey st
 		}
 		// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
 		filterKey := generateRandomKey("filter:" + fieldIndexKey)
-		q.tx.extractIdsFromFieldIndex(fieldIndexKey, filterKey, min, max)
+		q.tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, min, max)
 		// Intersect filterKey with origKey and store result in destKey
 		q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
 		// Delete the temporary key
@@ -657,7 +657,7 @@ func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey strin
 	}
 	// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
 	filterKey := generateRandomKey("filter:" + fieldIndexKey)
-	q.tx.extractIdsFromFieldIndex(fieldIndexKey, filterKey, min, max)
+	q.tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, min, max)
 	// Intersect filterKey with origKey and store result in destKey
 	q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
 	// Delete the temporary key
@@ -680,10 +680,10 @@ func (q *Query) intersectStringFilter(filter filter, origKey string, destKey str
 		filterKey := generateRandomKey("filter:" + fieldIndexKey)
 		// ZADD all ids greater than filter.value
 		min := "(" + valString + nullString + delString
-		q.tx.extractIdsFromStringIndex(fieldIndexKey, filterKey, min, "+")
+		q.tx.ExtractIdsFromStringIndex(fieldIndexKey, filterKey, min, "+")
 		// ZADD all ids less than filter.value
 		max := "(" + valString
-		q.tx.extractIdsFromStringIndex(fieldIndexKey, filterKey, "-", max)
+		q.tx.ExtractIdsFromStringIndex(fieldIndexKey, filterKey, "-", max)
 		// Intersect filterKey with origKey and store result in destKey
 		q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
 		// Delete the temporary key
@@ -709,7 +709,7 @@ func (q *Query) intersectStringFilter(filter filter, origKey string, destKey str
 		}
 		// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
 		filterKey := generateRandomKey("filter:" + fieldIndexKey)
-		q.tx.extractIdsFromStringIndex(fieldIndexKey, filterKey, min, max)
+		q.tx.ExtractIdsFromStringIndex(fieldIndexKey, filterKey, min, max)
 		// Intersect filterKey with origKey and store result in destKey
 		q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
 		// Delete the temporary key
