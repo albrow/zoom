@@ -31,7 +31,7 @@ var (
 
 -- Assign keys to variables for easy access
 local setKey = ARGV[1]
-local modelName = ARGV[2]
+local collectionName = ARGV[2]
 -- Get all the ids from the set name
 local ids = redis.call('SMEMBERS', setKey)
 local count = 0
@@ -39,16 +39,17 @@ if #ids > 0 then
 	-- Iterate over the ids
 	for i, id in ipairs(ids) do
 		-- Delete the main hash for each model
-		local key = modelName .. ':' .. id
+		local key = collectionName .. ':' .. id
 		count = count + redis.call('DEL', key)
 		-- Remove the model id from the set of all ids
 		-- NOTE: this is not necessarily the same as the
 		-- setName we were given
-		local setKey = modelName .. ':all'
+		local setKey = collectionName .. ':all'
 		redis.call('SREM', setKey, id)
 	end
 end
-return count`)
+return count
+`)
 	deleteStringIndexScript = redis.NewScript(0, `-- Copyright 2015 Alex Browne.  All rights reserved.
 -- Use of this source code is governed by the MIT
 -- license, which can be found in the LICENSE file.
@@ -64,18 +65,19 @@ return count`)
 -- IMPORTANT: If you edit this file, you must run go generate . to rewrite ../scripts.go
 
 -- Assign keys to variables for easy access
-local modelName = ARGV[1]
+local collectionName = ARGV[1]
 local modelId = ARGV[2]
 local fieldName = ARGV[3]
 -- Get the old value from the existing model hash (if any)
-local modelKey = modelName .. ":" .. modelId
+local modelKey = collectionName .. ":" .. modelId
 local oldValue = redis.call("HGET", modelKey, fieldName)
-local indexKey = modelName .. ":" .. fieldName
+local indexKey = collectionName .. ":" .. fieldName
 if oldValue ~= false then
 	-- Remove the model from the field index
 	local oldMember = oldValue .. "\0" .. modelId
 	redis.call("ZREM", indexKey, oldMember)
-end`)
+end
+`)
 	extractIdsFromFieldIndexScript = redis.NewScript(0, `-- Copyright 2015 Alex Browne.  All rights reserved.
 -- Use of this source code is governed by the MIT
 -- license, which can be found in the LICENSE file.
@@ -84,7 +86,7 @@ end`)
 -- 	1) setKey: The key of a sorted set for a field index (either numeric or bool)
 -- 	2) destKey: The key of a sorted set where the resulting ids will be stored
 --		3) min: The min argument for the ZRANGEBYSCORE command
--- 	4) max: The end argument for the ZRANGEBYSCORE command
+-- 	4) max: The max argument for the ZRANGEBYSCORE command
 -- The script then calls ZRANGEBYSCORE on setKey with the given min and max arguments,
 -- and then stores the resulting set in destKey. It does not preserve the existing
 -- scores, and instead just replaces scores with sequential numbers to keep the members
@@ -114,7 +116,7 @@ end
 --			value of 0.
 --		2) destKey: The key of a sorted set where the resulting ids will be stored
 -- 	3) min: The min argument for the ZRANGEBYLEX command
--- 	4) max: The end argument for the ZRANGEBYLEX command
+-- 	4) max: The max argument for the ZRANGEBYLEX command
 -- The script then extracts the ids from setKey using the given min and max arguments,
 -- and then stores them destKey with the appropriate scores in ascending order.
 
@@ -136,5 +138,6 @@ if #members > 0 then
 		local id = string.sub(member, idStart+1)
 		redis.call('ZADD', destKey, i, id)
 	end
-end`)
+end
+`)
 )

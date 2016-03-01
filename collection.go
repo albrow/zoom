@@ -137,9 +137,16 @@ func (p *Pool) nameIsRegistered(name string) bool {
 
 // ModelKey returns the key that identifies a hash in the database
 // which contains all the fields of the model corresponding to the given
-// id. It returns an error iff id is empty.
-func (c *Collection) ModelKey(id string) (string, error) {
-	return c.spec.modelKey(id)
+// id. If id is an empty string, it will return an empty string.
+func (c *Collection) ModelKey(id string) string {
+	if id == "" {
+		return ""
+	}
+	// c.spec.modelKey(id) will only return an error if id was an empty string.
+	// Since we already ruled that out with the check above, we can safely ignore
+	// the error return value here.
+	key, _ := c.spec.modelKey(id)
+	return key
 }
 
 // IndexKey returns the key that identifies a set in the database that
@@ -153,6 +160,22 @@ func (c *Collection) IndexKey() string {
 // field in the spec or if the field it identifies is not an indexed field.
 func (c *Collection) FieldIndexKey(fieldName string) (string, error) {
 	return c.spec.fieldIndexKey(fieldName)
+}
+
+// FieldNames returns all the field names for the Collection. The order is
+// always the same and is used internally by Zoom to determine the order of
+// fields in Redis commands such as HMGET.
+func (c *Collection) FieldNames() []string {
+	return c.spec.fieldNames()
+}
+
+// FieldRedisNames returns all the Redis names for the fields of the Collection.
+// For example, if a Collection was created with a model type that includes
+// custom field names via the `redis` struct tag, those names will be returned.
+// The order is always the same and is used internally by Zoom to determine the
+// order of fields in Redis commands such as HMGET.
+func (c *Collection) FieldRedisNames() []string {
+	return c.spec.fieldRedisNames()
 }
 
 // newNilCollectionError returns an error with a message describing that
@@ -405,7 +428,7 @@ func (t *Transaction) Find(c *Collection, id string, model Model) {
 	for _, fieldName := range mr.spec.fieldRedisNames() {
 		args = append(args, fieldName)
 	}
-	t.Command("HMGET", args, newScanModelHandler(mr.spec.fieldNames(), mr))
+	t.Command("HMGET", args, newScanModelRefHandler(mr.spec.fieldNames(), mr))
 }
 
 // FindFields is like Find but finds and sets only the specified fields. Any
@@ -450,7 +473,7 @@ func (t *Transaction) FindFields(c *Collection, id string, fieldNames []string, 
 		args = append(args, c.spec.fieldsByName[fieldName].redisName)
 	}
 	// Get the fields from the main hash for this model
-	t.Command("HMGET", args, newScanModelHandler(fieldNames, mr))
+	t.Command("HMGET", args, newScanModelRefHandler(fieldNames, mr))
 }
 
 // FindAll finds all the models of the given type. It executes the commands needed
@@ -523,7 +546,7 @@ func (t *Transaction) Count(c *Collection, count *int) {
 		t.setError(newUnindexedCollectionError("Count"))
 		return
 	}
-	t.Command("SCARD", redis.Args{c.IndexKey()}, newScanIntHandler(count))
+	t.Command("SCARD", redis.Args{c.IndexKey()}, NewScanIntHandler(count))
 }
 
 // Delete removes the model with the given type and id from the database. It will
@@ -561,7 +584,7 @@ func (t *Transaction) Delete(c *Collection, id string, deleted *bool) {
 	if deleted == nil {
 		handler = nil
 	} else {
-		handler = newScanBoolHandler(deleted)
+		handler = NewScanBoolHandler(deleted)
 	}
 	// Delete the main hash
 	t.Command("DEL", redis.Args{c.Name() + ":" + id}, handler)
@@ -626,9 +649,9 @@ func (t *Transaction) DeleteAll(c *Collection, count *int) {
 	if count == nil {
 		handler = nil
 	} else {
-		handler = newScanIntHandler(count)
+		handler = NewScanIntHandler(count)
 	}
-	t.deleteModelsBySetIds(c.IndexKey(), c.Name(), handler)
+	t.DeleteModelsBySetIds(c.IndexKey(), c.Name(), handler)
 }
 
 // checkModelType returns an error iff model is not of the registered type that

@@ -8,7 +8,7 @@
 --			value of 0.
 --		2) destKey: The key of a sorted set where the resulting ids will be stored
 -- 	3) min: The min argument for the ZRANGEBYLEX command
--- 	4) max: The end argument for the ZRANGEBYLEX command
+-- 	4) max: The max argument for the ZRANGEBYLEX command
 -- The script then extracts the ids from setKey using the given min and max arguments,
 -- and then stores them destKey with the appropriate scores in ascending order.
 

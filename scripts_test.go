@@ -42,7 +42,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 	// Run the script
 	tx := testPool.NewTransaction()
 	count := 0
-	tx.deleteModelsBySetIds(tempSetKey, testModels.Name(), newScanIntHandler(&count))
+	tx.DeleteModelsBySetIds(tempSetKey, testModels.Name(), NewScanIntHandler(&count))
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
@@ -54,19 +54,13 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 
 	// Make sure the first three models were deleted
 	for _, model := range models[:3] {
-		modelKey, err := testModels.ModelKey(model.ModelId())
-		if err != nil {
-			t.Errorf("Unexpected error in ModelKey: %s", err.Error())
-		}
+		modelKey := testModels.ModelKey(model.ModelId())
 		expectKeyDoesNotExist(t, modelKey)
 		expectSetDoesNotContain(t, testModels.IndexKey(), model.ModelId())
 	}
 	// Make sure the last two models were not deleted
 	for _, model := range models[3:] {
-		modelKey, err := testModels.ModelKey(model.ModelId())
-		if err != nil {
-			t.Errorf("Unexpected error in ModelKey: %s", err.Error())
-		}
+		modelKey := testModels.ModelKey(model.ModelId())
 		expectKeyExists(t, modelKey)
 		expectSetContains(t, testModels.IndexKey(), model.ModelId())
 	}
@@ -105,7 +99,7 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	// Set the field value in the main hash
 	conn := testPool.NewConn()
 	defer conn.Close()
-	modelKey, _ := stringIndexModels.ModelKey(model.ModelId())
+	modelKey := stringIndexModels.ModelKey(model.ModelId())
 	if _, err := conn.Do("HSET", modelKey, "String", model.String); err != nil {
 		t.Errorf("Unexpected error in HSET")
 	}
@@ -175,8 +169,8 @@ func TestExtractIdsFromFieldIndexScript(t *testing.T) {
 		gotIds := []string{}
 		destKey := "TestExtractIdsFromFieldIndexScript:" + strconv.Itoa(i)
 		tx = testPool.NewTransaction()
-		tx.extractIdsFromFieldIndex(fieldIndexKey, destKey, tc.min, tc.max)
-		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, newScanStringsHandler(&gotIds))
+		tx.ExtractIdsFromFieldIndex(fieldIndexKey, destKey, tc.min, tc.max)
+		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, NewScanStringsHandler(&gotIds))
 		if err := tx.Exec(); err != nil {
 			t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
 		}
@@ -231,8 +225,8 @@ func TestExtractIdsFromStringIndexScript(t *testing.T) {
 		gotIds := []string{}
 		destKey := "ExtractIdsFromStringIndexScript:" + strconv.Itoa(i)
 		tx = testPool.NewTransaction()
-		tx.extractIdsFromStringIndex(fieldIndexKey, destKey, tc.min, tc.max)
-		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, newScanStringsHandler(&gotIds))
+		tx.ExtractIdsFromStringIndex(fieldIndexKey, destKey, tc.min, tc.max)
+		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, NewScanStringsHandler(&gotIds))
 		if err := tx.Exec(); err != nil {
 			t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
 		}

@@ -13,13 +13,13 @@
 -- IMPORTANT: If you edit this file, you must run go generate . to rewrite ../scripts.go
 
 -- Assign keys to variables for easy access
-local modelName = ARGV[1]
+local collectionName = ARGV[1]
 local modelId = ARGV[2]
 local fieldName = ARGV[3]
 -- Get the old value from the existing model hash (if any)
-local modelKey = modelName .. ":" .. modelId
+local modelKey = collectionName .. ":" .. modelId
 local oldValue = redis.call("HGET", modelKey, fieldName)
-local indexKey = modelName .. ":" .. fieldName
+local indexKey = collectionName .. ":" .. fieldName
 if oldValue ~= false then
 	-- Remove the model from the field index
 	local oldMember = oldValue .. "\0" .. modelId

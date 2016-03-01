@@ -7,12 +7,7 @@
 
 package zoom
 
-import (
-	"fmt"
-	"reflect"
-
-	"github.com/garyburd/redigo/redis"
-)
+import "github.com/garyburd/redigo/redis"
 
 // Transaction is an abstraction layer around a redis transaction.
 // Transactions consist of a set of actions which are either redis
@@ -41,10 +36,6 @@ const (
 	CommandAction ActionKind = iota
 	ScriptAction
 )
-
-// ReplyHandler is a function which does something with the reply from a redis
-// command or script.
-type ReplyHandler func(interface{}) error
 
 // NewTransaction instantiates and returns a new transaction.
 func (p *Pool) NewTransaction() *Transaction {
@@ -163,182 +154,47 @@ func (t *Transaction) Exec() error {
 	return nil
 }
 
-// newScanIntHandler returns a ReplyHandler which will set the value of i to the
-// converted value of reply.
-func newScanIntHandler(i *int) ReplyHandler {
-	return func(reply interface{}) error {
-		var err error
-		(*i), err = redis.Int(reply, nil)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
-// newScanIntHandler returns a ReplyHandler which will set the value of b to the
-// converted value of reply.
-func newScanBoolHandler(b *bool) ReplyHandler {
-	return func(reply interface{}) error {
-		var err error
-		(*b), err = redis.Bool(reply, nil)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
-// newScanIntHandler returns a ReplyHandler which will set the value of s to the
-// converted value of reply.
-func newScanStringHandler(s *string) ReplyHandler {
-	return func(reply interface{}) error {
-		var err error
-		(*s), err = redis.String(reply, nil)
-		if err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
-// newScanStringsHandler returns a reply handler which will scan all the replies
-// in reply into strings. strings should be a pointer to a slice of some strings.
-// The returned replyHandler will grow or shrink strings as needed.
-func newScanStringsHandler(strings interface{}) ReplyHandler {
-	return func(reply interface{}) error {
-		replyStrings, err := redis.Strings(reply, nil)
-		if err != nil {
-			return err
-		}
-		stringsVal := reflect.ValueOf(strings).Elem()
-		stringsVal.Set(reflect.ValueOf(replyStrings))
-		return nil
-	}
-}
-
-// newScanModelHandler returns a ReplyHandler which will scan all the fields in
-// in the reply which are also in fieldNames into the fields of mr.model. It expects
-// a reply that looks like the output of an HMGET command, without the field names
-// included. The order of fieldNames must correspond to the order of the values in the
-// reply. fieldNames should be the actual field names as they appear in the struct
-// definition, not the redis names which may be custom.
-func newScanModelHandler(fieldNames []string, mr *modelRef) ReplyHandler {
-	return func(reply interface{}) error {
-		fieldValues, err := redis.Values(reply, nil)
-		if err != nil {
-			if err == redis.ErrNil {
-				return newModelNotFoundError(mr)
-			}
-			return err
-		}
-		if err := scanModel(fieldNames, fieldValues, mr); err != nil {
-			return err
-		}
-		return nil
-	}
-}
-
-// newScanModelsHandler returns a reply handler which will scan all the replies
-// in reply into models. It only scans the fields which are in fieldNames. models
-// should be a pointer to a slice of some registered model type. The returned
-// replyHandler will grow or shrink models as needed. It expects a reply which is
-// a flat array of field values, with no separation between the fields for each
-// model. The order of fieldNames must correspond to the order of the values in the
-// reply. fieldNames should be the actual field names as they appear in the struct
-// definition, not the redis names which may be custom. It will use the length of
-// fieldNames to determine which fields belong to which models. For example, if
-// fieldNames is ["Int", "String", "-"] and the reply from redis looks like this:
-//
-//   1) "5"
-//   2) "Bob"
-//   3) "b1C7B0yETtXFYuKinndqoa"
-//   4) "7"
-//   5) "Alice"
-//   6) "NmjzzzDyNJpsCpPKnndqoa"
-//
-// newScanModelsHandler will recognize that there are three fields and assign the
-// first three to the first model, the next three to the second model, etc. This
-// is the kind of reply we expect from a SORT command with multiple GET options.
-func newScanModelsHandler(spec *modelSpec, fieldNames []string, models interface{}) ReplyHandler {
-	return func(reply interface{}) error {
-		allFields, err := redis.Values(reply, nil)
-		if err != nil {
-			if err == redis.ErrNil {
-				return ModelNotFoundError{
-					Msg: fmt.Sprintf("Could not find %s with the given criteria", spec.name),
-				}
-			}
-			return err
-		}
-		numFields := len(fieldNames)
-		numModels := len(allFields) / numFields
-		modelsVal := reflect.ValueOf(models).Elem()
-		for i := 0; i < numModels; i++ {
-			start := i * numFields
-			stop := i*numFields + numFields
-			fieldValues := allFields[start:stop]
-			var modelVal reflect.Value
-			if modelsVal.Len() > i {
-				// Use the pre-existing value at index i
-				modelVal = modelsVal.Index(i)
-				if modelVal.IsNil() {
-					// If the value is nil, allocate space for it
-					modelsVal.Index(i).Set(reflect.New(spec.typ.Elem()))
-				}
-			} else {
-				// Index i is out of range of the existing slice. Create a
-				// new modelVal and append it to modelsVal
-				modelVal = reflect.New(spec.typ.Elem())
-				modelsVal.Set(reflect.Append(modelsVal, modelVal))
-			}
-			mr := &modelRef{
-				spec:  spec,
-				model: modelVal.Interface().(Model),
-			}
-			if err := scanModel(fieldNames, fieldValues, mr); err != nil {
-				return err
-			}
-		}
-		// Trim the slice if it is longer than the number of models we scanned
-		// in.
-		if numModels < modelsVal.Len() {
-			modelsVal.SetLen(numModels)
-			modelsVal.SetCap(numModels)
-		}
-		return nil
-	}
-}
-
 //go:generate go run scripts/main.go
 
-// deleteModelsBySetIds is a small function wrapper around deleteModelsBySetIdsScript.
-// It offers some type safety and helps make sure the arguments you pass through to the are correct.
-// The script will delete the models corresponding to the ids in the given set and return the number
-// of models that were deleted. You can use the handler to capture the return value.
-func (t *Transaction) deleteModelsBySetIds(setKey string, modelName string, handler ReplyHandler) {
-	t.Script(deleteModelsBySetIdsScript, redis.Args{setKey, modelName}, handler)
+// DeleteModelsBySetIds is a small function wrapper around a Lua script. The
+// script will atomically delete the models corresponding to the ids in set
+// (not sorted set) identified by setKey and return the number of models that
+// were deleted. You can pass in a handler (e.g. NewScanIntHandler) to capture
+// the return value of the script. You can use the Name method of a Collection
+// to get the name.
+func (t *Transaction) DeleteModelsBySetIds(setKey string, collectionName string, handler ReplyHandler) {
+	t.Script(deleteModelsBySetIdsScript, redis.Args{setKey, collectionName}, handler)
 }
 
-// deleteStringIndex is a small function wrapper around deleteStringIndexScript.
-// It offers some type safety and helps make sure the arguments you pass through to the are correct.
-// The script will atomically remove the existing index, if any, on the given field name.
-func (t *Transaction) deleteStringIndex(modelName, modelId, fieldName string) {
-	t.Script(deleteStringIndexScript, redis.Args{modelName, modelId, fieldName}, nil)
+// deleteStringIndex is a small function wrapper around a Lua script. The script
+// will atomically remove the existing string index, if any, on the given
+// fieldName for the model with the given modelId. You can use the Name method
+// of a Collection to get its name. fieldName should be the name as it is stored
+// in Redis.
+func (t *Transaction) deleteStringIndex(collectionName, modelId, fieldName string) {
+	t.Script(deleteStringIndexScript, redis.Args{collectionName, modelId, fieldName}, nil)
 }
 
-// extractIdsFromFieldIndex is a small function wrapper around extractIdsFromFieldIndexScript.
-// It offers some type safety and helps make sure the arguments you pass through to the are correct.
-// The script will get all the ids from setKey using ZRANGEBYSCORE with the given min and max, and then
-// store them in a sorted set identified by destKey.
-func (t *Transaction) extractIdsFromFieldIndex(setKey string, destKey string, min interface{}, max interface{}) {
+// ExtractIdsFromFieldIndex is a small function wrapper around a Lua script. The
+// script will get all the ids from the sorted set identified by setKey using
+// ZRANGEBYSCORE with the given min and max, and then store them in a sorted set
+// identified by destKey. The members of the sorted set should be model ids.
+// Note that this method will not work on sorted sets that represents string
+// indexes because they are stored differently.
+func (t *Transaction) ExtractIdsFromFieldIndex(setKey string, destKey string, min interface{}, max interface{}) {
 	t.Script(extractIdsFromFieldIndexScript, redis.Args{setKey, destKey, min, max}, nil)
 }
 
-// extractIdsFromStringIndex is a small function wrapper around extractIdsFromStringIndexScript.
-// It offers some type safety and helps make sure the arguments you pass through to the are correct.
-// The script will extract the ids from setKey using ZRANGEBYLEX with the given min and max, and then
-// store them in a sorted set identified by destKey.
-func (t *Transaction) extractIdsFromStringIndex(setKey, destKey, min, max string) {
+// ExtractIdsFromStringIndex is a small function wrapper around a Lua script.
+// The script will extract the ids from a sorted set identified by setKey using
+// ZRANGEBYLEX with the given min and max, and then store them in a sorted set
+// identified by destKey. All the scores for the sorted set should be 0, and the
+// members should follow the format <value>\x00<id>, where <value> is the string
+// value, \x000 is the NULL ASCII character and <id> is the id of the model
+// with that value. As with all string indexes in Zoom, the value cannot contain
+// the NULL ASCII character or the DEL character (codepoints 0 and 127
+// respectively). Note that the stored ids are sorted in ASCII order according
+// to their corresponding string values.
+func (t *Transaction) ExtractIdsFromStringIndex(setKey, destKey, min, max string) {
 	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, destKey, min, max}, nil)
 }
