@@ -481,8 +481,7 @@ t := pool.NewTransaction()
 t.Save(People, &Person{Name: "Foo"})
 t.Save(People, &Person{Name: "Bar"})
 // Count expects a pointer to an integer, which it will change the value of
-// when the transaction is executed. If you don't care about the number of
-// models deleted, you can pass in nil.
+// when the transaction is executed.
 t.Count(People, &numPeople)
 if err := t.Exec(); err != nil {
   // handle error
@@ -612,12 +611,13 @@ Read more about:
 
 ### Concurrent Updates
 
-Currently, Zoom does not support concurrent "read before write" updates on
-models. The `UpdateFields` method introduced in version 0.12 offers some
+Currently, Zoom does not directly support concurrent "read before write" updates
+on models. The `UpdateFields` method introduced in version 0.12 offers some
 additional safety for concurrent updates, as long as no concurrent callers
 update the same fields (or if you are okay with updates overwriting previous
 changes). However, cases where you need to do a "read before write" update are
-still not safe by default. For example, consider the following code:
+still not safe if you use a naive implementation. For example, consider the
+following code:
 
 ``` go
 func likePost(postId string) error {
@@ -642,16 +642,14 @@ adds to it.
 This can cause a bug if the function is called across multiple goroutines or
 multiple machines concurrently, because the `Post` model can change in between
 the time we retrieved it from the database with `Find` and saved it again with
-`Save`. Future versions of Zoom may provide
-[optimistic locking](https://github.com/albrow/zoom/issues/13) or other means to
-avoid these kinds of errors.
+`Save`.
 
-In the meantime, you could fix this code by using an HINCRBY command directly
-like so:
+However, since Zoom allows you to run your own Redis commands, you could fix
+this code by manually using HINCRBY:
 
 ```go
-// likePost increments the number of likes for a post with the given id and then
-// returns the new number of likes.
+// likePost atomically increments the number of likes for a post with the given
+// id and then returns the new number of likes.
 func likePost(postId string) (int, error) {
 	// Get the key which is used to store the post in Redis
 	postKey := Posts.ModelKey(postId)
@@ -671,6 +669,10 @@ func likePost(postId string) (int, error) {
 	return numLikes, nil
 }
 ```
+
+Future versions of Zoom may provide
+[optimistic locking](https://github.com/albrow/zoom/issues/13) or other means to
+make "read before write" updates easier.
 
 Read more about:
 - [Redis Commands](http://redis.io/commands)
