@@ -154,6 +154,7 @@ func (collection *Collection) NewQuery() *Query {
 	// future versions.
 	if !collection.index {
 		q.setError(fmt.Errorf("zoom: error in NewQuery: Only indexed collections are queryable. To index the collection, pass CollectionOptions to the NewCollection method."))
+		return q
 	}
 	return q
 }
@@ -183,6 +184,7 @@ func (q *Query) Order(fieldName string) *Query {
 	if q.hasOrder() {
 		// TODO: allow secondary sort orders?
 		q.setError(errors.New("zoom: error in Query.Order: previous order already specified. Only one order per query is allowed."))
+		return q
 	}
 	// Check for the presence of the "-" prefix
 	var orderKind orderKind
@@ -198,6 +200,7 @@ func (q *Query) Order(fieldName string) *Query {
 	if !found {
 		err := fmt.Errorf("zoom: error in Query.Order: could not find field %s in type %s", fieldName, q.collection.spec.typ.String())
 		q.setError(err)
+		return q
 	}
 	q.order = order{
 		fieldName: fs.name,
