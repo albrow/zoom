@@ -48,7 +48,7 @@ func TestRedisIgnoreOption(t *testing.T) {
 	// Check the database to make sure the field is not there
 	conn := testPool.NewConn()
 	defer conn.Close()
-	key, _ := ignoredFieldModels.ModelKey(model.ModelId())
+	key := ignoredFieldModels.ModelKey(model.ModelId())
 	gotAttr, err := redis.String(conn.Do("HGET", key, "Attr"))
 	if err != nil && err != redis.ErrNil {
 		t.Errorf("Unexpected error in HGET command: %s", err.Error())
@@ -90,7 +90,7 @@ func TestRedisNameOption(t *testing.T) {
 	if err := customFieldModels.Save(model); err != nil {
 		t.Errorf("Unexpected error in Save: %s", err.Error())
 	}
-	modelKey, _ := customFieldModels.ModelKey(model.ModelId())
+	modelKey := customFieldModels.ModelKey(model.ModelId())
 	expectFieldEquals(t, modelKey, "a", customFieldModels.spec.fallback, "test")
 }
 

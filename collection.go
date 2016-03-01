@@ -137,9 +137,16 @@ func (p *Pool) nameIsRegistered(name string) bool {
 
 // ModelKey returns the key that identifies a hash in the database
 // which contains all the fields of the model corresponding to the given
-// id. It returns an error iff id is empty.
-func (c *Collection) ModelKey(id string) (string, error) {
-	return c.spec.modelKey(id)
+// id. If id is an empty string, it will return an empty string.
+func (c *Collection) ModelKey(id string) string {
+	if id == "" {
+		return ""
+	}
+	// c.spec.modelKey(id) will only return an error if id was an empty string.
+	// Since we already ruled that out with the check above, we can safely ignore
+	// the error return value here.
+	key, _ := c.spec.modelKey(id)
+	return key
 }
 
 // IndexKey returns the key that identifies a set in the database that

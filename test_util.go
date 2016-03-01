@@ -382,10 +382,7 @@ func expectKeyDoesNotExist(t *testing.T, key string) {
 // the database. It checks for the main hash as well as the id in the index of all
 // ids for a given type.
 func expectModelExists(t *testing.T, mt *Collection, model Model) {
-	modelKey, err := mt.ModelKey(model.ModelId())
-	if err != nil {
-		t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
-	}
+	modelKey := mt.ModelKey(model.ModelId())
 	expectKeyExists(t, modelKey)
 	expectSetContains(t, mt.IndexKey(), model.ModelId())
 }
@@ -394,10 +391,7 @@ func expectModelExists(t *testing.T, mt *Collection, model Model) {
 // It checks for the main hash as well as the id in the index of all ids for a
 // given type.
 func expectModelDoesNotExist(t *testing.T, mt *Collection, model Model) {
-	modelKey, err := mt.ModelKey(model.ModelId())
-	if err != nil {
-		t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
-	}
+	modelKey := mt.ModelKey(model.ModelId())
 	expectKeyDoesNotExist(t, modelKey)
 	expectSetDoesNotContain(t, mt.IndexKey(), model.ModelId())
 }
@@ -407,10 +401,7 @@ func expectModelDoesNotExist(t *testing.T, mt *Collection, model Model) {
 // the index of all ids for a given type.
 func expectModelsExist(t *testing.T, mt *Collection, models []Model) {
 	for _, model := range models {
-		modelKey, err := mt.ModelKey(model.ModelId())
-		if err != nil {
-			t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
-		}
+		modelKey := mt.ModelKey(model.ModelId())
 		expectKeyExists(t, modelKey)
 		expectSetContains(t, mt.IndexKey(), model.ModelId())
 	}
@@ -421,10 +412,7 @@ func expectModelsExist(t *testing.T, mt *Collection, models []Model) {
 // of all ids for a given type.
 func expectModelsDoNotExist(t *testing.T, mt *Collection, models []Model) {
 	for _, model := range models {
-		modelKey, err := mt.ModelKey(model.ModelId())
-		if err != nil {
-			t.Fatalf("Unexpected error in ModelKey: %s", err.Error())
-		}
+		modelKey := mt.ModelKey(model.ModelId())
 		expectKeyDoesNotExist(t, modelKey)
 		expectSetDoesNotContain(t, mt.IndexKey(), model.ModelId())
 	}

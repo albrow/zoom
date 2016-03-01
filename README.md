@@ -654,10 +654,7 @@ like so:
 // returns the new number of likes.
 func likePost(postId string) (int, error) {
 	// Get the key which is used to store the post in Redis
-	postKey, err := Posts.ModelKey(postId)
-	if err != nil {
-		return 0, err
-	}
+	postKey := Posts.ModelKey(postId)
 	// Start a new transaction
 	tx := pool.NewTransaction()
 	// Add a command to increment the number of Likes. The HINCRBY command returns
@@ -685,7 +682,7 @@ Read more about:
 Testing & Benchmarking
 ----------------------
 
-### Running the Tests:
+### Running the Tests
 
 To run the tests, make sure you're in the root directory for Zoom and run:
 
@@ -710,7 +707,7 @@ you could use:
 go test -network=unix -address=/tmp/redis.sock -database=3
 ```
 
-### Running the Benchmarks:
+### Running the Benchmarks
 
 To run the benchmarks, make sure you're in the root directory for the project and run:
 
