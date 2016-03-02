@@ -142,8 +142,8 @@ var filterOps = map[string]filterOp{
 // NewQuery is used to construct a query. The query returned can be chained
 // together with one or more query modifiers (e.g. Filter or Order), and then
 // executed using the Run, RunOne, Count, or Ids methods. If no query modifiers
-// are used, running the query will return all models of the given type in uspecified
-// order. Queries use delated execution, so nothing touches the database until you
+// are used, running the query will return all models of the given type in unspecified
+// order. Queries use delayed execution, so nothing touches the database until you
 // execute it.
 func (collection *Collection) NewQuery() *Query {
 	q := &Query{
@@ -178,7 +178,7 @@ func (q *Query) setError(e error) {
 // if another order has already been applied to the query, or if the fieldName specified
 // does not correspond to an indexed field. The error, same as any other error
 // that occurs during the lifetime of the query, is not returned until the query
-// is executed. When the query is executed the first error that occured during
+// is executed. When the query is executed the first error that occurred during
 // the lifetime of the query object (if any) will be returned.
 func (q *Query) Order(fieldName string) *Query {
 	if q.hasOrder() {
@@ -231,7 +231,7 @@ func (q *Query) Offset(amount uint) *Query {
 // set an error if you try to use it with Exclude on the same query. The error,
 // same as any other error that occurs during the lifetime of the query, is not
 // returned until the query is executed. When the query is executed the first
-// error that occured during the lifetime of the query object (if any) will be
+// error that occurred during the lifetime of the query object (if any) will be
 // returned.
 func (q *Query) Include(fields ...string) *Query {
 	if q.hasExcludes() {
@@ -248,7 +248,7 @@ func (q *Query) Include(fields ...string) *Query {
 // Exclude, not both on the same query. Exclude will set an error if you try to
 // use it with Include on the same query. The error, same as any other error
 // that occurs during the lifetime of the query, is not returned until the query
-// is executed. When the query is executed the first error that occured during
+// is executed. When the query is executed the first error that occurred during
 // the lifetime of the query object (if any) will be returned.
 func (q *Query) Exclude(fields ...string) *Query {
 	if q.hasIncludes() {
@@ -266,14 +266,14 @@ func (q *Query) Exclude(fields ...string) *Query {
 // only use Filter on fields which are indexed, i.e. those which have the
 // `zoom:"index"` struct tag. If multiple filters are applied to the same query,
 // the query will only return models which have matches for ALL of the filters.
-// I.e. applying multiple filters is logially equivalent to combining them with
+// I.e. applying multiple filters is logically equivalent to combining them with
 // a AND or INTERSECT operator. Filter will set an error on the query if the
 // arguments are improperly formated, if the field you are attempting to filter
 // is not indexed, or if the type of value does not match the type of the field.
 // The error, same as any other error that occurs during the lifetime of the
 // query, is not returned until the query is executed. When the query is
-// executed the first error that occured during the lifetime of the query object
-// (if any) will be returned.
+// executed the first error that occurred during the lifetime of the query
+// object (if any) will be returned.
 func (q *Query) Filter(filterString string, value interface{}) *Query {
 	fieldName, operator, err := splitFilterString(filterString)
 	if err != nil {
@@ -324,8 +324,8 @@ func splitFilterString(filterString string) (fieldName string, operator string, 
 // checkValType returns an error if the type of value does not correspond to
 // filter.fieldSpec.
 func (filter filter) checkValType(value interface{}) error {
-	// Here we iterate through pointer inderections. This is so you can
-	// just pass in a primative instead of a pointer to a primative for
+	// Here we iterate through pointer indirections. This is so you can
+	// just pass in a primitive instead of a pointer to a primitive for
 	// filtering on fields which have pointer values.
 	valueType := reflect.TypeOf(value)
 	valueVal := reflect.ValueOf(value)
@@ -349,7 +349,7 @@ func (filter filter) checkValType(value interface{}) error {
 
 // Run executes the query and scans the results into models. The type of models
 // should be a pointer to a slice of pointers to a registered Model. Run will
-// return the first error that occured during the lifetime of the query object
+// return the first error that occurred during the lifetime of the query object
 // (if any). It will also return an error if models is the wrong type.
 func (q *Query) Run(models interface{}) error {
 	if q.hasError() {
@@ -405,8 +405,8 @@ func (q *Query) RunOne(model Model) error {
 }
 
 // Count counts the number of models that would be returned by the query without
-// actually retreiving the models themselves. Count will also return the first
-// error that occured during the lifetime of the query object (if any).
+// actually retrieving the models themselves. Count will also return the first
+// error that occurred during the lifetime of the query object (if any).
 // Otherwise, the second return value will be nil.
 func (q *Query) Count() (uint, error) {
 	if q.hasError() {
@@ -446,8 +446,8 @@ func (q *Query) Count() (uint, error) {
 	}
 }
 
-// Ids returns only the ids of the models without actually retreiving the
-// models themselves. Ids will return the first error that occured
+// Ids returns only the ids of the models without actually retrieving the
+// models themselves. Ids will return the first error that occurred
 // during the lifetime of the query object (if any).
 func (q *Query) Ids() ([]string, error) {
 	if q.hasError() {
@@ -556,10 +556,10 @@ func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err erro
 	return idsKey, tmpKeys, nil
 }
 
-// intersectFilter adds commands to the query transacation which, when run, will create a
+// intersectFilter adds commands to the query transaction which, when run, will create a
 // temporary set which contains all the ids that fit the given filter criteria. Then it will
 // intersect them with origKey and stores the result in destKey. The function will automatically
-// delete any temporary sets created since, in this case, they are gauranteed to not be needed
+// delete any temporary sets created since, in this case, they are guaranteed to not be needed
 // by any other transaction commands.
 func (q *Query) intersectFilter(filter filter, origKey string, destKey string) error {
 	switch filter.fieldSpec.indexKind {
@@ -815,7 +815,7 @@ func (q *Query) hasError() bool {
 }
 
 // generateRandomKey generates a random string that is more or less
-// garunteed to be unique and then prepends the given prefix. It is
+// guaranteed to be unique and then prepends the given prefix. It is
 // used to generate keys for temporary sorted sets in queries.
 func generateRandomKey(prefix string) string {
 	return prefix + ":" + generateRandomId()
