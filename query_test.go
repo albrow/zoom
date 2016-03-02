@@ -296,12 +296,14 @@ func testQuery(t *testing.T, q *Query, models []*indexedTestModel) {
 	testQueryIds(t, q, expected)
 	testQueryCount(t, q, expected)
 	testQueryStoreIds(t, q, expected)
+	checkForLeakedTmpKeys(t, q)
 }
 
 func testQueryRun(t *testing.T, q *Query, expected []*indexedTestModel) {
 	got := []*indexedTestModel{}
 	if err := q.Run(&got); err != nil {
 		t.Errorf("Unexpected error in query.Run: %s", err.Error())
+		return
 	}
 	if err := expectModelsToBeEqual(expected, got, q.hasOrder()); err != nil {
 		t.Errorf("testQueryRun failed for query %s\nExpected: %#v\nGot:  %#v", q, expected, got)
@@ -312,6 +314,7 @@ func testQueryCount(t *testing.T, q *Query, expectedModels []*indexedTestModel) 
 	expected := uint(len(expectedModels))
 	if got, err := q.Count(); err != nil {
 		t.Error(err)
+		return
 	} else if got != expected {
 		t.Errorf("testQueryCount failed for query %s. Expected %d but got %d.", q, expected, got)
 	}
@@ -321,6 +324,7 @@ func testQueryIds(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
 	got, err := q.Ids()
 	if err != nil {
 		t.Errorf("Unexpected error in query.Ids: %s", err.Error())
+		return
 	}
 	expected := modelIds(Models(expectedModels))
 	if q.hasOrder() {
@@ -340,24 +344,41 @@ func testQueryStoreIds(t *testing.T, q *Query, expectedModels []*indexedTestMode
 	destKey := "queryDestKey:" + generateRandomId()
 	if err := q.StoreIds(destKey); err != nil {
 		t.Errorf("Unexpected error in query.StoreIds: %s", err.Error())
+		return
 	}
 	expected := modelIds(Models(expectedModels))
 	conn := testPool.NewConn()
 	defer conn.Close()
 	got, err := redis.Strings(conn.Do("LRANGE", destKey, 0, -1))
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
+		return
 	}
 	if q.hasOrder() {
 		// Order matters
 		if !reflect.DeepEqual(expected, got) {
 			t.Errorf("testQueryStoreIds failed for query %s\nExpected: %v\nGot:  %v", q, expected, got)
+			return
 		}
 	} else {
 		// Order does not matter
 		if equal, msg := compareAsStringSet(expected, got); !equal {
 			t.Errorf("testQueryStoreIds failed for query %s\n%s\nExpected: %v\nGot:  %v", q, msg, expected, got)
+			return
 		}
+	}
+}
+
+func checkForLeakedTmpKeys(t *testing.T, query *Query) {
+	conn := testPool.NewConn()
+	defer conn.Close()
+	keys, err := redis.Strings(conn.Do("KEYS", "tmp:*"))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(keys) > 0 {
+		t.Errorf("Found leaked keys: %v\nFor query: %s", keys, query)
 	}
 }
 

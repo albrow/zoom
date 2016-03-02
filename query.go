@@ -361,9 +361,6 @@ func (q *Query) Run(models interface{}) error {
 	q.tx = q.pool.NewTransaction()
 	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {
-		if len(tmpKeys) > 0 {
-			q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
-		}
 		return err
 	}
 	limit := int(q.limit)
@@ -459,9 +456,6 @@ func (q *Query) Ids() ([]string, error) {
 	q.tx = q.pool.NewTransaction()
 	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {
-		if len(tmpKeys) > 0 {
-			q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
-		}
 		return nil, err
 	}
 	limit := int(q.limit)
@@ -494,9 +488,6 @@ func (q *Query) StoreIds(destKey string) error {
 	q.tx = q.pool.NewTransaction()
 	idsKey, tmpKeys, err := q.generateIdsSet()
 	if err != nil {
-		if len(tmpKeys) > 0 {
-			q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
-		}
 		return err
 	}
 	limit := int(q.limit)
@@ -534,7 +525,7 @@ func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err erro
 		if fieldSpec.indexKind == stringIndex {
 			// If the order is a string field, we need to extract the ids before
 			// we use ZRANGE. Create a temporary set to store the ordered ids
-			orderedIdsKey := generateRandomKey("order:" + q.order.fieldName)
+			orderedIdsKey := generateRandomKey("tmp:order:" + q.order.fieldName)
 			tmpKeys = append(tmpKeys, orderedIdsKey)
 			idsKey = orderedIdsKey
 			// TODO: as an optimization, if there is a filter on the same field,
@@ -545,7 +536,7 @@ func (q *Query) generateIdsSet() (idsKey string, tmpKeys []interface{}, err erro
 		}
 	}
 	if q.hasFilters() {
-		filteredIdsKey := generateRandomKey("filter:all")
+		filteredIdsKey := generateRandomKey("tmp:filter:all")
 		tmpKeys = append(tmpKeys, filteredIdsKey)
 		for i, filter := range q.filters {
 			if i == 0 {
@@ -594,7 +585,7 @@ func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey st
 	if filter.op == notEqualOp {
 		// Special case for not equal. We need to use two separate commands
 		valueExclusive := fmt.Sprintf("(%v", filter.value.Interface())
-		filterKey := generateRandomKey("filter:" + fieldIndexKey)
+		filterKey := generateRandomKey("tmp:filter:" + fieldIndexKey)
 		// ZADD all ids greater than filter.value
 		q.tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, valueExclusive, "+inf")
 		// ZADD all ids less than filter.value
@@ -623,7 +614,7 @@ func (q *Query) intersectNumericFilter(filter filter, origKey string, destKey st
 			max = "+inf"
 		}
 		// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
-		filterKey := generateRandomKey("filter:" + fieldIndexKey)
+		filterKey := generateRandomKey("tmp:filter:" + fieldIndexKey)
 		q.tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, min, max)
 		// Intersect filterKey with origKey and store result in destKey
 		q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
@@ -692,7 +683,7 @@ func (q *Query) intersectBoolFilter(filter filter, origKey string, destKey strin
 		}
 	}
 	// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
-	filterKey := generateRandomKey("filter:" + fieldIndexKey)
+	filterKey := generateRandomKey("tmp:filter:" + fieldIndexKey)
 	q.tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, min, max)
 	// Intersect filterKey with origKey and store result in destKey
 	q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
@@ -713,7 +704,7 @@ func (q *Query) intersectStringFilter(filter filter, origKey string, destKey str
 	valString := filter.value.String()
 	if filter.op == notEqualOp {
 		// Special case for not equal. We need to use two separate commands
-		filterKey := generateRandomKey("filter:" + fieldIndexKey)
+		filterKey := generateRandomKey("tmp:filter:" + fieldIndexKey)
 		// ZADD all ids greater than filter.value
 		min := "(" + valString + nullString + delString
 		q.tx.ExtractIdsFromStringIndex(fieldIndexKey, filterKey, min, "+")
@@ -744,7 +735,7 @@ func (q *Query) intersectStringFilter(filter filter, origKey string, destKey str
 			max = "+"
 		}
 		// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
-		filterKey := generateRandomKey("filter:" + fieldIndexKey)
+		filterKey := generateRandomKey("tmp:filter:" + fieldIndexKey)
 		q.tx.ExtractIdsFromStringIndex(fieldIndexKey, filterKey, min, max)
 		// Intersect filterKey with origKey and store result in destKey
 		q.tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)

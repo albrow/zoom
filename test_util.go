@@ -287,7 +287,7 @@ func checkDatabaseEmpty() {
 }
 
 // testingTearDown flushes the database. It should be run at the end
-// of each test that toches the database, typically by using defer.
+// of each test that touches the database, typically by using defer.
 func testingTearDown() {
 	// flush and close the database
 	conn := testPool.NewConn()
