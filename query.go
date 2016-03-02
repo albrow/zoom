@@ -482,6 +482,42 @@ func (q *Query) Ids() ([]string, error) {
 	return ids, nil
 }
 
+// StoreIds executes the query and stores the model ids matching the query
+// criteria in a list identified by destKey. The list will be completely
+// overwritten, and the model ids stored there will be in the correct order if
+// the query includes an Order modifier. StoreIds will return the first error
+// that occurred during the lifetime of the query object (if any).
+func (q *Query) StoreIds(destKey string) error {
+	if q.hasError() {
+		return q.err
+	}
+	q.tx = q.pool.NewTransaction()
+	idsKey, tmpKeys, err := q.generateIdsSet()
+	if err != nil {
+		if len(tmpKeys) > 0 {
+			q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
+		}
+		return err
+	}
+	limit := int(q.limit)
+	if limit == 0 {
+		// In our query syntax, a limit of 0 means unlimited
+		// But in Redis, -1 means unlimited
+		limit = -1
+	}
+	sortArgs := q.collection.spec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind)
+	// Append the STORE argument to cause Redis to store the results in destKey.
+	sortAndStoreArgs := append(sortArgs, "STORE", destKey)
+	q.tx.Command("SORT", sortAndStoreArgs, nil)
+	if len(tmpKeys) > 0 {
+		q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
+	}
+	if err := q.tx.Exec(); err != nil {
+		return err
+	}
+	return nil
+}
+
 // generateIdsSet will return the key of a set or sorted set that contains all the ids
 // which match the query criteria. It may also return some temporary keys which were created
 // during the process of creating the set of ids. Note that tmpKeys may contain idsKey itself,

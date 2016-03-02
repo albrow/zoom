@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+
+	"github.com/garyburd/redigo/redis"
 )
 
 func TestQueryAll(t *testing.T) {
@@ -293,6 +295,7 @@ func testQuery(t *testing.T, q *Query, models []*indexedTestModel) {
 	testQueryRun(t, q, expected)
 	testQueryIds(t, q, expected)
 	testQueryCount(t, q, expected)
+	testQueryStoreIds(t, q, expected)
 }
 
 func testQueryRun(t *testing.T, q *Query, expected []*indexedTestModel) {
@@ -329,6 +332,31 @@ func testQueryIds(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
 		// Order does not matter
 		if equal, msg := compareAsStringSet(expected, got); !equal {
 			t.Errorf("testQueryIds failed for query %s\n%s\nExpected: %v\nGot:  %v", q, msg, expected, got)
+		}
+	}
+}
+
+func testQueryStoreIds(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
+	destKey := "queryDestKey:" + generateRandomId()
+	if err := q.StoreIds(destKey); err != nil {
+		t.Errorf("Unexpected error in query.StoreIds: %s", err.Error())
+	}
+	expected := modelIds(Models(expectedModels))
+	conn := testPool.NewConn()
+	defer conn.Close()
+	got, err := redis.Strings(conn.Do("LRANGE", destKey, 0, -1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if q.hasOrder() {
+		// Order matters
+		if !reflect.DeepEqual(expected, got) {
+			t.Errorf("testQueryStoreIds failed for query %s\nExpected: %v\nGot:  %v", q, expected, got)
+		}
+	} else {
+		// Order does not matter
+		if equal, msg := compareAsStringSet(expected, got); !equal {
+			t.Errorf("testQueryStoreIds failed for query %s\n%s\nExpected: %v\nGot:  %v", q, msg, expected, got)
 		}
 	}
 }
