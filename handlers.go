@@ -150,17 +150,18 @@ func NewScanModelHandler(fieldNames []string, model Model) ReplyHandler {
 func newScanModelsHandler(spec *modelSpec, fieldNames []string, models interface{}) ReplyHandler {
 	return func(reply interface{}) error {
 		allFields, err := redis.Values(reply, nil)
+		modelsVal := reflect.ValueOf(models).Elem()
 		if err != nil {
 			if err == redis.ErrNil {
-				return ModelNotFoundError{
-					Msg: fmt.Sprintf("Could not find %s with the given criteria", spec.name),
-				}
+				// This means no models matched the criteria. Set the length of
+				// models to 0 to indicate this and then return.
+				modelsVal.SetLen(0)
+				return nil
 			}
 			return err
 		}
 		numFields := len(fieldNames)
 		numModels := len(allFields) / numFields
-		modelsVal := reflect.ValueOf(models).Elem()
 		for i := 0; i < numModels; i++ {
 			start := i * numFields
 			stop := i*numFields + numFields
@@ -232,4 +233,40 @@ func newScanModelsHandler(spec *modelSpec, fieldNames []string, models interface
 // model, the next three to the second model, etc.
 func NewScanModelsHandler(collection *Collection, fieldNames []string, models interface{}) ReplyHandler {
 	return newScanModelsHandler(collection.spec, fieldNames, models)
+}
+
+// newScanOneModelHandler returns a ReplyHandler which will scan reply into the
+// given model. It differs from NewScanModelHandler in that it expects reply to
+// have an underlying type of [][]byte{}. Specifically, if fieldNames is
+// ["Age", "Name", "-"], reply should look like:
+//
+//   1) "25"
+//   2) "Bob"
+//   3) "b1C7B0yETtXFYuKinndqoa"
+//
+// Note that this is similar to the kind of reply expected by
+// NewScanModelHandler except that there should only ever be len(fieldNames)
+// fields in the reply (i.e. enough fields for exactly one model). If the reply
+// is nil or an empty array, the ReplyHandler will return an error. This makes
+// newScanOneModelHandler useful in contexts where you expect exactly one model
+// to match certain query criteria (e.g. for Query.RunOne).
+func newScanOneModelHandler(q *query, spec *modelSpec, fieldNames []string, model Model) ReplyHandler {
+	return func(reply interface{}) error {
+		// Use reflection to create a slice which contains only one element, the
+		// given model. We'll then pass this in to newScanModelsHandler to set the
+		// value of model.
+		modelsVal := reflect.New(reflect.SliceOf(reflect.TypeOf(model)))
+		modelsVal.Elem().Set(reflect.Append(modelsVal.Elem(), reflect.ValueOf(model)))
+		if err := newScanModelsHandler(spec, fieldNames, modelsVal.Interface())(reply); err != nil {
+			return err
+		}
+		// Return an error if we didn't find any models matching the criteria.
+		// When you use newScanOneModelHandler, you are explicitly saying that you
+		// expect exactly one model.
+		if modelsVal.Elem().Len() == 0 {
+			msg := fmt.Sprintf("Could not find a model with the given query criteria: %s", q)
+			return ModelNotFoundError{Msg: msg}
+		}
+		return nil
+	}
 }

@@ -291,12 +291,12 @@ func TestQueryRunOne(t *testing.T) {
 // then the query was correct and the test will pass. models should be an array of all
 // the models which are being queried against.
 func testQuery(t *testing.T, q *Query, models []*indexedTestModel) {
-	expected := expectedResultsForQuery(q, models)
+	expected := expectedResultsForQuery(q.query, models)
 	testQueryRun(t, q, expected)
 	testQueryIds(t, q, expected)
 	testQueryCount(t, q, expected)
 	testQueryStoreIds(t, q, expected)
-	checkForLeakedTmpKeys(t, q)
+	checkForLeakedTmpKeys(t, q.query)
 }
 
 func testQueryRun(t *testing.T, q *Query, expected []*indexedTestModel) {
@@ -311,7 +311,7 @@ func testQueryRun(t *testing.T, q *Query, expected []*indexedTestModel) {
 }
 
 func testQueryCount(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
-	expected := uint(len(expectedModels))
+	expected := len(expectedModels)
 	if got, err := q.Count(); err != nil {
 		t.Error(err)
 		return
@@ -369,7 +369,7 @@ func testQueryStoreIds(t *testing.T, q *Query, expectedModels []*indexedTestMode
 	}
 }
 
-func checkForLeakedTmpKeys(t *testing.T, query *Query) {
+func checkForLeakedTmpKeys(t *testing.T, query *query) {
 	conn := testPool.NewConn()
 	defer conn.Close()
 	keys, err := redis.Strings(conn.Do("KEYS", "tmp:*"))
@@ -386,7 +386,7 @@ func checkForLeakedTmpKeys(t *testing.T, query *Query) {
 // It computes the models that should be returned in-memory, without touching the database,
 // and without the same optimizations that database queries have. It can be used to test for
 // the correctness of database queries.
-func expectedResultsForQuery(q *Query, models []*indexedTestModel) []*indexedTestModel {
+func expectedResultsForQuery(q *query, models []*indexedTestModel) []*indexedTestModel {
 	expected := make([]*indexedTestModel, len(models))
 	copy(expected, models)
 

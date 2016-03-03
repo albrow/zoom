@@ -152,3 +152,38 @@ func TestScanModelsHandler(t *testing.T) {
 		)
 	}
 }
+
+func TestScanOneModelHandler(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+	expected := &testModel{
+		Int:    38,
+		String: "bar",
+		Bool:   false,
+		RandomId: RandomId{
+			Id: "thisIsAnId",
+		},
+	}
+	fieldNames := []string{"String", "-", "Int"}
+	got := &testModel{}
+	handler := newScanOneModelHandler(testModels.NewQuery().query, testModels.spec, fieldNames, got)
+	if err := handler([]interface{}{
+		[]byte("bar"),
+		[]byte("thisIsAnId"),
+		[]byte("38"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(expected, got) {
+		t.Errorf("\nExpected: %s\nBut got:  %s\n",
+			spew.Sprint(expected),
+			spew.Sprint(got),
+		)
+	}
+	// If reply is nil, the ReplyHandler should return a ModelNotFoundError.
+	if err := handler(nil); err == nil {
+		t.Error("Expected error but got none")
+	} else if _, ok := err.(ModelNotFoundError); !ok {
+		t.Errorf("Expected ModelNotFoundError but got: %T: %v", err, err)
+	}
+}
