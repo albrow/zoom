@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
@@ -403,7 +404,14 @@ func (mr *modelRef) mainHashArgsForFields(fieldNames []string) (redis.Args, erro
 		fieldVal := mr.fieldValue(fs.name)
 		switch fs.kind {
 		case primativeField:
-			args = args.Add(fs.redisName, fieldVal.Interface())
+			// Add a special case for time.Duration. By default, the redigo driver
+			// will fall back to fmt.Sprintf, but we want to save it as an int64 in
+			// this case.
+			if fs.typ == reflect.TypeOf(time.Duration(0)) {
+				args = args.Add(fs.redisName, int64(fieldVal.Interface().(time.Duration)))
+			} else {
+				args = args.Add(fs.redisName, fieldVal.Interface())
+			}
 		case pointerField:
 			if !fieldVal.IsNil() {
 				args = args.Add(fs.redisName, fieldVal.Elem().Interface())

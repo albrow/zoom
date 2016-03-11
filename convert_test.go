@@ -10,6 +10,7 @@ package zoom
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestConvertPrimatives(t *testing.T) {
@@ -22,6 +23,24 @@ func TestConvertPointers(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 	testConvertType(t, indexedPointersModels, createIndexedPointersModel())
+}
+
+func TestTimeDuration(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	type durationModel struct {
+		Duration time.Duration
+		RandomId
+	}
+	durationModels, err := testPool.NewCollection(&durationModel{}, nil)
+	if err != nil {
+		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
+	}
+	model := &durationModel{
+		Duration: 43 * time.Second,
+	}
+	testConvertType(t, durationModels, model)
 }
 
 func TestGobFallback(t *testing.T) {
