@@ -269,6 +269,18 @@ func (ms modelSpec) fieldRedisNames() []string {
 	return names
 }
 
+func (ms modelSpec) redisNamesForFieldNames(fieldNames []string) ([]string, error) {
+	redisNames := []string{}
+	for _, fieldName := range fieldNames {
+		fs, found := ms.fieldsByName[fieldName]
+		if !found {
+			return nil, fmt.Errorf("Type %s has no field named %s", ms.typ.Name(), fieldName)
+		}
+		redisNames = append(redisNames, fs.redisName)
+	}
+	return redisNames, nil
+}
+
 // fieldIndexKey returns the key for the sorted set used to index the field identified
 // by fieldName. It returns an error if fieldName does not identify a field in the spec
 // or if the field it identifies is not an indexed field.
@@ -290,9 +302,9 @@ func (ms *modelSpec) fieldIndexKey(fieldName string) (string, error) {
 // be the key of a set or a sorted set which consists of model ids. The arguments
 // use they "BY nosort" option, so if a specific order is required, the setKey should be
 // a sorted set.
-func (ms *modelSpec) sortArgs(setKey string, includeFields []string, limit int, offset uint, orderKind orderKind) redis.Args {
-	args := redis.Args{setKey, "BY", "nosort"}
-	for _, fieldName := range includeFields {
+func (ms *modelSpec) sortArgs(idsKey string, redisFieldNames []string, limit int, offset uint, reverse bool) redis.Args {
+	args := redis.Args{idsKey, "BY", "nosort"}
+	for _, fieldName := range redisFieldNames {
 		args = append(args, "GET", ms.name+":*->"+fieldName)
 	}
 	// We always want to get the id
@@ -300,11 +312,10 @@ func (ms *modelSpec) sortArgs(setKey string, includeFields []string, limit int, 
 	if !(limit == 0 && offset == 0) {
 		args = append(args, "LIMIT", offset, limit)
 	}
-	switch orderKind {
-	case ascendingOrder:
-		args = append(args, "ASC")
-	case descendingOrder:
+	if reverse {
 		args = append(args, "DESC")
+	} else {
+		args = append(args, "ASC")
 	}
 	return args
 }

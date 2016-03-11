@@ -110,7 +110,7 @@ func (q *TransactionQuery) Run(models interface{}) {
 		// But in redis, -1 means unlimited
 		limit = -1
 	}
-	sortArgs := q.collection.spec.sortArgs(idsKey, q.redisFieldNames(), limit, q.offset, q.order.kind)
+	sortArgs := q.collection.spec.sortArgs(idsKey, q.redisFieldNames(), limit, q.offset, q.order.kind == descendingOrder)
 	q.tx.Command("SORT", sortArgs, newScanModelsHandler(q.collection.spec, append(q.fieldNames(), "-"), models))
 	if len(tmpKeys) > 0 {
 		q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
@@ -138,7 +138,7 @@ func (q *TransactionQuery) RunOne(model Model) {
 		q.tx.setError(err)
 		return
 	}
-	sortArgs := q.collection.spec.sortArgs(idsKey, q.redisFieldNames(), 1, q.offset, q.order.kind)
+	sortArgs := q.collection.spec.sortArgs(idsKey, q.redisFieldNames(), 1, q.offset, q.order.kind == descendingOrder)
 	q.tx.Command("SORT", sortArgs, newScanOneModelHandler(q.query, q.collection.spec, append(q.fieldNames(), "-"), model))
 	if len(tmpKeys) > 0 {
 		q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
@@ -207,7 +207,7 @@ func (q *TransactionQuery) Ids(ids *[]string) {
 		// But in redis, -1 means unlimited
 		limit = -1
 	}
-	sortArgs := q.collection.spec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind)
+	sortArgs := q.collection.spec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind == descendingOrder)
 	q.tx.Command("SORT", sortArgs, NewScanStringsHandler(ids))
 	if len(tmpKeys) > 0 {
 		q.tx.Command("DEL", (redis.Args{}).Add(tmpKeys...), nil)
@@ -235,7 +235,7 @@ func (q *TransactionQuery) StoreIds(destKey string) {
 		// But in Redis, -1 means unlimited
 		limit = -1
 	}
-	sortArgs := q.collection.spec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind)
+	sortArgs := q.collection.spec.sortArgs(idsKey, nil, limit, q.offset, q.order.kind == descendingOrder)
 	// Append the STORE argument to cause Redis to store the results in destKey.
 	sortAndStoreArgs := append(sortArgs, "STORE", destKey)
 	q.tx.Command("SORT", sortAndStoreArgs, nil)

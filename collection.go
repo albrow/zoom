@@ -516,7 +516,7 @@ func (t *Transaction) FindAll(c *Collection, models interface{}) {
 		t.setError(fmt.Errorf("zoom: Error in FindAll or Transaction.FindAll: %s", err.Error()))
 		return
 	}
-	sortArgs := c.spec.sortArgs(c.spec.indexKey(), c.spec.fieldRedisNames(), 0, 0, ascendingOrder)
+	sortArgs := c.spec.sortArgs(c.spec.indexKey(), c.spec.fieldRedisNames(), 0, 0, false)
 	fieldNames := append(c.spec.fieldNames(), "-")
 	t.Command("SORT", sortArgs, newScanModelsHandler(c.spec, fieldNames, models))
 }

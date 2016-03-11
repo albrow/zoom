@@ -323,7 +323,7 @@ func (filter filter) checkValType(value interface{}) error {
 		valueType = valueType.Elem()
 		valueVal = valueVal.Elem()
 		if !valueVal.IsValid() {
-			return errors.New("zoom: invalid value arg for Filter. Is it a nil pointer?")
+			return errors.New("zoom: invalid value for Filter. Is it a nil pointer?")
 		}
 	}
 	// Also dereference the field type to reach the underlying type.
@@ -332,7 +332,7 @@ func (filter filter) checkValType(value interface{}) error {
 		fieldType = fieldType.Elem()
 	}
 	if valueType != fieldType {
-		return fmt.Errorf("zoom: invalid value arg for Filter. Type of value (%T) does not match type of field (%s).", value, fieldType.String())
+		return fmt.Errorf("zoom: invalid value for Filter on %s. Type of value (%T) does not match type of field (%s).", filter.fieldSpec.name, value, fieldType.String())
 	}
 	return nil
 }
