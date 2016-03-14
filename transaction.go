@@ -148,6 +148,9 @@ func (t *Transaction) Exec() error {
 		// Iterate through the replies, calling the corresponding handler functions
 		for i, reply := range replies {
 			a := t.actions[i]
+			if err, ok := reply.(error); ok {
+				return err
+			}
 			if a.handler != nil {
 				if err := a.handler(reply); err != nil {
 					return err
