@@ -8,7 +8,6 @@
 package zoom
 
 import (
-	"container/list"
 	"fmt"
 	"reflect"
 	"strings"
@@ -86,38 +85,6 @@ const (
 	stringIndex
 	booleanIndex
 )
-
-var modelSpecs = list.New()
-
-// addModelSpec adds the given spec to the list of modelSpecs iff it has not
-// already been added.
-func addModelSpec(spec *modelSpec) {
-	for e := modelSpecs.Front(); e != nil; e = e.Next() {
-		otherSpec := e.Value.(*modelSpec)
-		if spec.typ == otherSpec.typ {
-			// The spec was already added to the list. No need to do anything.
-			return
-		}
-	}
-	modelSpecs.PushFront(spec)
-}
-
-// getModelSpecForModel returns the modelSpec corresponding to the type of
-// model.
-func getModelSpecForModel(model Model) (*modelSpec, error) {
-	typ := reflect.TypeOf(model)
-	for e := modelSpecs.Front(); e != nil; e = e.Next() {
-		spec := e.Value.(*modelSpec)
-		if spec.typ == typ {
-			return spec, nil
-		}
-	}
-	return nil, fmt.Errorf(
-		"Could not find modelSpec for type %T. Is there a corresponding"+
-			"Collection for this type?",
-		model,
-	)
-}
 
 // compilesModelSpec examines typ using reflection, parses its fields,
 // and returns a modelSpec.
@@ -199,7 +166,6 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 			fs.kind = inconvertibleField
 		}
 	}
-	addModelSpec(ms)
 	return ms, nil
 }
 
@@ -353,8 +319,9 @@ func (spec *modelSpec) checkModelsType(models interface{}) error {
 // itself and a pointer to the corresponding spec. This allows us to avoid constant lookups
 // in the modelTypeToSpec map.
 type modelRef struct {
-	model Model
-	spec  *modelSpec
+	collection *Collection
+	model      Model
+	spec       *modelSpec
 }
 
 // value is an alias for reflect.ValueOf(mr.model)

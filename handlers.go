@@ -132,13 +132,14 @@ func newScanModelRefHandler(fieldNames []string, mr *modelRef) ReplyHandler {
 // "b1C7B0yETtXFYuKinndqoa" using the model's SetModelId method.
 func NewScanModelHandler(fieldNames []string, model Model) ReplyHandler {
 	// Create a modelRef that wraps the given model.
-	spec, err := getModelSpecForModel(model)
+	collection, err := getCollectionForModel(model)
 	if err != nil {
 		return newAlwaysErrorHandler(err)
 	}
 	mr := &modelRef{
-		spec:  spec,
-		model: model,
+		collection: collection,
+		model:      model,
+		spec:       collection.spec,
 	}
 	// Create and return a reply handler using newScanModelRefHandler
 	return newScanModelRefHandler(fieldNames, mr)

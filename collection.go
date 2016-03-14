@@ -9,12 +9,15 @@
 package zoom
 
 import (
+	"container/list"
 	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/garyburd/redigo/redis"
 )
+
+var collections = list.New()
 
 // Collection represents a specific registered type of model. It has methods
 // for saving, finding, and deleting models of a specific type. Use the
@@ -52,6 +55,33 @@ type CollectionOptions struct {
 	Name string
 }
 
+// addCollection adds the given spec to the list of collections iff it has not
+// already been added.
+func addCollection(collection *Collection) {
+	for e := collections.Front(); e != nil; e = e.Next() {
+		otherCollection := e.Value.(*Collection)
+		if collection.spec.typ == otherCollection.spec.typ {
+			// The Collection was already added to the list. No need to do
+			// anything.
+			return
+		}
+	}
+	collections.PushFront(collection)
+}
+
+// getCollectionForModel returns the Collection corresponding to the type of
+// model.
+func getCollectionForModel(model Model) (*Collection, error) {
+	typ := reflect.TypeOf(model)
+	for e := collections.Front(); e != nil; e = e.Next() {
+		col := e.Value.(*Collection)
+		if col.spec.typ == typ {
+			return col, nil
+		}
+	}
+	return nil, fmt.Errorf("Could not find Collection for type %T", model)
+}
+
 // NewCollection registers and returns a new collection of the given model type.
 // You must create a collection for each model type you want to save. The type
 // of model must be unique, i.e., not already registered, and must be a pointer
@@ -84,12 +114,13 @@ func (p *Pool) NewCollection(model Model, options *CollectionOptions) (*Collecti
 	p.modelTypeToSpec[typ] = spec
 	p.modelNameToSpec[fullOptions.Name] = spec
 
-	// Return the Collection
-	return &Collection{
+	collection := &Collection{
 		spec:  spec,
 		pool:  p,
 		index: fullOptions.Index,
-	}, nil
+	}
+	addCollection(collection)
+	return collection, nil
 }
 
 // Name returns the name for the given collection. The name is a unique string
@@ -223,8 +254,9 @@ func (t *Transaction) Save(c *Collection, model Model) {
 	}
 	// Create a modelRef and start a transaction
 	mr := &modelRef{
-		spec:  c.spec,
-		model: model,
+		collection: c,
+		model:      model,
+		spec:       c.spec,
 	}
 	// Save indexes
 	// This must happen first, because it relies on reading the old field values
@@ -366,8 +398,9 @@ func (t *Transaction) UpdateFields(c *Collection, fieldNames []string, model Mod
 	}
 	// Create a modelRef and start a transaction
 	mr := &modelRef{
-		spec:  c.spec,
-		model: model,
+		collection: c,
+		model:      model,
+		spec:       c.spec,
 	}
 	// Update indexes
 	// This must happen first, because it relies on reading the old field values
@@ -420,8 +453,9 @@ func (t *Transaction) Find(c *Collection, id string, model Model) {
 	}
 	model.SetModelId(id)
 	mr := &modelRef{
-		spec:  c.spec,
-		model: model,
+		collection: c,
+		model:      model,
+		spec:       c.spec,
 	}
 	// Get the fields from the main hash for this model
 	args := redis.Args{mr.key()}
@@ -456,8 +490,9 @@ func (t *Transaction) FindFields(c *Collection, id string, fieldNames []string, 
 	// Set the model id and create a modelRef
 	model.SetModelId(id)
 	mr := &modelRef{
-		spec:  c.spec,
-		model: model,
+		collection: c,
+		spec:       c.spec,
+		model:      model,
 	}
 	// Check the given field names and append the corresponding redis field names
 	// to args.
