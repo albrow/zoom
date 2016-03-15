@@ -333,6 +333,12 @@ func expectFieldEquals(t *testing.T, key string, fieldName string, marshalerUnma
 	if err != nil {
 		t.Errorf("Unexpected error in HGET: %s", err.Error())
 	}
+	if reply == nil {
+		if expected == nil {
+			return
+		}
+		t.Errorf("Field %s was nil. Expected: %v", fieldName, expected)
+	}
 	srcBytes, ok := reply.([]byte)
 	if !ok {
 		t.Fatalf("Unexpected error: could not convert %v of type %T to []byte.\n", reply, reply)

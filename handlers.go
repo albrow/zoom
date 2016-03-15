@@ -20,6 +20,25 @@ func newAlwaysErrorHandler(err error) ReplyHandler {
 	}
 }
 
+// newModelExistsHandler returns a reply handler which will return a
+// ModelNotFound error if the value of reply is false. It is expected to be
+// used as the reply handler for an EXISTS command.
+func newModelExistsHandler(collection *Collection, modelId string) ReplyHandler {
+	return func(reply interface{}) error {
+		exists, err := redis.Bool(reply, nil)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return ModelNotFoundError{
+				Collection: collection,
+				Msg:        fmt.Sprintf("Could not find %s with id = %s", collection.spec.name, modelId),
+			}
+		}
+		return nil
+	}
+}
+
 // NewScanIntHandler returns a ReplyHandler which will convert the reply to an
 // integer and set the value of i to the converted integer. The ReplyHandler
 // will return an error if there was a problem converting the reply.

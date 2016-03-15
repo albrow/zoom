@@ -357,42 +357,42 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 	t.Command("ZADD", redis.Args{indexKey, 0, member}, nil)
 }
 
-// UpdateFields updates only the given fields of the model. UpdateFields uses
+// SaveFields saves only the given fields of the model. SaveFields uses
 // "last write wins" semantics. If another caller updates the the same fields
 // concurrently, your updates may be overwritten. It will return an error if
 // the type of model does not match the registered Collection, or if any of
 // the given fieldNames are not found in the registered Collection. If
-// UpdateFields is called on a model that has not yet been saved, it will not
+// SaveFields is called on a model that has not yet been saved, it will not
 // return an error. Instead, only the given fields will be saved in the
 // database.
-func (c *Collection) UpdateFields(fieldNames []string, model Model) error {
+func (c *Collection) SaveFields(fieldNames []string, model Model) error {
 	t := c.pool.NewTransaction()
-	t.UpdateFields(c, fieldNames, model)
+	t.SaveFields(c, fieldNames, model)
 	if err := t.Exec(); err != nil {
 		return err
 	}
 	return nil
 }
 
-// UpdateFields updates only the given fields of the model inside an existing
-// transaction. UpdateFields will set the err property of the transaction if the
+// SaveFields saves only the given fields of the model inside an existing
+// transaction. SaveFields will set the err property of the transaction if the
 // type of model does not match the registered Collection, or if any of the
 // given fieldNames are not found in the model type. In either case, the
-// transaction will return the error when you call Exec. UpdateFields uses "last
+// transaction will return the error when you call Exec. SaveFields uses "last
 // write wins" semantics. If another caller updates the the same fields
-// concurrently, your updates may be overwritten. If UpdateFields is called on a
+// concurrently, your updates may be overwritten. If SaveFields is called on a
 // model that has not yet been saved, it will not return an error. Instead, only
 // the given fields will be saved in the database.
-func (t *Transaction) UpdateFields(c *Collection, fieldNames []string, model Model) {
+func (t *Transaction) SaveFields(c *Collection, fieldNames []string, model Model) {
 	// Check the model type
 	if err := c.checkModelType(model); err != nil {
-		t.setError(fmt.Errorf("zoom: Error in UpdateFields or Transaction.UpdateFields: %s", err.Error()))
+		t.setError(fmt.Errorf("zoom: Error in SaveFields or Transaction.SaveFields: %s", err.Error()))
 		return
 	}
 	// Check the given field names
 	for _, fieldName := range fieldNames {
 		if !stringSliceContains(c.spec.fieldNames(), fieldName) {
-			t.setError(fmt.Errorf("zoom: Error in UpdateFields or Transaction.UpdateFields: Collection %s does not have field named %s", c.Name(), fieldName))
+			t.setError(fmt.Errorf("zoom: Error in SaveFields or Transaction.SaveFields: Collection %s does not have field named %s", c.Name(), fieldName))
 			return
 		}
 	}
@@ -418,6 +418,10 @@ func (t *Transaction) UpdateFields(c *Collection, fieldNames []string, model Mod
 		// so there are fields if the length is greater than
 		// 1.
 		t.Command("HMSET", hashArgs, nil)
+	}
+	// Add the model id to the set of all models for this collection
+	if c.index {
+		t.Command("SADD", redis.Args{c.IndexKey(), model.ModelId()}, nil)
 	}
 }
 
@@ -457,6 +461,8 @@ func (t *Transaction) Find(c *Collection, id string, model Model) {
 		model:      model,
 		spec:       c.spec,
 	}
+	// Check if the model actually exists
+	t.Command("EXISTS", redis.Args{mr.key()}, newModelExistsHandler(c, id))
 	// Get the fields from the main hash for this model
 	args := redis.Args{mr.key()}
 	for _, fieldName := range mr.spec.fieldRedisNames() {
@@ -507,6 +513,8 @@ func (t *Transaction) FindFields(c *Collection, id string, fieldNames []string, 
 		// may be customized via struct tags.
 		args = append(args, c.spec.fieldsByName[fieldName].redisName)
 	}
+	// Check if the model actually exists.
+	t.Command("EXISTS", redis.Args{mr.key()}, newModelExistsHandler(c, id))
 	// Get the fields from the main hash for this model
 	t.Command("HMGET", args, newScanModelRefHandler(fieldNames, mr))
 }

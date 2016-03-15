@@ -183,4 +183,12 @@ func testConvertType(t *testing.T, collection *Collection, model Model) {
 	if err := collection.Save(emptyModel); err != nil {
 		t.Errorf("Unexpected error saving an empty model: %s", err.Error())
 	}
+	emptyModelCopy, ok := reflect.New(collection.spec.typ.Elem()).Interface().(Model)
+	if err := collection.Find(emptyModel.ModelId(), emptyModelCopy); err != nil {
+		t.Errorf("Unexpected error in Find: %s", err.Error())
+	}
+	// Make sure the copy equals the original
+	if !reflect.DeepEqual(emptyModel, emptyModelCopy) {
+		t.Errorf("Model of type %T was not saved/retrieved correctly.\nExpected: %+v\nGot:      %+v", emptyModel, emptyModel, emptyModelCopy)
+	}
 }
