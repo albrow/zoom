@@ -30,29 +30,110 @@ type Collection struct {
 
 // CollectionOptions contains various options for a pool.
 type CollectionOptions struct {
-	// FallbackMarshalerUnmarshaler is used to marshal/unmarshal any type
-	// into a slice of bytes which is suitable for storing in the database. If
-	// Zoom does not know how to directly encode a certain type into bytes, it
-	// will use the FallbackMarshalerUnmarshaler. By default, the value is
-	// GobMarshalerUnmarshaler which uses the builtin gob package. Zoom also
-	// provides JSONMarshalerUnmarshaler to support json encoding out of the box.
-	// Default: GobMarshalerUnmarshaler.
+	// FallbackMarshalerUnmarshaler is used to marshal/unmarshal any type into a
+	// slice of bytes which is suitable for storing in the database. If Zoom does
+	// not know how to directly encode a certain type into bytes, it will use the
+	// FallbackMarshalerUnmarshaler. Zoom provides GobMarshalerUnmarshaler and
+	// JSONMarshalerUnmarshaler out of the box. You are also free to write your
+	// own implementation.
 	FallbackMarshalerUnmarshaler MarshalerUnmarshaler
-	// Iff Index is true, any model in the collection that is saved will be added
-	// to a set in redis which acts as an index. The default value is false. The
-	// key for the set is exposed via the IndexKey method. Queries and the
+	// If Index is true, any model in the collection that is saved will be added
+	// to a set in Redis which acts as an index on all models in the collection.
+	// The key for the set is exposed via the IndexKey method. Queries and the
 	// FindAll, Count, and DeleteAll methods will not work for unindexed
-	// collections. This may change in future versions. Default: false.
+	// collections. This may change in future versions.
 	Index bool
-	// Name is a unique string identifier to use for the collection in redis. All
+	// Name is a unique string identifier to use for the collection in Redis. All
 	// models in this collection that are saved in the database will use the
-	// collection name as a prefix. If not provided, the default name will be the
-	// name of the model type without the package prefix or pointer declarations.
-	// So for example, the default name corresponding to *models.User would be
-	// "User". If a custom name is provided, it cannot contain a colon.
-	// Default: The name of the model type, excluding package prefix and pointer
-	// declarations.
+	// collection name as a prefix. If Name is an empty string, Zoom will use the
+	// name of the concrete model type, excluding package prefix and pointer
+	// declarations, as the name for the collection. So for example, the default
+	// name corresponding to *models.User would be "User". If a custom name is
+	// provided, it cannot contain a colon.
 	Name string
+}
+
+// DefaultCollectionOptions is the default set of options for a collection.
+var DefaultCollectionOptions = CollectionOptions{
+	FallbackMarshalerUnmarshaler: GobMarshalerUnmarshaler,
+	Index: false,
+	Name:  "",
+}
+
+// WithFallbackMarshalerUnmarshaler returns a new copy of the options with the
+// FallbackMarshalerUnmarshaler property set to the given value. It does not
+// mutate the original options.
+func (options CollectionOptions) WithFallbackMarshalerUnmarshaler(fallback MarshalerUnmarshaler) CollectionOptions {
+	options.FallbackMarshalerUnmarshaler = fallback
+	return options
+}
+
+// WithIndex returns a new copy of the options with the Index property set to
+// the given value. It does not mutate the original options.
+func (options CollectionOptions) WithIndex(index bool) CollectionOptions {
+	options.Index = index
+	return options
+}
+
+// WithName returns a new copy of the options with the Name property set to the
+// given value. It does not mutate the original options.
+func (options CollectionOptions) WithName(name string) CollectionOptions {
+	options.Name = name
+	return options
+}
+
+func (p *Pool) NewCollection(model Model) (*Collection, error) {
+	return p.NewCollectionWithOptions(model, DefaultCollectionOptions)
+}
+
+// NewCollection registers and returns a new collection of the given model type.
+// You must create a collection for each model type you want to save. The type
+// of model must be unique, i.e., not already registered, and must be a pointer
+// to a struct. To use the default options, pass in nil as the options argument.
+func (p *Pool) NewCollectionWithOptions(model Model, options CollectionOptions) (*Collection, error) {
+	typ := reflect.TypeOf(model)
+	// If options.Name is empty use the name of the concrete model type (without
+	// the package prefix).
+	if options.Name == "" {
+		options.Name = getDefaultModelSpecName(typ)
+	} else if strings.Contains(options.Name, ":") {
+		return nil, fmt.Errorf("zoom: CollectionOptions.Name cannot contain a colon. Got: %s", options.Name)
+	}
+
+	// Make sure the name and type have not been previously registered
+	switch {
+	case p.typeIsRegistered(typ):
+		return nil, fmt.Errorf("zoom: Error in NewCollection: The type %T has already been registered", model)
+	case p.nameIsRegistered(options.Name):
+		return nil, fmt.Errorf("zoom: Error in NewCollection: The name %s has already been registered", options.Name)
+	case !typeIsPointerToStruct(typ):
+		return nil, fmt.Errorf("zoom: NewCollection requires a pointer to a struct as an argument. Got type %T", model)
+	}
+
+	// Compile the spec for this model and store it in the maps
+	spec, err := compileModelSpec(typ)
+	if err != nil {
+		return nil, err
+	}
+	spec.name = options.Name
+	spec.fallback = options.FallbackMarshalerUnmarshaler
+	p.modelTypeToSpec[typ] = spec
+	p.modelNameToSpec[options.Name] = spec
+
+	collection := &Collection{
+		spec:  spec,
+		pool:  p,
+		index: options.Index,
+	}
+	addCollection(collection)
+	return collection, nil
+}
+
+// Name returns the name for the given collection. The name is a unique string
+// identifier to use for the collection in redis. All models in this collection
+// that are saved in the database will use the collection name as a prefix.
+func (c *Collection) Name() string {
+	return c.spec.name
 }
 
 // addCollection adds the given spec to the list of collections iff it has not
@@ -80,80 +161,6 @@ func getCollectionForModel(model Model) (*Collection, error) {
 		}
 	}
 	return nil, fmt.Errorf("Could not find Collection for type %T", model)
-}
-
-// NewCollection registers and returns a new collection of the given model type.
-// You must create a collection for each model type you want to save. The type
-// of model must be unique, i.e., not already registered, and must be a pointer
-// to a struct. To use the default options, pass in nil as the options argument.
-func (p *Pool) NewCollection(model Model, options *CollectionOptions) (*Collection, error) {
-	// Parse the options
-	fullOptions, err := parseCollectionOptions(model, options)
-	if err != nil {
-		return nil, err
-	}
-
-	// Make sure the name and type have not been previously registered
-	typ := reflect.TypeOf(model)
-	switch {
-	case p.typeIsRegistered(typ):
-		return nil, fmt.Errorf("zoom: Error in NewCollection: The type %T has already been registered", model)
-	case p.nameIsRegistered(fullOptions.Name):
-		return nil, fmt.Errorf("zoom: Error in NewCollection: The name %s has already been registered", fullOptions.Name)
-	case !typeIsPointerToStruct(typ):
-		return nil, fmt.Errorf("zoom: NewCollection requires a pointer to a struct as an argument. Got type %T", model)
-	}
-
-	// Compile the spec for this model and store it in the maps
-	spec, err := compileModelSpec(typ)
-	if err != nil {
-		return nil, err
-	}
-	spec.name = fullOptions.Name
-	spec.fallback = fullOptions.FallbackMarshalerUnmarshaler
-	p.modelTypeToSpec[typ] = spec
-	p.modelNameToSpec[fullOptions.Name] = spec
-
-	collection := &Collection{
-		spec:  spec,
-		pool:  p,
-		index: fullOptions.Index,
-	}
-	addCollection(collection)
-	return collection, nil
-}
-
-// Name returns the name for the given collection. The name is a unique string
-// identifier to use for the collection in redis. All models in this collection
-// that are saved in the database will use the collection name as a prefix.
-func (c *Collection) Name() string {
-	return c.spec.name
-}
-
-// parseCollectionOptions returns a well-formed CollectionOptions struct. If
-// passedOptions is nil, it uses all the default options. Else, for each zero
-// value field in passedOptions, it uses the default value for that field.
-func parseCollectionOptions(model Model, passedOptions *CollectionOptions) (*CollectionOptions, error) {
-	// If passedOptions is nil, use all the default values
-	if passedOptions == nil {
-		return &CollectionOptions{
-			FallbackMarshalerUnmarshaler: GobMarshalerUnmarshaler,
-			Name: getDefaultModelSpecName(reflect.TypeOf(model)),
-		}, nil
-	}
-	// Copy and validate the passedOptions
-	newOptions := *passedOptions
-	if newOptions.Name == "" {
-		newOptions.Name = getDefaultModelSpecName(reflect.TypeOf(model))
-	} else if strings.Contains(newOptions.Name, ":") {
-		return nil, fmt.Errorf("zoom: CollectionOptions.Name cannot contain a colon. Got: %s", newOptions.Name)
-	}
-	if newOptions.FallbackMarshalerUnmarshaler == nil {
-		newOptions.FallbackMarshalerUnmarshaler = GobMarshalerUnmarshaler
-	}
-	// NOTE: we don't need to modify the Index field because the default value,
-	// false, is also the zero value.
-	return &newOptions, nil
 }
 
 func (p *Pool) typeIsRegistered(typ reflect.Type) bool {

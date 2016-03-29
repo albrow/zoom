@@ -23,7 +23,7 @@ func TestRedisIgnoreOption(t *testing.T) {
 		Attr string `redis:"-"`
 		RandomId
 	}
-	ignoredFieldModels, err := testPool.NewCollection(&ignoredFieldModel{}, nil)
+	ignoredFieldModels, err := testPool.NewCollection(&ignoredFieldModel{})
 	if err != nil {
 		t.Errorf("Unexpected error in Register: %s", err)
 	}
@@ -67,7 +67,7 @@ func TestRedisNameOption(t *testing.T) {
 		Attr string `redis:"a"`
 		RandomId
 	}
-	customFieldModels, err := testPool.NewCollection(&customFieldModel{}, nil)
+	customFieldModels, err := testPool.NewCollection(&customFieldModel{})
 	if err != nil {
 		t.Errorf("Unexpected error in Register: %s", err.Error())
 	}
@@ -102,7 +102,7 @@ func TestInvalidOptionThrowsError(t *testing.T) {
 		Attr string `zoom:"index,poop"`
 		RandomId
 	}
-	if _, err := testPool.NewCollection(&invalid{}, nil); err == nil {
+	if _, err := testPool.NewCollection(&invalid{}); err == nil {
 		t.Error("Expected error when registering struct with invalid tag")
 	}
 }
@@ -216,7 +216,7 @@ func TestIndexAndCustomName(t *testing.T) {
 		Bool   bool   `zoom:"index" redis:"boolean"`
 		RandomId
 	}
-	customIndexModels, err := testPool.NewCollection(&customIndexModel{}, nil)
+	customIndexModels, err := testPool.NewCollection(&customIndexModel{})
 	if err != nil {
 		t.Fatalf("Unexpected error in Register: %s", err.Error())
 	}

@@ -13,7 +13,7 @@ import (
 )
 
 // collectionTestModel is a model type that is only used for testing
-// the Register and RegisterName functions
+// the NewCollection and NewCollectionWithOptions functions
 type collectionTestModel struct {
 	Int    int
 	Bool   bool
@@ -25,9 +25,9 @@ func TestNewCollection(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	col, err := testPool.NewCollection(&collectionTestModel{}, nil)
+	col, err := testPool.NewCollection(&collectionTestModel{})
 	if err != nil {
-		t.Fatalf("Unexpected error in Register: %s", err.Error())
+		t.Fatalf("Unexpected error in NewCollection: %s", err.Error())
 	}
 	expectedName := "collectionTestModel"
 	expectedType := reflect.TypeOf(&collectionTestModel{})
@@ -43,12 +43,10 @@ func TestNewCollectionWithName(t *testing.T) {
 	defer testingTearDown()
 
 	expectedName := "customName"
-	col, err := testPool.NewCollection(&collectionTestModel{},
-		&CollectionOptions{
-			Name: expectedName,
-		})
+	options := DefaultCollectionOptions.WithName(expectedName)
+	col, err := testPool.NewCollectionWithOptions(&collectionTestModel{}, options)
 	if err != nil {
-		t.Fatalf("Unexpected error in Register: %s", err.Error())
+		t.Fatalf("Unexpected error in NewCollectionWithOptions: %s", err.Error())
 	}
 	expectedType := reflect.TypeOf(&collectionTestModel{})
 	testRegisteredCollectionType(t, col, expectedName, expectedType)

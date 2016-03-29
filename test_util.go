@@ -267,9 +267,8 @@ func registerTestingTypes() {
 		},
 	}
 	for _, m := range testModelTypes {
-		collection, err := testPool.NewCollection(m.model, &CollectionOptions{
-			Index: m.index,
-		})
+		options := DefaultCollectionOptions.WithIndex(true)
+		collection, err := testPool.NewCollectionWithOptions(m.model, options)
 		if err != nil {
 			panic(err)
 		}

@@ -33,7 +33,7 @@ func TestTimeDuration(t *testing.T) {
 		Duration time.Duration
 		RandomId
 	}
-	durationModels, err := testPool.NewCollection(&durationModel{}, nil)
+	durationModels, err := testPool.NewCollection(&durationModel{})
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
@@ -57,9 +57,8 @@ func TestGobFallback(t *testing.T) {
 		IntMap      map[int]int
 		RandomId
 	}
-	gobModels, err := testPool.NewCollection(&gobModel{}, &CollectionOptions{
-		FallbackMarshalerUnmarshaler: GobMarshalerUnmarshaler,
-	})
+	options := DefaultCollectionOptions.WithFallbackMarshalerUnmarshaler(GobMarshalerUnmarshaler)
+	gobModels, err := testPool.NewCollectionWithOptions(&gobModel{}, options)
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
@@ -88,9 +87,8 @@ func TestJSONFallback(t *testing.T) {
 		EmptyInterface interface{}
 		RandomId
 	}
-	jsonModels, err := testPool.NewCollection(&jsonModel{}, &CollectionOptions{
-		FallbackMarshalerUnmarshaler: JSONMarshalerUnmarshaler,
-	})
+	options := DefaultCollectionOptions.WithFallbackMarshalerUnmarshaler(JSONMarshalerUnmarshaler)
+	jsonModels, err := testPool.NewCollectionWithOptions(&jsonModel{}, options)
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
@@ -119,7 +117,7 @@ func TestConvertEmbeddedStruct(t *testing.T) {
 		Embeddable
 		RandomId
 	}
-	embededStructModels, err := testPool.NewCollection(&embeddedStructModel{}, nil)
+	embededStructModels, err := testPool.NewCollection(&embeddedStructModel{})
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
@@ -141,7 +139,7 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 		*Embeddable
 		RandomId
 	}
-	embededPointerToStructModels, err := testPool.NewCollection(&embeddedPointerToStructModel{}, nil)
+	embededPointerToStructModels, err := testPool.NewCollection(&embeddedPointerToStructModel{})
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}

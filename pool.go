@@ -29,7 +29,7 @@ type Pool struct {
 	modelNameToSpec map[string]*modelSpec
 }
 
-// DefaultPoolOptions holds the default values for each pool option.
+// DefaultPoolOptions is the default set of options for a Pool.
 var DefaultPoolOptions = PoolOptions{
 	Address:     "localhost:6379",
 	Database:    0,
@@ -43,29 +43,29 @@ var DefaultPoolOptions = PoolOptions{
 
 // PoolOptions contains various options for a pool.
 type PoolOptions struct {
-	// Address to connect to. Default: "localhost:6379"
+	// Address to use when connecting to Redis.
 	Address string
-	// Database id to use (using SELECT). Default: 0
+	// Database id to use (using SELECT).
 	Database int
 	// IdleTimeout is the amount of time to wait before timing out (closing) idle
-	// connections. Default: 240 * time.Second
+	// connections.
 	IdleTimeout time.Duration
 	// MaxActive is the maximum number of active connections the pool will keep.
-	// A value of 0 means unlimited. Default: 1000
+	// A value of 0 means unlimited.
 	MaxActive int
 	// MaxIdle is the maximum number of idle connections the pool will keep. A
-	// value of 0 means unlimited. Default: 1000
+	// value of 0 means unlimited.
 	MaxIdle int
-	// Network to use. Default: "tcp"
+	// Network to use.
 	Network string
 	// Password for a password-protected redis database. If not empty,
 	// every connection will use the AUTH command during initialization
-	// to authenticate with the database. Default: ""
+	// to authenticate with the database.
 	Password string
 	// Wait indicates whether or not the pool should wait for a free connection
-	// if the MaxActive limit has been hit. If Wait is false and the MaxActive
-	// limit is hit, Zoom will return an error indicating that the pool is
-	// exhausted. Default: true
+	// if the MaxActive limit has been reached. If Wait is false and the
+	// MaxActive limit is reached, Zoom will return an error indicating that the
+	// pool is exhausted.
 	Wait bool
 }
 
