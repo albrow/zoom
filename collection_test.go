@@ -13,7 +13,7 @@ import (
 )
 
 // collectionTestModel is a model type that is only used for testing
-// the Register and RegisterName functions
+// the NewCollection and NewCollectionWithOptions functions
 type collectionTestModel struct {
 	Int    int
 	Bool   bool
@@ -25,9 +25,9 @@ func TestNewCollection(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
-	col, err := testPool.NewCollection(&collectionTestModel{}, nil)
+	col, err := testPool.NewCollection(&collectionTestModel{})
 	if err != nil {
-		t.Fatalf("Unexpected error in Register: %s", err.Error())
+		t.Fatalf("Unexpected error in NewCollection: %s", err.Error())
 	}
 	expectedName := "collectionTestModel"
 	expectedType := reflect.TypeOf(&collectionTestModel{})
@@ -43,12 +43,10 @@ func TestNewCollectionWithName(t *testing.T) {
 	defer testingTearDown()
 
 	expectedName := "customName"
-	col, err := testPool.NewCollection(&collectionTestModel{},
-		&CollectionOptions{
-			Name: expectedName,
-		})
+	options := DefaultCollectionOptions.WithName(expectedName)
+	col, err := testPool.NewCollectionWithOptions(&collectionTestModel{}, options)
 	if err != nil {
-		t.Fatalf("Unexpected error in Register: %s", err.Error())
+		t.Fatalf("Unexpected error in NewCollectionWithOptions: %s", err.Error())
 	}
 	expectedType := reflect.TypeOf(&collectionTestModel{})
 	testRegisteredCollectionType(t, col, expectedName, expectedType)
@@ -136,7 +134,38 @@ func TestSave(t *testing.T) {
 	expectFieldEquals(t, key, "Bool", mu, model.Bool)
 }
 
-func TestUpdateFields(t *testing.T) {
+func TestSaveFields(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Save the Int and Bool fields, leaving the String field empty.
+	model := &testModel{
+		Int:  43,
+		Bool: true,
+	}
+	if err := testModels.SaveFields([]string{"Int", "Bool"}, model); err != nil {
+		t.Errorf("Unexpected error in testModels.SaveFields: %s", err.Error())
+	}
+
+	// Make sure the model was saved correctly
+	expectModelExists(t, testModels, model)
+	key := testModels.ModelKey(model.ModelId())
+	mu := testModels.spec.fallback
+	expectFieldEquals(t, key, "Int", mu, model.Int)
+	expectFieldEquals(t, key, "String", mu, nil)
+	expectFieldEquals(t, key, "Bool", mu, model.Bool)
+
+	// Make sure the model can be found.
+	gotModel := &testModel{}
+	if err := testModels.Find(model.Id, gotModel); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(model, gotModel) {
+		t.Errorf("Expected: %+v\nBut got:  %+v", model, gotModel)
+	}
+}
+
+func TestSaveFieldsOverwrite(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -152,8 +181,8 @@ func TestUpdateFields(t *testing.T) {
 	originalString := model.String
 	model.String = "new" + model.String
 	model.Bool = !model.Bool
-	if err := testModels.UpdateFields([]string{"Int", "Bool"}, model); err != nil {
-		t.Errorf("Unexpected error in testModels.UpdateFields: %s", err.Error())
+	if err := testModels.SaveFields([]string{"Int", "Bool"}, model); err != nil {
+		t.Errorf("Unexpected error in testModels.SaveFields: %s", err.Error())
 	}
 
 	// Make sure the model was saved correctly
@@ -175,6 +204,26 @@ func TestFind(t *testing.T) {
 		t.Errorf("Unexpected error saving test models: %s", err.Error())
 	}
 	model := models[0]
+
+	// Find the model in the database and store it in modelCopy
+	modelCopy := &testModel{}
+	if err := testModels.Find(model.ModelId(), modelCopy); err != nil {
+		t.Errorf("Unexpected error in testModels.Find: %s", err.Error())
+	}
+	if !reflect.DeepEqual(model, modelCopy) {
+		t.Errorf("Found model was incorrect.\n\tExpected: %+v\n\tBut got:  %+v", model, modelCopy)
+	}
+}
+
+func TestFindEmpty(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Create model which is empty (no fields with values)
+	model := &testModel{}
+	if err := testModels.Save(model); err != nil {
+		t.Fatal(err)
+	}
 
 	// Find the model in the database and store it in modelCopy
 	modelCopy := &testModel{}

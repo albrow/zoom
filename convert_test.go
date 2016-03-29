@@ -10,6 +10,7 @@ package zoom
 import (
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestConvertPrimatives(t *testing.T) {
@@ -22,6 +23,24 @@ func TestConvertPointers(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 	testConvertType(t, indexedPointersModels, createIndexedPointersModel())
+}
+
+func TestTimeDuration(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	type durationModel struct {
+		Duration time.Duration
+		RandomId
+	}
+	durationModels, err := testPool.NewCollection(&durationModel{})
+	if err != nil {
+		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
+	}
+	model := &durationModel{
+		Duration: 43 * time.Second,
+	}
+	testConvertType(t, durationModels, model)
 }
 
 func TestGobFallback(t *testing.T) {
@@ -38,9 +57,8 @@ func TestGobFallback(t *testing.T) {
 		IntMap      map[int]int
 		RandomId
 	}
-	gobModels, err := testPool.NewCollection(&gobModel{}, &CollectionOptions{
-		FallbackMarshalerUnmarshaler: GobMarshalerUnmarshaler,
-	})
+	options := DefaultCollectionOptions.WithFallbackMarshalerUnmarshaler(GobMarshalerUnmarshaler)
+	gobModels, err := testPool.NewCollectionWithOptions(&gobModel{}, options)
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
@@ -69,9 +87,8 @@ func TestJSONFallback(t *testing.T) {
 		EmptyInterface interface{}
 		RandomId
 	}
-	jsonModels, err := testPool.NewCollection(&jsonModel{}, &CollectionOptions{
-		FallbackMarshalerUnmarshaler: JSONMarshalerUnmarshaler,
-	})
+	options := DefaultCollectionOptions.WithFallbackMarshalerUnmarshaler(JSONMarshalerUnmarshaler)
+	jsonModels, err := testPool.NewCollectionWithOptions(&jsonModel{}, options)
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
@@ -100,7 +117,7 @@ func TestConvertEmbeddedStruct(t *testing.T) {
 		Embeddable
 		RandomId
 	}
-	embededStructModels, err := testPool.NewCollection(&embeddedStructModel{}, nil)
+	embededStructModels, err := testPool.NewCollection(&embeddedStructModel{})
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
@@ -122,7 +139,7 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 		*Embeddable
 		RandomId
 	}
-	embededPointerToStructModels, err := testPool.NewCollection(&embeddedPointerToStructModel{}, nil)
+	embededPointerToStructModels, err := testPool.NewCollection(&embeddedPointerToStructModel{})
 	if err != nil {
 		t.Errorf("Unexpected error in testPool.NewCollection: %s", err.Error())
 	}
@@ -163,5 +180,13 @@ func testConvertType(t *testing.T, collection *Collection, model Model) {
 	}
 	if err := collection.Save(emptyModel); err != nil {
 		t.Errorf("Unexpected error saving an empty model: %s", err.Error())
+	}
+	emptyModelCopy, ok := reflect.New(collection.spec.typ.Elem()).Interface().(Model)
+	if err := collection.Find(emptyModel.ModelId(), emptyModelCopy); err != nil {
+		t.Errorf("Unexpected error in Find: %s", err.Error())
+	}
+	// Make sure the copy equals the original
+	if !reflect.DeepEqual(emptyModel, emptyModelCopy) {
+		t.Errorf("Model of type %T was not saved/retrieved correctly.\nExpected: %+v\nGot:      %+v", emptyModel, emptyModel, emptyModelCopy)
 	}
 }

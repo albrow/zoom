@@ -24,13 +24,16 @@ import (
 // not the redis names which may be custom.
 func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) error {
 	ms := mr.spec
+	if fieldValues == nil || len(fieldValues) == 0 {
+		return newModelNotFoundError(mr)
+	}
 	for i, reply := range fieldValues {
+		if reply == nil {
+			continue
+		}
 		fieldName := fieldNames[i]
 		replyBytes, err := redis.Bytes(reply, nil)
 		if err != nil {
-			if err == redis.ErrNil {
-				return newModelNotFoundError(mr)
-			}
 			return err
 		}
 		if fieldName == "-" {

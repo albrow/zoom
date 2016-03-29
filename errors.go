@@ -12,7 +12,8 @@ import "fmt"
 // ModelNotFoundError is returned from Find and Query methods if a model
 // that fits the given criteria is not found.
 type ModelNotFoundError struct {
-	Msg string
+	Collection *Collection
+	Msg        string
 }
 
 func (e ModelNotFoundError) Error() string {
@@ -26,5 +27,8 @@ func newModelNotFoundError(mr *modelRef) error {
 	} else {
 		msg = fmt.Sprintf("Could not find %s with the given criteria", mr.spec.name)
 	}
-	return ModelNotFoundError{Msg: msg}
+	return ModelNotFoundError{
+		Collection: mr.collection,
+		Msg:        msg,
+	}
 }

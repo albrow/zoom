@@ -8,10 +8,10 @@
 package zoom
 
 import (
-	"container/list"
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 
 	"github.com/garyburd/redigo/redis"
 )
@@ -85,38 +85,6 @@ const (
 	stringIndex
 	booleanIndex
 )
-
-var modelSpecs = list.New()
-
-// addModelSpec adds the given spec to the list of modelSpecs iff it has not
-// already been added.
-func addModelSpec(spec *modelSpec) {
-	for e := modelSpecs.Front(); e != nil; e = e.Next() {
-		otherSpec := e.Value.(*modelSpec)
-		if spec.typ == otherSpec.typ {
-			// The spec was already added to the list. No need to do anything.
-			return
-		}
-	}
-	modelSpecs.PushFront(spec)
-}
-
-// getModelSpecForModel returns the modelSpec corresponding to the type of
-// model.
-func getModelSpecForModel(model Model) (*modelSpec, error) {
-	typ := reflect.TypeOf(model)
-	for e := modelSpecs.Front(); e != nil; e = e.Next() {
-		spec := e.Value.(*modelSpec)
-		if spec.typ == typ {
-			return spec, nil
-		}
-	}
-	return nil, fmt.Errorf(
-		"Could not find modelSpec for type %T. Is there a corresponding"+
-			"Collection for this type?",
-		model,
-	)
-}
 
 // compilesModelSpec examines typ using reflection, parses its fields,
 // and returns a modelSpec.
@@ -198,7 +166,6 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 			fs.kind = inconvertibleField
 		}
 	}
-	addModelSpec(ms)
 	return ms, nil
 }
 
@@ -269,6 +236,18 @@ func (ms modelSpec) fieldRedisNames() []string {
 	return names
 }
 
+func (ms modelSpec) redisNamesForFieldNames(fieldNames []string) ([]string, error) {
+	redisNames := []string{}
+	for _, fieldName := range fieldNames {
+		fs, found := ms.fieldsByName[fieldName]
+		if !found {
+			return nil, fmt.Errorf("Type %s has no field named %s", ms.typ.Name(), fieldName)
+		}
+		redisNames = append(redisNames, fs.redisName)
+	}
+	return redisNames, nil
+}
+
 // fieldIndexKey returns the key for the sorted set used to index the field identified
 // by fieldName. It returns an error if fieldName does not identify a field in the spec
 // or if the field it identifies is not an indexed field.
@@ -290,9 +269,9 @@ func (ms *modelSpec) fieldIndexKey(fieldName string) (string, error) {
 // be the key of a set or a sorted set which consists of model ids. The arguments
 // use they "BY nosort" option, so if a specific order is required, the setKey should be
 // a sorted set.
-func (ms *modelSpec) sortArgs(setKey string, includeFields []string, limit int, offset uint, orderKind orderKind) redis.Args {
-	args := redis.Args{setKey, "BY", "nosort"}
-	for _, fieldName := range includeFields {
+func (ms *modelSpec) sortArgs(idsKey string, redisFieldNames []string, limit int, offset uint, reverse bool) redis.Args {
+	args := redis.Args{idsKey, "BY", "nosort"}
+	for _, fieldName := range redisFieldNames {
 		args = append(args, "GET", ms.name+":*->"+fieldName)
 	}
 	// We always want to get the id
@@ -300,11 +279,10 @@ func (ms *modelSpec) sortArgs(setKey string, includeFields []string, limit int, 
 	if !(limit == 0 && offset == 0) {
 		args = append(args, "LIMIT", offset, limit)
 	}
-	switch orderKind {
-	case ascendingOrder:
-		args = append(args, "ASC")
-	case descendingOrder:
+	if reverse {
 		args = append(args, "DESC")
+	} else {
+		args = append(args, "ASC")
 	}
 	return args
 }
@@ -341,8 +319,9 @@ func (spec *modelSpec) checkModelsType(models interface{}) error {
 // itself and a pointer to the corresponding spec. This allows us to avoid constant lookups
 // in the modelTypeToSpec map.
 type modelRef struct {
-	model Model
-	spec  *modelSpec
+	collection *Collection
+	model      Model
+	spec       *modelSpec
 }
 
 // value is an alias for reflect.ValueOf(mr.model)
@@ -392,7 +371,14 @@ func (mr *modelRef) mainHashArgsForFields(fieldNames []string) (redis.Args, erro
 		fieldVal := mr.fieldValue(fs.name)
 		switch fs.kind {
 		case primativeField:
-			args = args.Add(fs.redisName, fieldVal.Interface())
+			// Add a special case for time.Duration. By default, the redigo driver
+			// will fall back to fmt.Sprintf, but we want to save it as an int64 in
+			// this case.
+			if fs.typ == reflect.TypeOf(time.Duration(0)) {
+				args = args.Add(fs.redisName, int64(fieldVal.Interface().(time.Duration)))
+			} else {
+				args = args.Add(fs.redisName, fieldVal.Interface())
+			}
 		case pointerField:
 			if !fieldVal.IsNil() {
 				args = args.Add(fs.redisName, fieldVal.Elem().Interface())

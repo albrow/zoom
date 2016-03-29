@@ -33,11 +33,17 @@ var setUpOnce = sync.Once{}
 // testingSetUp
 func testingSetUp() {
 	setUpOnce.Do(func() {
-		testPool = NewPool(&PoolOptions{
-			Address:  *address,
-			Network:  *network,
-			Database: *database,
-		})
+		options := DefaultPoolOptions
+		if address != nil {
+			options = options.WithAddress(*address)
+		}
+		if network != nil {
+			options = options.WithNetwork(*network)
+		}
+		if database != nil {
+			options = options.WithDatabase(*database)
+		}
+		testPool = NewPoolWithOptions(options)
 		checkDatabaseEmpty()
 		registerTestingTypes()
 	})
@@ -261,9 +267,8 @@ func registerTestingTypes() {
 		},
 	}
 	for _, m := range testModelTypes {
-		collection, err := testPool.NewCollection(m.model, &CollectionOptions{
-			Index: m.index,
-		})
+		options := DefaultCollectionOptions.WithIndex(true)
+		collection, err := testPool.NewCollectionWithOptions(m.model, options)
 		if err != nil {
 			panic(err)
 		}
@@ -287,15 +292,14 @@ func checkDatabaseEmpty() {
 }
 
 // testingTearDown flushes the database. It should be run at the end
-// of each test that toches the database, typically by using defer.
+// of each test that touches the database, typically by using defer.
 func testingTearDown() {
 	// flush and close the database
 	conn := testPool.NewConn()
-	_, err := conn.Do("flushdb")
-	if err != nil {
+	defer conn.Close()
+	if _, err := conn.Do("flushdb"); err != nil {
 		panic(err)
 	}
-	conn.Close()
 }
 
 // expectSetContains sets an error via t.Errorf if member is not in the set
@@ -332,6 +336,12 @@ func expectFieldEquals(t *testing.T, key string, fieldName string, marshalerUnma
 	reply, err := conn.Do("HGET", key, fieldName)
 	if err != nil {
 		t.Errorf("Unexpected error in HGET: %s", err.Error())
+	}
+	if reply == nil {
+		if expected == nil {
+			return
+		}
+		t.Errorf("Field %s was nil. Expected: %v", fieldName, expected)
 	}
 	srcBytes, ok := reply.([]byte)
 	if !ok {

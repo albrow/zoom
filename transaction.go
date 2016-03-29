@@ -7,7 +7,11 @@
 
 package zoom
 
-import "github.com/garyburd/redigo/redis"
+import (
+	"fmt"
+
+	"github.com/garyburd/redigo/redis"
+)
 
 // Transaction is an abstraction layer around a redis transaction.
 // Transactions consist of a set of actions which are either redis
@@ -144,6 +148,9 @@ func (t *Transaction) Exec() error {
 		// Iterate through the replies, calling the corresponding handler functions
 		for i, reply := range replies {
 			a := t.actions[i]
+			if err, ok := reply.(error); ok {
+				return err
+			}
 			if a.handler != nil {
 				if err := a.handler(reply); err != nil {
 					return err
@@ -197,4 +204,18 @@ func (t *Transaction) ExtractIdsFromFieldIndex(setKey string, destKey string, mi
 // to their corresponding string values.
 func (t *Transaction) ExtractIdsFromStringIndex(setKey, destKey, min, max string) {
 	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, destKey, min, max}, nil)
+}
+
+func (t *Transaction) FindModelsByIdsKey(collection *Collection, idsKey string, fieldNames []string, limit uint, offset uint, reverse bool, models interface{}) {
+	if err := collection.checkModelsType(models); err != nil {
+		t.setError(fmt.Errorf("zoom: error in FindModelsByIdKey: %s", err.Error()))
+		return
+	}
+	redisNames, err := collection.spec.redisNamesForFieldNames(fieldNames)
+	if err != nil {
+		t.setError(fmt.Errorf("zoom: error in FindModelsByIdKey: %s", err.Error()))
+		return
+	}
+	sortArgs := collection.spec.sortArgs(idsKey, redisNames, int(limit), offset, reverse)
+	t.Command("SORT", sortArgs, newScanModelsHandler(collection.spec, append(fieldNames, "-"), models))
 }
