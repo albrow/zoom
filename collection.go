@@ -82,14 +82,18 @@ func (options CollectionOptions) WithName(name string) CollectionOptions {
 	return options
 }
 
+// NewCollection registers and returns a new collection of the given model type.
+// You must create a collection for each model type you want to save. The type
+// of model must be unique, i.e., not already registered, and must be a pointer
+// to a struct. NewCollection will use all the default options for the
+// collection, which are specified in DefaultCollectionOptions. If you want to
+// specify different options, use the NewCollectionWithOptions method.
 func (p *Pool) NewCollection(model Model) (*Collection, error) {
 	return p.NewCollectionWithOptions(model, DefaultCollectionOptions)
 }
 
-// NewCollection registers and returns a new collection of the given model type.
-// You must create a collection for each model type you want to save. The type
-// of model must be unique, i.e., not already registered, and must be a pointer
-// to a struct. To use the default options, pass in nil as the options argument.
+// NewCollection registers and returns a new collection of the given model type
+// and with the provided options.
 func (p *Pool) NewCollectionWithOptions(model Model, options CollectionOptions) (*Collection, error) {
 	typ := reflect.TypeOf(model)
 	// If options.Name is empty use the name of the concrete model type (without
