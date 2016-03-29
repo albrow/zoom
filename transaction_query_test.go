@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestTransactionalQueries(t *testing.T) {
+func TestTransactionQueries(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -45,7 +45,7 @@ func TestTransactionalQueries(t *testing.T) {
 	}
 }
 
-func TestTransactionalQueriesError(t *testing.T) {
+func TestTransactionQueriesError(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 

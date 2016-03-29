@@ -291,11 +291,10 @@ func checkDatabaseEmpty() {
 func testingTearDown() {
 	// flush and close the database
 	conn := testPool.NewConn()
-	_, err := conn.Do("flushdb")
-	if err != nil {
+	defer conn.Close()
+	if _, err := conn.Do("flushdb"); err != nil {
 		panic(err)
 	}
-	conn.Close()
 }
 
 // expectSetContains sets an error via t.Errorf if member is not in the set
