@@ -122,14 +122,6 @@ To install Zoom itself, run `go get -u github.com/albrow/zoom` to pull down the
 current master branch, or install with the dependency manager of your choice to
 lock in a specific version.
 
-Zoom supports the
-[Go 1.5 vendor experiment](https://docs.google.com/document/d/1Bz5-UB7g2uPBdOx-rw5t9MxJwkfpx90cqG9AFL0JAYo/edit)
-and all dependencies are installed into the vendor folder, which is checked into
-version control. To use Zoom, you must use Go version >= 1.5 and set
-`GO15VENDOREXPERIMENT=1`. (Internally, Zoom uses 
-[Glide](https://github.com/Masterminds/glide) to manage dependencies,
-but you do not need to install Glide to use Zoom).
-
 
 Initialization
 --------------
@@ -143,8 +135,9 @@ import (
 )
 ```
 
-Then, you must create a new pool with `zoom.NewPool`. A pool represents a pool
-of connections to the database. Since you may need access to the pool in
+Then, you must create a new pool with 
+[`NewPool`](http://godoc.org/github.com/albrow/zoom/#NewPool). A pool represents
+a pool of connections to the database. Since you may need access to the pool in
 different parts of your application, it is sometimes a good idea to declare a
 top-level variable and then initialize it in the `main` or `init` function. You
 must also call `pool.Close` when your application exits, so it's a good idea to
@@ -165,12 +158,17 @@ func main() {
 ```
 
 The `NewPool` function accepts an address which will be used to connect to
-Redis, and it will use all the default values for the other options. If you need
-to specify different options, you can use the `NewPoolWithOptions` function.
+Redis, and it will use all the
+[default values](http://godoc.org/github.com/albrow/zoom/#DefaultPoolOptions)
+for the other options. If you need to specify different options, you can use the
+[`NewPoolWithOptions`](http://godoc.org/github.com/albrow/zoom/#NewPoolWithOptions)
+function.
 
-For convenience, the `PoolOptions` type has chainable methods for changing each
-option. Typically you would start with `DefaultOptions` and call `WithX` to
-change the options you want to change.
+For convenience, the
+[`PoolOptions`](http://godoc.org/github.com/albrow/zoom/#PoolOptions) type has
+chainable methods for changing each option. Typically you would start with
+[`DefaultOptions`](http://godoc.org/github.com/albrow/zoom/#DefaultOptions) and
+call `WithX` to change value for option `X`.
 
 For example, here's how you could initialize a Pool that connects to Redis using
 a unix socket connection on `/tmp/unix.sock`:
@@ -256,56 +254,47 @@ pools, you will need to create a collection for each pool.
 
 ``` go
 // Create a new collection for the Person type.
-People, err := pool.NewCollection(&Person{}, nil)
+People, err := pool.NewCollection(&Person{})
 if err != nil {
 	 // handle error
 }
 ```
 
-The second argument to `NewCollection` is a
-[`CollectionOptions`](http://godoc.org/github.com/albrow/zoom#CollectionOptions).
-It works similarly to `PoolOptions`. You can just pass nil to use all the
-default options. Additionally, any zero-valued fields in the struct indicate
-that the default value should be used for that field.
 
+The convention is to name the `Collection` the plural of the corresponding
+model type (e.g. "People"), but it's just a variable so you can name it
+whatever you want.
+
+`NewCollection` will use all the
+[default options](http://godoc.org/github.com/albrow/zoom/#DefaultCollectionOptions)
+for the collection.
+
+If you need to specify other options, use the
+[`NewCollectionWithOptions`](http://godoc.org/github.com/albrow/zoom/#NewCollectionWithOptions)
+function. The second argument to `NewCollectionWithOptions` is a
+[`CollectionOptions`](http://godoc.org/github.com/albrow/zoom#CollectionOptions).
+It works similarly to `PoolOptions`, so you can start with
+[`DefaultCollectionOptions`](http://godoc.org/github.com/albrow/zoom/#DefaultCollectionOptions)
+and use the chainable `WithX` methods to specify a new value for option `X`.
+
+Here's an example of how to create a new `Collection` which is indexed, allowing
+you to use Queries and methods like `FindAll` which rely on collection indexing:
 
 ``` go
-type CollectionOptions struct {
-	// FallbackMarshalerUnmarshaler is used to marshal/unmarshal any type
-	// into a slice of bytes which is suitable for storing in the database. If
-	// Zoom does not know how to directly encode a certain type into bytes, it
-	// will use the FallbackMarshalerUnmarshaler. By default, the value is
-	// GobMarshalerUnmarshaler which uses the builtin gob package. Zoom also
-	// provides JSONMarshalerUnmarshaler to support json encoding out of the box.
-	// Default: GobMarshalerUnmarshaler.
-	FallbackMarshalerUnmarshaler MarshalerUnmarshaler
-	// If Index is true, any model in the collection that is saved will be added
-	// to a set in Redis which acts as an index. The default value is false. The
-	// key for the set is exposed via the IndexKey method. Queries and the
-	// FindAll, Count, and DeleteAll methods will not work for unindexed
-	// collections. This may change in future versions. Default: false.
-	Index bool
-	// Name is a unique string identifier to use for the collection in Redis. All
-	// models in this collection that are saved in the database will use the
-	// collection name as a prefix. If not provided, the default name will be the
-	// name of the model type without the package prefix or pointer declarations.
-	// So for example, the default name corresponding to *models.User would be
-	// "User". If a custom name is provided, it cannot contain a colon.
-	// Default: The name of the model type, excluding package prefix and pointer
-	// declarations.
-	Name string
+options := zoom.DefaultCollectionOptions.WithIndex(true)
+People, err = pool.NewCollection(&Person{}, options)
+if err != nil {
+	// handle error
 }
 ```
 
 There are a few important points to emphasize concerning collections:
 
 1. The collection name cannot contain a colon.
-2. Queries, as well as the FindAll, DeleteAll, and Count methods will not work
-   if Index is false. This may change in future versions.
+2. Queries, as well as the `FindAll`, `DeleteAll`, and `Count` methods will not
+	work if `Index` is `false`. This may change in future versions.
 
-Convention is to name the `Collection` the plural of the corresponding
-model type (e.g. "People"), but it's just a variable so you can name it
-whatever you want. If you need to access a `Collection` in different parts of
+If you need to access a `Collection` in different parts of
 your application, it is sometimes a good idea to declare a top-level variable
 and then initialize it in the `init` function:
 
@@ -317,12 +306,13 @@ var (
 func init() {
 	var err error
 	// Assuming pool and Person are already defined.
-	People, err = pool.NewCollection(&Person{}, nil)
+	People, err = pool.NewCollection(&Person{})
 	if err != nil {
 		// handle error
 	}
 }
 ```
+
 
 ### Saving Models
 
