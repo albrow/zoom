@@ -33,11 +33,17 @@ var setUpOnce = sync.Once{}
 // testingSetUp
 func testingSetUp() {
 	setUpOnce.Do(func() {
-		testPool = NewPool(&PoolOptions{
-			Address:  *address,
-			Network:  *network,
-			Database: *database,
-		})
+		options := DefaultPoolOptions
+		if address != nil {
+			options = options.WithAddress(*address)
+		}
+		if network != nil {
+			options = options.WithNetwork(*network)
+		}
+		if database != nil {
+			options = options.WithDatabase(*database)
+		}
+		testPool = NewPoolWithOptions(options)
 		checkDatabaseEmpty()
 		registerTestingTypes()
 	})

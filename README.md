@@ -154,7 +154,7 @@ use defer.
 var pool *zoom.Pool
 
 func main() {
-	pool = zoom.NewPool(nil)
+	pool = zoom.NewPool("localhost:6379")
 	defer func() {
 		if err := pool.Close(); err != nil {
 			// handle error
@@ -164,27 +164,21 @@ func main() {
 }
 ```
 
-The `NewPool` function takes a `zoom.PoolOptions` as an argument. Here's a list of options and their
-defaults:
+The `NewPool` function accepts an address which will be used to connect to
+Redis, and it will use all the default values for the other options. If you need
+to specify different options, you can use the `NewPoolWithOptions` function.
+
+For convenience, the `PoolOptions` type has chainable methods for changing each
+option. Typically you would start with `DefaultOptions` and call `WithX` to
+change the options you want to change.
+
+For example, here's how you could initialize a Pool that connects to Redis using
+a unix socket connection on `/tmp/unix.sock`:
 
 ``` go
-type PoolOptions struct {
-	// Address to connect to. Default: "localhost:6379"
-	Address string
-	// Network to use. Default: "tcp"
-	Network string
-	// Database id to use (using SELECT). Default: 0
-	Database int
-	// Password for a password-protected redis database. If not empty,
-	// every connection will use the AUTH command during initialization
-	// to authenticate with the database. Default: ""
-	Password string
-}
+options := zoom.DefaultPoolOptions.WithNetwork("unix").WithAddress("/tmp/unix.sock")
+pool = zoom.NewPoolWithOptions(options)
 ```
-
-If you pass in `nil` to `NewPool`, Zoom will use all the default values. Any fields in the `PoolOptions`
-struct that are empty (e.g., an empty string or 0) will fall back to their default values, so you only need
-to provide a `PoolOptions` struct with the fields you want to change.
 
 
 Models
