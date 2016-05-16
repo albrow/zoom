@@ -92,7 +92,7 @@ func (p *Pool) NewCollection(model Model) (*Collection, error) {
 	return p.NewCollectionWithOptions(model, DefaultCollectionOptions)
 }
 
-// NewCollection registers and returns a new collection of the given model type
+// NewCollectionWithOptions registers and returns a new collection of the given model type
 // and with the provided options.
 func (p *Pool) NewCollectionWithOptions(model Model, options CollectionOptions) (*Collection, error) {
 	typ := reflect.TypeOf(model)
