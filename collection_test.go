@@ -318,6 +318,36 @@ func TestFindAll(t *testing.T) {
 	}
 }
 
+func TestExists(t *testing.T) {
+	testingSetUp()
+	defer testingTearDown()
+
+	// Expect exists to be false if we haven't saved any models
+	exists, err := testModels.Exists("invalidId")
+	if err != nil {
+		t.Errorf("Unexpected error in testModels.Exists: %s", err.Error())
+	}
+	if exists {
+		t.Errorf("Expected exists to be false, but got: %v", exists)
+	}
+
+	// Create and save a test model
+	models, err := createAndSaveTestModels(1)
+	if err != nil {
+		t.Errorf("Unexpected error saving test models: %s", err.Error())
+	}
+	model := models[0]
+
+	// Expect exists to be true
+	exists, err = testModels.Exists(model.Id)
+	if err != nil {
+		t.Errorf("Unexpected error in testModels.Exists: %s", err.Error())
+	}
+	if !exists {
+		t.Errorf("Expected exists to be true, but got: %v", exists)
+	}
+}
+
 func TestCount(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
@@ -346,7 +376,6 @@ func TestCount(t *testing.T) {
 	if got != expected {
 		t.Errorf("Expected Count to be %d but got %d", expected, got)
 	}
-
 }
 
 func TestDelete(t *testing.T) {
