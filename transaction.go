@@ -13,32 +13,33 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
-// Transaction is an abstraction layer around a redis transaction.
-// Transactions consist of a set of actions which are either redis
+// Transaction is an abstraction layer around a Redis transaction.
+// Transactions consist of a set of actions which are either Redis
 // commands or lua scripts. Transactions feature delayed execution,
-// so nothing toches the database until you call Exec.
+// so nothing touches the database until you call Exec.
 type Transaction struct {
-	conn    redis.Conn
-	actions []*Action
-	err     error
+	conn     redis.Conn
+	actions  []*Action
+	err      error
+	watching []string
 }
 
 // Action is a single step in a transaction and must be either a command
 // or a script with optional arguments and a reply handler.
 type Action struct {
-	kind    ActionKind
+	kind    actionKind
 	name    string
 	script  *redis.Script
 	args    redis.Args
 	handler ReplyHandler
 }
 
-// ActionKind is either a command or a script
-type ActionKind int
+// actionKind is either a command or a script
+type actionKind int
 
 const (
-	CommandAction ActionKind = iota
-	ScriptAction
+	commandAction actionKind = iota
+	scriptAction
 )
 
 // NewTransaction instantiates and returns a new transaction.
@@ -57,12 +58,48 @@ func (t *Transaction) setError(err error) {
 	}
 }
 
+// Watch issues a Redis WATCH command using the key for the given model. If the
+// model changes before the transaction is executed, Exec will return a
+// WatchError and the commands in the transaction will not be executed. Unlike
+// most other transaction methods, Watch does not use delayed execution. Because
+// of how the WATCH command works, Watch must send a command to Redis
+// immediately. You must call Watch or WatchKey before any other transaction
+// methods.
+func (t *Transaction) Watch(model Model) error {
+	if len(t.actions) != 0 {
+		return fmt.Errorf("Cannot call Watch after other commands have been added to the transaction")
+	}
+	col, err := getCollectionForModel(model)
+	if err != nil {
+		return err
+	}
+	key := col.ModelKey(model.ModelId())
+	return t.WatchKey(key)
+}
+
+// WatchKey issues a Redis WATCH command using the given key. If the key changes
+// before the transaction is executed, Exec will return a WatchError and the
+// commands in the transaction will not be executed. Unlike most other
+// transaction methods, WatchKey does not use delayed execution. Because of how
+// the WATCH command works, WatchKey must send a command to Redis immediately.
+// You must call Watch or WatchKey before any other transaction methods.
+func (t *Transaction) WatchKey(key string) error {
+	if len(t.actions) != 0 {
+		return fmt.Errorf("Cannot call WatchKey after other commands have been added to the transaction")
+	}
+	if _, err := t.conn.Do("WATCH", key); err != nil {
+		return err
+	}
+	t.watching = append(t.watching, key)
+	return nil
+}
+
 // Command adds a command action to the transaction with the given args.
 // handler will be called with the reply from this specific command when
 // the transaction is executed.
 func (t *Transaction) Command(name string, args redis.Args, handler ReplyHandler) {
 	t.actions = append(t.actions, &Action{
-		kind:    CommandAction,
+		kind:    commandAction,
 		name:    name,
 		args:    args,
 		handler: handler,
@@ -74,7 +111,7 @@ func (t *Transaction) Command(name string, args redis.Args, handler ReplyHandler
 // the transaction is executed.
 func (t *Transaction) Script(script *redis.Script, args redis.Args, handler ReplyHandler) {
 	t.actions = append(t.actions, &Action{
-		kind:    ScriptAction,
+		kind:    scriptAction,
 		script:  script,
 		args:    args,
 		handler: handler,
@@ -84,9 +121,9 @@ func (t *Transaction) Script(script *redis.Script, args redis.Args, handler Repl
 // sendAction writes a to a connection buffer using conn.Send()
 func (t *Transaction) sendAction(a *Action) error {
 	switch a.kind {
-	case CommandAction:
+	case commandAction:
 		return t.conn.Send(a.name, a.args...)
-	case ScriptAction:
+	case scriptAction:
 		return a.script.Send(t.conn, a.args...)
 	}
 	return nil
@@ -96,9 +133,9 @@ func (t *Transaction) sendAction(a *Action) error {
 // flushes the buffer and reads the reply via conn.Do()
 func (t *Transaction) doAction(a *Action) (interface{}, error) {
 	switch a.kind {
-	case CommandAction:
+	case commandAction:
 		return t.conn.Do(a.name, a.args...)
-	case ScriptAction:
+	case scriptAction:
 		return a.script.Do(t.conn, a.args...)
 	}
 	return nil, nil
@@ -116,8 +153,9 @@ func (t *Transaction) Exec() error {
 		return t.err
 	}
 
-	if len(t.actions) == 1 {
-		// If there is only one command, no need to use MULTI/EXEC
+	if len(t.actions) == 1 && len(t.watching) == 0 {
+		// If there is only one command and no keys being watched, no need to use
+		// MULTI/EXEC
 		a := t.actions[0]
 		reply, err := t.doAction(a)
 		if err != nil {
@@ -138,13 +176,14 @@ func (t *Transaction) Exec() error {
 				return err
 			}
 		}
-
 		// Invoke redis driver to execute the transaction
 		replies, err := redis.Values(t.conn.Do("EXEC"))
 		if err != nil {
+			if err == redis.ErrNil && len(t.watching) > 0 {
+				return WatchError{keys: t.watching}
+			}
 			return err
 		}
-
 		// Iterate through the replies, calling the corresponding handler functions
 		for i, reply := range replies {
 			a := t.actions[i]
@@ -204,18 +243,4 @@ func (t *Transaction) ExtractIdsFromFieldIndex(setKey string, destKey string, mi
 // to their corresponding string values.
 func (t *Transaction) ExtractIdsFromStringIndex(setKey, destKey, min, max string) {
 	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, destKey, min, max}, nil)
-}
-
-func (t *Transaction) FindModelsByIdsKey(collection *Collection, idsKey string, fieldNames []string, limit uint, offset uint, reverse bool, models interface{}) {
-	if err := collection.checkModelsType(models); err != nil {
-		t.setError(fmt.Errorf("zoom: error in FindModelsByIdKey: %s", err.Error()))
-		return
-	}
-	redisNames, err := collection.spec.redisNamesForFieldNames(fieldNames)
-	if err != nil {
-		t.setError(fmt.Errorf("zoom: error in FindModelsByIdKey: %s", err.Error()))
-		return
-	}
-	sortArgs := collection.spec.sortArgs(idsKey, redisNames, int(limit), offset, reverse)
-	t.Command("SORT", sortArgs, newScanModelsHandler(collection.spec, append(fieldNames, "-"), models))
 }

@@ -92,8 +92,8 @@ func (p *Pool) NewCollection(model Model) (*Collection, error) {
 	return p.NewCollectionWithOptions(model, DefaultCollectionOptions)
 }
 
-// NewCollection registers and returns a new collection of the given model type
-// and with the provided options.
+// NewCollectionWithOptions registers and returns a new collection of the given
+// model type and with the provided options.
 func (p *Pool) NewCollectionWithOptions(model Model, options CollectionOptions) (*Collection, error) {
 	typ := reflect.TypeOf(model)
 	// If options.Name is empty use the name of the concrete model type (without
@@ -575,6 +575,30 @@ func (t *Transaction) FindAll(c *Collection, models interface{}) {
 	t.Command("SORT", sortArgs, newScanModelsHandler(c.spec, fieldNames, models))
 }
 
+// Exists returns true if the collection has a model with the given id. It
+// returns an error if there was a problem connecting to the database.
+func (c *Collection) Exists(id string) (bool, error) {
+	t := c.pool.NewTransaction()
+	exists := false
+	t.Exists(c, id, &exists)
+	if err := t.Exec(); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
+// Exists sets the value of exists to true if a model exists in the given
+// collection with the given id, and sets it to false otherwise. The first error
+// encountered (if any) will be added to the transaction and returned when
+// the transaction is executed.
+func (t *Transaction) Exists(c *Collection, id string, exists *bool) {
+	if c == nil {
+		t.setError(newNilCollectionError("Exists"))
+		return
+	}
+	t.Command("EXISTS", redis.Args{c.ModelKey(id)}, NewScanBoolHandler(exists))
+}
+
 // Count returns the number of models of the given type that exist in the database.
 // It returns an error if there was a problem connecting to the database.
 func (c *Collection) Count() (int, error) {
@@ -582,7 +606,7 @@ func (c *Collection) Count() (int, error) {
 	count := 0
 	t.Count(c, &count)
 	if err := t.Exec(); err != nil {
-		return count, err
+		return 0, err
 	}
 	return count, nil
 }

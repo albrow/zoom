@@ -1,7 +1,7 @@
 Zoom
 ====
 
-[![Version](https://img.shields.io/badge/version-0.17.0-5272B4.svg)](https://github.com/albrow/zoom/releases)
+[![Version](https://img.shields.io/badge/version-0.18.0-5272B4.svg)](https://github.com/albrow/zoom/releases)
 [![Circle CI](https://img.shields.io/circleci/project/albrow/zoom/master.svg)](https://circleci.com/gh/albrow/zoom/tree/master)
 [![GoDoc](https://godoc.org/github.com/albrow/zoom?status.svg)](https://godoc.org/github.com/albrow/zoom)
 
@@ -42,10 +42,10 @@ Table of Contents
 - [More Information](#more-information)
   * [Persistence](#persistence)
   * [Atomicity](#atomicity)
-  * [Concurrent Updates](#concurrent-updates)
+  * [Concurrent Updates and Optimistic Locking](#concurrent-updates-and-optimistic-locking)
 - [Testing & Benchmarking](#testing---benchmarking)
-  * [Running the Tests:](#running-the-tests-)
-  * [Running the Benchmarks:](#running-the-benchmarks-)
+  * [Running the Tests](#running-the-tests)
+  * [Running the Benchmarks](#running-the-benchmarks)
 - [Contributing](#contributing)
 - [Example Usage](#example-usage)
 - [License](#license)
@@ -56,7 +56,7 @@ Development Status
 ------------------
 
 Zoom was first started in 2013. It is well-tested and going forward the API
-will be relatively stable. We are closing in on Version 1.0.0-alpha.
+will be relatively stable. We are closing in on Version 1.0.
 
 At this time, Zoom can be considered safe for use in low-traffic production
 applications. However, as with any relatively new package, it is possible that
@@ -97,15 +97,15 @@ Zoom might be a good fit if:
 
 Zoom might ***not*** be a good fit if:
 
-1. **You are working with a lot of data.** Zoom stores all data in memory at all times, and does not
+1. **You are working with a lot of data.** Redis is an in-memory database, and Zoom does not
 	yet support sharding or Redis Cluster. Memory could be a hard constraint for larger applications.
 	Keep in mind that it is possible (if expensive) to run Redis on machines with up to 256GB of memory
 	on cloud providers such as Amazon EC2.
-2. **You require the ability to run advanced queries.** Zoom currently only provides support for
-	basic queries and is not as powerful or flexible as something like SQL. For example, Zoom currently
-	lacks the equivalent of the `IN` or `OR` SQL keywords. See the
-	[documentation](http://godoc.org/github.com/albrow/zoom/#Query) for a full list of the types of queries
-	supported.
+2. **You need advanced queries.** Zoom currently only provides support for basic queries and is
+	not as powerful or flexible as something like SQL. For example, Zoom currently lacks the
+	equivalent of the `IN` or `OR` SQL keywords. See the
+	[documentation](http://godoc.org/github.com/albrow/zoom/#Query) for a full list of the types
+	of queries supported.
 
 
 Installation
@@ -197,7 +197,7 @@ To clarify, all you have to do to implement the `Model` interface is add a gette
 for a unique id property.
 
 If you want, you can embed `zoom.RandomId` to give your model all the
-required methods. A struct with `zoom.RandomId` embedded will genrate a pseudo-random id for itself
+required methods. A struct with `zoom.RandomId` embedded will generate a pseudo-random id for itself
 the first time the `ModelId` method is called iff it does not already have an id. The pseudo-randomly
 generated id consists of the current UTC unix time with second precision, an incremented atomic
 counter, a unique machine identifier, and an additional random string of characters. With ids generated
@@ -349,7 +349,8 @@ if err := People.UpdateFields([]string{"Name"}, person); err != nil {
 `UpdateFields` uses "last write wins" semantics, so if another caller updates
 the same field, your changes may be overwritten. That means it is not safe for
 "read before write" updates. See the section on
-[Concurrent Updates](#concurrent-updates) for more information.
+[Concurrent Updates](#concurrent-updates-and-optimistic-locking) for more
+information.
 
 ### Finding a Single Model
 
@@ -580,7 +581,7 @@ corrupted. If this happens, Redis will refuse to start until the AOF file is fix
 easy to fix the problem with the `redis-check-aof` tool, which will remove the partial transaction
 from the AOF file.
 
-If you intend to issue custom Redis commands or run custom scripts, it is highly recommended that
+If you intend to issue Redis commands directly or run custom scripts, it is highly recommended that
 you also make everything atomic. If you do not, Zoom can no longer guarantee that its indexes are
 consistent. For example, if you change the value of a field which is indexed, you should also
 update the index for that field in the same transaction. The keys that Zoom uses for indexes
@@ -593,21 +594,29 @@ Read more about:
 - [Redis scripts](http://redis.io/commands/eval)
 - [Redis transactions](http://redis.io/topics/transactions)
 
-### Concurrent Updates
+### Concurrent Updates and Optimistic Locking
 
-Currently, Zoom does not directly support concurrent "read before write" updates
-on models. The `UpdateFields` method introduced in version 0.12 offers some
-additional safety for concurrent updates, as long as no concurrent callers
-update the same fields (or if you are okay with updates overwriting previous
-changes). However, cases where you need to do a "read before write" update are
-still not safe if you use a naive implementation. For example, consider the
-following code:
+Zoom 0.18.0 introduced support for basic optimistic locking. You can use
+optimistic locking to safely implement concurrent "read before write" updates.
+
+Optimistic locking utilizes the `WATCH`, `MULTI`, and `EXEC` commands in Redis
+and only works in the context of transactions. You can use the
+[`Transaction.Watch`](https://godoc.org/github.com/albrow/zoom#Transaction.Watch)
+method to watch a model for changes. If the model changes after you call `Watch`
+but before you call `Exec`, the transaction will not be executed and instead
+will return a
+[`WatchError`](https://godoc.org/github.com/albrow/zoom#WatchError). You can
+also use the `WatchKey` method, which functions exactly the same but operates on
+keys instead of models.
+
+To understand why optimistic locking is useful, consider the following code:
 
 ``` go
+// likePost increments the number of likes for a post with the given id.
 func likePost(postId string) error {
   // Find the Post with the given postId
   post := &Post{}
-  if err := Posts.Find(postId); err != nil {
+  if err := Posts.Find(postId, post); err != nil {
 	 return err
   }
   // Increment the number of likes
@@ -628,15 +637,48 @@ multiple machines concurrently, because the `Post` model can change in between
 the time we retrieved it from the database with `Find` and saved it again with
 `Save`.
 
-However, since Zoom allows you to run your own Redis commands, you could fix
-this code by manually using HINCRBY:
+You can use optimistic locking to avoid this problem. Here's the revised code:
+
+```go
+// likePost increments the number of likes for a post with the given id.
+func likePost(postId string) error {
+  // Start a new transaction and watch the post key for changes. It's important
+  // to call Watch or WatchKey *before* finding the model.
+  tx := pool.NewTransaction()
+  if err := tx.WatchKey(Posts.ModelKey(postId)); err != nil {
+    return err
+  }
+  // Find the Post with the given postId
+  post := &Post{}
+  if err := Posts.Find(postId, post); err != nil {
+	 return err
+  }
+  // Increment the number of likes
+  post.Likes += 1
+  // Save the post in a transaction
+  tx.Save(Posts, post)
+  if err := tx.Exec(); err != nil {
+  	 // If the post was modified by another goroutine or server, Exec will return
+  	 // a WatchError. You could call likePost again to retry the operation.
+    return err
+  }
+}
+```
+
+Optimistic locking is not appropriate for models which are frequently updated,
+because you would almost always get a `WatchError`. In fact, it's called
+"optimistic" locking because you are optimistically assuming that conflicts will
+be rare. That's not always a safe assumption.
+
+Don't forget that Zoom allows you to run Redis commands directly. This
+particular problem might be best solved by the `HINCRBY` command.
 
 ```go
 // likePost atomically increments the number of likes for a post with the given
 // id and then returns the new number of likes.
 func likePost(postId string) (int, error) {
 	// Get the key which is used to store the post in Redis
-	postKey := Posts.ModelKey(postId)
+	postKey := Posts.ModelKey(postId, post)
 	// Start a new transaction
 	tx := pool.NewTransaction()
 	// Add a command to increment the number of Likes. The HINCRBY command returns
@@ -654,9 +696,13 @@ func likePost(postId string) (int, error) {
 }
 ```
 
-Future versions of Zoom may provide
-[optimistic locking](https://github.com/albrow/zoom/issues/13) or other means to
-make "read before write" updates easier.
+Finally, if optimistic locking is not appropriate and there is no built-in Redis
+command that offers the functionality you need, Zoom also supports custom Lua
+scripts via the
+[`Transaction.Script`](https://godoc.org/github.com/albrow/zoom#Transaction.Script)
+method. Redis is single-threaded and scripts are always executed atomically, so
+you can perform complicated updates without worrying about other clients
+changing the database.
 
 Read more about:
 - [Redis Commands](http://redis.io/commands)
