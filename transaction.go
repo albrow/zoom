@@ -27,19 +27,19 @@ type Transaction struct {
 // Action is a single step in a transaction and must be either a command
 // or a script with optional arguments and a reply handler.
 type Action struct {
-	kind    ActionKind
+	kind    actionKind
 	name    string
 	script  *redis.Script
 	args    redis.Args
 	handler ReplyHandler
 }
 
-// ActionKind is either a command or a script
-type ActionKind int
+// actionKind is either a command or a script
+type actionKind int
 
 const (
-	CommandAction ActionKind = iota
-	ScriptAction
+	commandAction actionKind = iota
+	scriptAction
 )
 
 // NewTransaction instantiates and returns a new transaction.
@@ -99,7 +99,7 @@ func (t *Transaction) WatchKey(key string) error {
 // the transaction is executed.
 func (t *Transaction) Command(name string, args redis.Args, handler ReplyHandler) {
 	t.actions = append(t.actions, &Action{
-		kind:    CommandAction,
+		kind:    commandAction,
 		name:    name,
 		args:    args,
 		handler: handler,
@@ -111,7 +111,7 @@ func (t *Transaction) Command(name string, args redis.Args, handler ReplyHandler
 // the transaction is executed.
 func (t *Transaction) Script(script *redis.Script, args redis.Args, handler ReplyHandler) {
 	t.actions = append(t.actions, &Action{
-		kind:    ScriptAction,
+		kind:    scriptAction,
 		script:  script,
 		args:    args,
 		handler: handler,
@@ -121,9 +121,9 @@ func (t *Transaction) Script(script *redis.Script, args redis.Args, handler Repl
 // sendAction writes a to a connection buffer using conn.Send()
 func (t *Transaction) sendAction(a *Action) error {
 	switch a.kind {
-	case CommandAction:
+	case commandAction:
 		return t.conn.Send(a.name, a.args...)
-	case ScriptAction:
+	case scriptAction:
 		return a.script.Send(t.conn, a.args...)
 	}
 	return nil
@@ -133,9 +133,9 @@ func (t *Transaction) sendAction(a *Action) error {
 // flushes the buffer and reads the reply via conn.Do()
 func (t *Transaction) doAction(a *Action) (interface{}, error) {
 	switch a.kind {
-	case CommandAction:
+	case commandAction:
 		return t.conn.Do(a.name, a.args...)
-	case ScriptAction:
+	case scriptAction:
 		return a.script.Do(t.conn, a.args...)
 	}
 	return nil, nil
