@@ -59,9 +59,16 @@ func (t *Transaction) setError(err error) {
 }
 
 // Watch issues a Redis WATCH command using the key for the given model. If the
-// model changes before the transaction is executed, Exec will return an error
-// and the commands in the transaction will not be executed.
+// model changes before the transaction is executed, Exec will return a
+// WatchError and the commands in the transaction will not be executed. Unlike
+// most other transaction methods, Watch does not use delayed execution. Because
+// of how the WATCH command works, Watch must send a command to Redis
+// immediately. You must call Watch or WatchKey before any other transaction
+// methods.
 func (t *Transaction) Watch(model Model) error {
+	if len(t.actions) != 0 {
+		return fmt.Errorf("Cannot call Watch after other commands have been added to the transaction")
+	}
 	col, err := getCollectionForModel(model)
 	if err != nil {
 		return err
@@ -71,9 +78,15 @@ func (t *Transaction) Watch(model Model) error {
 }
 
 // WatchKey issues a Redis WATCH command using the given key. If the key changes
-// before the transaction is executed, Exec will return an error and the
-// commands in the transaction will not be executed.
+// before the transaction is executed, Exec will return a WatchError and the
+// commands in the transaction will not be executed. Unlike most other
+// transaction methods, WatchKey does not use delayed execution. Because of how
+// the WATCH command works, WatchKey must send a command to Redis immediately.
+// You must call Watch or WatchKey before any other transaction methods.
 func (t *Transaction) WatchKey(key string) error {
+	if len(t.actions) != 0 {
+		return fmt.Errorf("Cannot call WatchKey after other commands have been added to the transaction")
+	}
 	if _, err := t.conn.Do("WATCH", key); err != nil {
 		return err
 	}
