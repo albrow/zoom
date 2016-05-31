@@ -18,9 +18,10 @@ import (
 // commands or lua scripts. Transactions feature delayed execution,
 // so nothing toches the database until you call Exec.
 type Transaction struct {
-	conn    redis.Conn
-	actions []*Action
-	err     error
+	conn     redis.Conn
+	actions  []*Action
+	err      error
+	watching []string
 }
 
 // Action is a single step in a transaction and must be either a command
@@ -55,6 +56,29 @@ func (t *Transaction) setError(err error) {
 	if t.err == nil {
 		t.err = err
 	}
+}
+
+// Watch issues a Redis WATCH command using the key for the given model. If the
+// model changes before the transaction is executed, Exec will return an error
+// and the commands in the transaction will not be executed.
+func (t *Transaction) Watch(model Model) error {
+	col, err := getCollectionForModel(model)
+	if err != nil {
+		return err
+	}
+	key := col.ModelKey(model.ModelId())
+	return t.WatchKey(key)
+}
+
+// WatchKey issues a Redis WATCH command using the given key. If the key changes
+// before the transaction is executed, Exec will return an error and the
+// commands in the transaction will not be executed.
+func (t *Transaction) WatchKey(key string) error {
+	if _, err := t.conn.Do("WATCH", key); err != nil {
+		return err
+	}
+	t.watching = append(t.watching, key)
+	return nil
 }
 
 // Command adds a command action to the transaction with the given args.
@@ -116,8 +140,9 @@ func (t *Transaction) Exec() error {
 		return t.err
 	}
 
-	if len(t.actions) == 1 {
-		// If there is only one command, no need to use MULTI/EXEC
+	if len(t.actions) == 1 && len(t.watching) == 0 {
+		// If there is only one command and no keys being watched, no need to use
+		// MULTI/EXEC
 		a := t.actions[0]
 		reply, err := t.doAction(a)
 		if err != nil {
@@ -138,13 +163,14 @@ func (t *Transaction) Exec() error {
 				return err
 			}
 		}
-
 		// Invoke redis driver to execute the transaction
 		replies, err := redis.Values(t.conn.Do("EXEC"))
 		if err != nil {
+			if err == redis.ErrNil && len(t.watching) > 0 {
+				return WatchError{keys: t.watching}
+			}
 			return err
 		}
-
 		// Iterate through the replies, calling the corresponding handler functions
 		for i, reply := range replies {
 			a := t.actions[i]

@@ -32,3 +32,11 @@ func newModelNotFoundError(mr *modelRef) error {
 		Msg:        msg,
 	}
 }
+
+type WatchError struct {
+	keys []string
+}
+
+func (e WatchError) Error() string {
+	return fmt.Sprintf("Watch error: at least one of the following keys has changed: %v", e.keys)
+}
