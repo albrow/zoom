@@ -13,10 +13,10 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
-// Transaction is an abstraction layer around a redis transaction.
-// Transactions consist of a set of actions which are either redis
+// Transaction is an abstraction layer around a Redis transaction.
+// Transactions consist of a set of actions which are either Redis
 // commands or lua scripts. Transactions feature delayed execution,
-// so nothing toches the database until you call Exec.
+// so nothing touches the database until you call Exec.
 type Transaction struct {
 	conn     redis.Conn
 	actions  []*Action
