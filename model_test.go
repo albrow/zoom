@@ -7,8 +7,10 @@
 package zoom
 
 import (
+	"errors"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 )
@@ -44,6 +46,12 @@ func TestCompileModelSpec(t *testing.T) {
 		String string `redis:"myString"`
 		Bool   bool   `redis:"myBool"`
 	}
+	type Inconvertible struct {
+		Time time.Time
+	}
+	type InconvertibleIndexed struct {
+		Time time.Time `zoom:"index"`
+	}
 	type Embedded struct {
 		Primative
 	}
@@ -54,8 +62,9 @@ func TestCompileModelSpec(t *testing.T) {
 		private
 	}
 	testCases := []struct {
-		model        interface{}
-		expectedSpec *modelSpec
+		model         interface{}
+		expectedSpec  *modelSpec
+		expectedError error
 	}{
 		{
 			model: &Primative{},
@@ -286,6 +295,36 @@ func TestCompileModelSpec(t *testing.T) {
 			},
 		},
 		{
+			model: &Inconvertible{},
+			expectedSpec: &modelSpec{
+				typ:  reflect.TypeOf(&Inconvertible{}),
+				name: "Inconvertible",
+				fieldsByName: map[string]*fieldSpec{
+					"Time": &fieldSpec{
+						kind:      inconvertibleField,
+						name:      "Time",
+						redisName: "Time",
+						typ:       reflect.TypeOf(Inconvertible{}.Time),
+						indexKind: noIndex,
+					},
+				},
+				fields: []*fieldSpec{
+					{
+						kind:      inconvertibleField,
+						name:      "Time",
+						redisName: "Time",
+						typ:       reflect.TypeOf(Inconvertible{}.Time),
+						indexKind: noIndex,
+					},
+				},
+			},
+		},
+		{
+			model:         &InconvertibleIndexed{},
+			expectedSpec:  nil,
+			expectedError: errors.New("zoom: Requested index on unsupported type time.Time"),
+		},
+		{
 			model: &Embedded{},
 			expectedSpec: &modelSpec{
 				typ:  reflect.TypeOf(&Embedded{}),
@@ -321,16 +360,32 @@ func TestCompileModelSpec(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		gotSpec, err := compileModelSpec(reflect.TypeOf(tc.model))
-		if err != nil {
-			t.Error("Error compiling model spec: ", err.Error())
-			continue
-		}
-		if !reflect.DeepEqual(tc.expectedSpec, gotSpec) {
-			t.Errorf(
-				"Incorrect model spec.\nExpected: %s\nBut got:  %s\n",
-				spew.Sprint(tc.expectedSpec),
-				spew.Sprint(gotSpec),
-			)
+		if tc.expectedError == nil {
+			if err != nil {
+				t.Error("Error compiling model spec: ", err.Error())
+				continue
+			}
+			if !reflect.DeepEqual(tc.expectedSpec, gotSpec) {
+				t.Errorf(
+					"Incorrect model spec.\nExpected: %s\nBut got:  %s\n",
+					spew.Sprint(tc.expectedSpec),
+					spew.Sprint(gotSpec),
+				)
+			}
+		} else {
+			if err == nil {
+				t.Errorf(
+					"Didn't get an error but expected: %s\n",
+					spew.Sprint(tc.expectedError),
+				)
+			}
+			if !reflect.DeepEqual(tc.expectedError, err) {
+				t.Errorf(
+					"Incorrect error.\nExpected: %s\nBut got:  %s\n",
+					spew.Sprint(tc.expectedError),
+					spew.Sprint(err),
+				)
+			}
 		}
 	}
 }

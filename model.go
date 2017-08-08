@@ -163,6 +163,9 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 			}
 		} else {
 			// All other types are considered inconvertible
+			if shouldIndex {
+				return nil, fmt.Errorf("zoom: Requested index on unsupported type %s", field.Type)
+			}
 			fs.kind = inconvertibleField
 		}
 	}
