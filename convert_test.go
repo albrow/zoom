@@ -98,7 +98,7 @@ func TestJSONFallback(t *testing.T) {
 		IntArray:       [3]int{randomInt(), randomInt(), randomInt()},
 		StringArray:    [3]string{randomString(), randomString(), randomString()},
 		StringMap:      map[string]string{randomString(): randomString(), randomString(): randomString()},
-		EmptyInterface: "This satisfies empty interface",
+		EmptyInterface: map[string]interface{}{"key": []interface{}{"This satisfies empty interface"}},
 	}
 	testConvertType(t, jsonModels, model)
 }
