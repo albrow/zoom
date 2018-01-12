@@ -22,8 +22,8 @@ func (e ModelNotFoundError) Error() string {
 
 func newModelNotFoundError(mr *modelRef) error {
 	var msg string
-	if mr.model.ModelId() != "" {
-		msg = fmt.Sprintf("Could not find %s with id = %s", mr.spec.name, mr.model.ModelId())
+	if mr.model.ModelID() != "" {
+		msg = fmt.Sprintf("Could not find %s with id = %s", mr.spec.name, mr.model.ModelID())
 	} else {
 		msg = fmt.Sprintf("Could not find %s with the given criteria", mr.spec.name)
 	}
@@ -33,10 +33,13 @@ func newModelNotFoundError(mr *modelRef) error {
 	}
 }
 
+// WatchError is returned whenever a watched key is modified before a
+// transaction can execute. It is part of the implementation of optimistic
+// locking in Zoom. You can watch a key with the Transaction.WatchKey method.
 type WatchError struct {
 	keys []string
 }
 
 func (e WatchError) Error() string {
-	return fmt.Sprintf("Watch error: at least one of the following keys has changed: %v", e.keys)
+	return fmt.Sprintf("zoom: watch error: at least one of the following keys has changed: %v", e.keys)
 }

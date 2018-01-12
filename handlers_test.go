@@ -93,15 +93,15 @@ func TestScanModelHandler(t *testing.T) {
 		Int:    38,
 		String: "bar",
 		Bool:   true,
-		RandomId: RandomId{
-			Id: "thisIsANewId",
+		RandomID: RandomID{
+			ID: "thisIsANewID",
 		},
 	}
 	fieldNames := []string{"String", "-", "Int"}
 	handler := NewScanModelHandler(fieldNames, &model)
 	if err := handler([]interface{}{
 		[]byte("bar"),
-		[]byte("thisIsANewId"),
+		[]byte("thisIsANewID"),
 		[]byte("38"),
 	}); err != nil {
 		t.Fatal(err)
@@ -120,16 +120,16 @@ func TestScanModelsHandler(t *testing.T) {
 			Int:    38,
 			String: "bar",
 			Bool:   false,
-			RandomId: RandomId{
-				Id: "thisIsANewId",
+			RandomID: RandomID{
+				ID: "thisIsANewID",
 			},
 		},
 		{
 			Int:    37,
 			String: "biz",
 			Bool:   false,
-			RandomId: RandomId{
-				Id: "thisIsAlsoANewId",
+			RandomID: RandomID{
+				ID: "thisIsAlsoANewID",
 			},
 		},
 	}
@@ -137,10 +137,10 @@ func TestScanModelsHandler(t *testing.T) {
 	handler := NewScanModelsHandler(testModels, fieldNames, &models)
 	if err := handler([]interface{}{
 		[]byte("bar"),
-		[]byte("thisIsANewId"),
+		[]byte("thisIsANewID"),
 		[]byte("38"),
 		[]byte("biz"),
-		[]byte("thisIsAlsoANewId"),
+		[]byte("thisIsAlsoANewID"),
 		[]byte("37"),
 	}); err != nil {
 		t.Fatal(err)
@@ -160,8 +160,8 @@ func TestScanOneModelHandler(t *testing.T) {
 		Int:    38,
 		String: "bar",
 		Bool:   false,
-		RandomId: RandomId{
-			Id: "thisIsAnId",
+		RandomID: RandomID{
+			ID: "thisIsAnID",
 		},
 	}
 	fieldNames := []string{"String", "-", "Int"}
@@ -169,7 +169,7 @@ func TestScanOneModelHandler(t *testing.T) {
 	handler := newScanOneModelHandler(testModels.NewQuery().query, testModels.spec, fieldNames, got)
 	if err := handler([]interface{}{
 		[]byte("bar"),
-		[]byte("thisIsAnId"),
+		[]byte("thisIsAnID"),
 		[]byte("38"),
 	}); err != nil {
 		t.Fatal(err)

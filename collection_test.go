@@ -18,7 +18,7 @@ type collectionTestModel struct {
 	Int    int
 	Bool   bool
 	String string
-	RandomId
+	RandomID
 }
 
 func TestNewCollection(t *testing.T) {
@@ -127,7 +127,7 @@ func TestSave(t *testing.T) {
 
 	// Make sure the model was saved correctly
 	expectModelExists(t, testModels, model)
-	key := testModels.ModelKey(model.ModelId())
+	key := testModels.ModelKey(model.ModelID())
 	mu := testModels.spec.fallback
 	expectFieldEquals(t, key, "Int", mu, model.Int)
 	expectFieldEquals(t, key, "String", mu, model.String)
@@ -149,7 +149,7 @@ func TestSaveFields(t *testing.T) {
 
 	// Make sure the model was saved correctly
 	expectModelExists(t, testModels, model)
-	key := testModels.ModelKey(model.ModelId())
+	key := testModels.ModelKey(model.ModelID())
 	mu := testModels.spec.fallback
 	expectFieldEquals(t, key, "Int", mu, model.Int)
 	expectFieldEquals(t, key, "String", mu, nil)
@@ -157,7 +157,7 @@ func TestSaveFields(t *testing.T) {
 
 	// Make sure the model can be found.
 	gotModel := &testModel{}
-	if err := testModels.Find(model.Id, gotModel); err != nil {
+	if err := testModels.Find(model.ID, gotModel); err != nil {
 		t.Fatal(err)
 	}
 	if !reflect.DeepEqual(model, gotModel) {
@@ -187,7 +187,7 @@ func TestSaveFieldsOverwrite(t *testing.T) {
 
 	// Make sure the model was saved correctly
 	expectModelExists(t, testModels, model)
-	key := testModels.ModelKey(model.ModelId())
+	key := testModels.ModelKey(model.ModelID())
 	mu := testModels.spec.fallback
 	expectFieldEquals(t, key, "Int", mu, model.Int)
 	expectFieldEquals(t, key, "String", mu, originalString)
@@ -207,7 +207,7 @@ func TestFind(t *testing.T) {
 
 	// Find the model in the database and store it in modelCopy
 	modelCopy := &testModel{}
-	if err := testModels.Find(model.ModelId(), modelCopy); err != nil {
+	if err := testModels.Find(model.ModelID(), modelCopy); err != nil {
 		t.Errorf("Unexpected error in testModels.Find: %s", err.Error())
 	}
 	if !reflect.DeepEqual(model, modelCopy) {
@@ -227,7 +227,7 @@ func TestFindEmpty(t *testing.T) {
 
 	// Find the model in the database and store it in modelCopy
 	modelCopy := &testModel{}
-	if err := testModels.Find(model.ModelId(), modelCopy); err != nil {
+	if err := testModels.Find(model.ModelID(), modelCopy); err != nil {
 		t.Errorf("Unexpected error in testModels.Find: %s", err.Error())
 	}
 	if !reflect.DeepEqual(model, modelCopy) {
@@ -249,7 +249,7 @@ func TestFindFields(t *testing.T) {
 	// Find only certain fields for the model in the database and store it in
 	// modelCopy
 	modelCopy := &testModel{}
-	if err := testModels.FindFields(model.ModelId(), []string{"Int", "Bool"}, modelCopy); err != nil {
+	if err := testModels.FindFields(model.ModelID(), []string{"Int", "Bool"}, modelCopy); err != nil {
 		t.Errorf("Unexpected error in testModels.FindFields: %s", err.Error())
 	}
 	// Since we did not specify the String field in FindFields, we expect it to
@@ -288,7 +288,7 @@ func TestFindAll(t *testing.T) {
 	modelsCopy := []*testModel{}
 	ids := []string{}
 	for _, model := range models[1:] {
-		ids = append(ids, model.ModelId())
+		ids = append(ids, model.ModelID())
 	}
 	if err := testModels.FindAll(&modelsCopy); err != nil {
 		t.Errorf("Unexpected error in testModels.FindAll: %s", err.Error())
@@ -298,18 +298,18 @@ func TestFindAll(t *testing.T) {
 	if len(modelsCopy) != len(models) {
 		t.Errorf("modelsCopy was the wrong length. Expected %d but got %d", len(models), len(modelsCopy))
 	}
-	modelsById := map[string]*testModel{}
+	modelsByID := map[string]*testModel{}
 	for _, model := range models {
-		modelsById[model.ModelId()] = model
+		modelsByID[model.ModelID()] = model
 	}
 	for i, modelCopy := range modelsCopy {
-		if modelCopy.ModelId() == "" {
-			t.Errorf("modelsCopy[%d].ModelId() is empty.", i)
+		if modelCopy.ModelID() == "" {
+			t.Errorf("modelsCopy[%d].ModelID() is empty.", i)
 			continue
 		}
-		model, found := modelsById[modelCopy.ModelId()]
+		model, found := modelsByID[modelCopy.ModelID()]
 		if !found {
-			t.Errorf("modelsCopy[%d].ModelId() was invalid. Got %s but expected one of %v", i, modelCopy.ModelId(), ids)
+			t.Errorf("modelsCopy[%d].ModelID() was invalid. Got %s but expected one of %v", i, modelCopy.ModelID(), ids)
 			continue
 		}
 		if !reflect.DeepEqual(model, modelCopy) {
@@ -323,7 +323,7 @@ func TestExists(t *testing.T) {
 	defer testingTearDown()
 
 	// Expect exists to be false if we haven't saved any models
-	exists, err := testModels.Exists("invalidId")
+	exists, err := testModels.Exists("invalidID")
 	if err != nil {
 		t.Errorf("Unexpected error in testModels.Exists: %s", err.Error())
 	}
@@ -339,7 +339,7 @@ func TestExists(t *testing.T) {
 	model := models[0]
 
 	// Expect exists to be true
-	exists, err = testModels.Exists(model.Id)
+	exists, err = testModels.Exists(model.ID)
 	if err != nil {
 		t.Errorf("Unexpected error in testModels.Exists: %s", err.Error())
 	}
@@ -390,7 +390,7 @@ func TestDelete(t *testing.T) {
 	model := models[0]
 
 	// Delete the model we just saved
-	deleted, err := testModels.Delete(model.ModelId())
+	deleted, err := testModels.Delete(model.ModelID())
 	if err != nil {
 		t.Errorf("Unexpected error in testModels.Delete: %s", err.Error())
 	}
@@ -402,7 +402,7 @@ func TestDelete(t *testing.T) {
 	expectModelDoesNotExist(t, testModels, model)
 
 	// A second call to Delete should return false
-	deleted, err = testModels.Delete(model.ModelId())
+	deleted, err = testModels.Delete(model.ModelID())
 	if err != nil {
 		t.Errorf("Unexpected error in testModels.Delete: %s", err.Error())
 	}

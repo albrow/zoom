@@ -99,7 +99,7 @@ func TestQueryFilterInt(t *testing.T) {
 	// few different filter values.
 	filterValues := []interface{}{-10, 0, 99999999, models[0].Int}
 	for _, val := range filterValues {
-		for op, _ := range filterOps {
+		for op := range filterOps {
 			q := indexedTestModels.NewQuery().Filter("Int "+op, val)
 			testQuery(t, q, models)
 		}
@@ -118,7 +118,7 @@ func TestQueryFilterBool(t *testing.T) {
 	// few different filter values.
 	filterValues := []interface{}{true, false}
 	for _, val := range filterValues {
-		for op, _ := range filterOps {
+		for op := range filterOps {
 			q := indexedTestModels.NewQuery().Filter("Bool "+op, val)
 			testQuery(t, q, models)
 		}
@@ -145,7 +145,7 @@ func TestQueryFilterString(t *testing.T) {
 	// few different filter values.
 	filterValues := []interface{}{"a", "AbCdE", models[0].String, incrementString(models[0].String), decrementString(models[0].String), models[0].String + " ", models[0].String[:len(models[0].String)-1]}
 	for _, val := range filterValues {
-		for op, _ := range filterOps {
+		for op := range filterOps {
 			q := indexedTestModels.NewQuery().Filter("String "+op, val)
 			testQuery(t, q, models)
 		}
@@ -168,8 +168,8 @@ func TestQueryDoubleFilters(t *testing.T) {
 		v1 := filterValues[i]
 		for j, f2 := range fieldNames {
 			v2 := filterValues[j]
-			for o1, _ := range filterOps {
-				for o2, _ := range filterOps {
+			for o1 := range filterOps {
+				for o2 := range filterOps {
 					if f1 == f2 && o1 == o2 {
 						// no sense in doing the same filter twice
 						continue
@@ -199,7 +199,7 @@ func TestQueryCombos(t *testing.T) {
 	offsets := []uint{0, 1, 5, 9, 10}
 	for i, filterField := range fieldNames {
 		filterVal := filterValues[i]
-		for filterOp, _ := range filterOps {
+		for filterOp := range filterOps {
 			for _, orderField := range fieldNames {
 				for _, orderPrefix := range []string{"", "-"} {
 					for _, offset := range offsets {
@@ -274,28 +274,27 @@ func TestQueryRunOne(t *testing.T) {
 	}
 }
 
-// There's a huge amount of test cases to cover above.
-// Below is some code that makes it easier, but needs to be
-// tested itself. Testing for correctness using a brute force
-// approach (obviously slow compared to what Zoom is actually doing) is
-// fine because the tests in this file will typically use only a handful
-// of models. The brute force approach is also easier becuase you can apply
-// query modifiers independently, in any order. (Whereas behind the scenes
+// There's a huge amount of test cases to cover above. Below is some code that
+// makes it easier, but needs to be tested itself. Testing for correctness using
+// a brute force approach (obviously slow compared to what Zoom is actually
+// doing) is fine because the tests in this file will typically use only a
+// handful of models. The brute force approach is also easier because you can
+// apply query modifiers independently, in any order. (Whereas behind the scenes
 // zoom actually does some clever optimization and changing any single paramater
 // or modifier of the query could completely change the command sent to Redis).
-// We're assuming that for all tests in this file, the indexedTestModel type will
-// be used.
+// We're assuming that for all tests in this file, the indexedTestModel type
+// will be used.
 
-// testQuery compares the results of the Query run by Zoom with the results
-// of a simpler implementation which doesn't touch the database. If the results match,
-// then the query was correct and the test will pass. models should be an array of all
-// the models which are being queried against.
+// testQuery compares the results of the Query run by Zoom with the results of a
+// simpler implementation which doesn't touch the database. If the results
+// match, then the query was correct and the test will pass. models should be an
+// array of all the models which are being queried against.
 func testQuery(t *testing.T, q *Query, models []*indexedTestModel) {
 	expected := expectedResultsForQuery(q.query, models)
 	testQueryRun(t, q, expected)
-	testQueryIds(t, q, expected)
+	testQueryIDs(t, q, expected)
 	testQueryCount(t, q, expected)
-	testQueryStoreIds(t, q, expected)
+	testQueryStoreIDs(t, q, expected)
 	checkForLeakedTmpKeys(t, q.query)
 }
 
@@ -320,35 +319,37 @@ func testQueryCount(t *testing.T, q *Query, expectedModels []*indexedTestModel) 
 	}
 }
 
-func testQueryIds(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
-	got, err := q.Ids()
+func testQueryIDs(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
+	got, err := q.IDs()
 	if err != nil {
-		t.Errorf("Unexpected error in query.Ids: %s", err.Error())
+		t.Errorf("Unexpected error in query.IDs: %s", err.Error())
 		return
 	}
-	expected := modelIds(Models(expectedModels))
+	expected := modelIDs(Models(expectedModels))
 	if q.hasOrder() {
 		// Order matters
 		if !reflect.DeepEqual(expected, got) {
-			t.Errorf("testQueryIds failed for query %s\nExpected: %v\nGot:  %v", q, expected, got)
+			t.Errorf("testQueryIDs failed for query %s\nExpected: %v\nGot:  %v", q, expected, got)
 		}
 	} else {
 		// Order does not matter
 		if equal, msg := compareAsStringSet(expected, got); !equal {
-			t.Errorf("testQueryIds failed for query %s\n%s\nExpected: %v\nGot:  %v", q, msg, expected, got)
+			t.Errorf("testQueryIDs failed for query %s\n%s\nExpected: %v\nGot:  %v", q, msg, expected, got)
 		}
 	}
 }
 
-func testQueryStoreIds(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
-	destKey := "queryDestKey:" + generateRandomId()
-	if err := q.StoreIds(destKey); err != nil {
-		t.Errorf("Unexpected error in query.StoreIds: %s", err.Error())
+func testQueryStoreIDs(t *testing.T, q *Query, expectedModels []*indexedTestModel) {
+	destKey := "queryDestKey:" + generateRandomID()
+	if err := q.StoreIDs(destKey); err != nil {
+		t.Errorf("Unexpected error in query.StoreIDs: %s", err.Error())
 		return
 	}
-	expected := modelIds(Models(expectedModels))
+	expected := modelIDs(Models(expectedModels))
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	got, err := redis.Strings(conn.Do("LRANGE", destKey, 0, -1))
 	if err != nil {
 		t.Error(err)
@@ -357,13 +358,13 @@ func testQueryStoreIds(t *testing.T, q *Query, expectedModels []*indexedTestMode
 	if q.hasOrder() {
 		// Order matters
 		if !reflect.DeepEqual(expected, got) {
-			t.Errorf("testQueryStoreIds failed for query %s\nExpected: %v\nGot:  %v", q, expected, got)
+			t.Errorf("testQueryStoreIDs failed for query %s\nExpected: %v\nGot:  %v", q, expected, got)
 			return
 		}
 	} else {
 		// Order does not matter
 		if equal, msg := compareAsStringSet(expected, got); !equal {
-			t.Errorf("testQueryStoreIds failed for query %s\n%s\nExpected: %v\nGot:  %v", q, msg, expected, got)
+			t.Errorf("testQueryStoreIDs failed for query %s\n%s\nExpected: %v\nGot:  %v", q, msg, expected, got)
 			return
 		}
 	}
@@ -371,7 +372,9 @@ func testQueryStoreIds(t *testing.T, q *Query, expectedModels []*indexedTestMode
 
 func checkForLeakedTmpKeys(t *testing.T, query *query) {
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	keys, err := redis.Strings(conn.Do("KEYS", "tmp:*"))
 	if err != nil {
 		t.Error(err)
@@ -607,14 +610,14 @@ func TestApplyFilterNumeric(t *testing.T) {
 
 	for i, tc := range testCases {
 		fieldSpec, _ := indexedTestModels.spec.fieldsByName["Int"]
-		filter := filter{
+		fltr := filter{
 			fieldSpec: fieldSpec,
 			op:        tc.filterOp,
 			value:     reflect.ValueOf(tc.filterVal),
 		}
-		got := applyFilter(models, filter)
+		got := applyFilter(models, fltr)
 		if !reflect.DeepEqual(tc.expected, got) {
-			t.Errorf("Test failed on iteration %d: %s\nExpected: %#v\nGot:  %#v", i, filter, tc.expected, got)
+			t.Errorf("Test failed on iteration %d: %s\nExpected: %#v\nGot:  %#v", i, fltr, tc.expected, got)
 		}
 	}
 }
@@ -688,14 +691,14 @@ func TestApplyFilterBool(t *testing.T) {
 
 	for i, tc := range testCases {
 		fieldSpec, _ := indexedTestModels.spec.fieldsByName["Bool"]
-		filter := filter{
+		fltr := filter{
 			fieldSpec: fieldSpec,
 			op:        tc.filterOp,
 			value:     reflect.ValueOf(tc.filterVal),
 		}
-		got := applyFilter(models, filter)
+		got := applyFilter(models, fltr)
 		if !reflect.DeepEqual(tc.expected, got) {
-			t.Errorf("Test failed on iteration %d: %s\nExpected: %+v\nGot:  %+v", i, filter, tc.expected, got)
+			t.Errorf("Test failed on iteration %d: %s\nExpected: %+v\nGot:  %+v", i, fltr, tc.expected, got)
 		}
 	}
 }
@@ -792,14 +795,14 @@ func TestApplyFilterString(t *testing.T) {
 
 	for i, tc := range testCases {
 		fieldSpec, _ := indexedTestModels.spec.fieldsByName["String"]
-		filter := filter{
+		fltr := filter{
 			fieldSpec: fieldSpec,
 			op:        tc.filterOp,
 			value:     reflect.ValueOf(tc.filterVal),
 		}
-		got := applyFilter(models, filter)
+		got := applyFilter(models, fltr)
 		if !reflect.DeepEqual(tc.expected, got) {
-			t.Errorf("Test failed on iteration %d: %s\nExpected: %+v\nGot:  %+v", i, filter, tc.expected, got)
+			t.Errorf("Test failed on iteration %d: %s\nExpected: %+v\nGot:  %+v", i, fltr, tc.expected, got)
 		}
 	}
 }
@@ -823,20 +826,20 @@ func newModelSorter(models []*indexedTestModel, fieldName string) *modelSorter {
 		"Int": func(m1, m2 *indexedTestModel) bool {
 			if m1.Int == m2.Int {
 				// Redis sorts by member if the scores are equal.
-				// Which means all models have a secondary order: the Id field.
-				return m1.ModelId() < m2.ModelId()
+				// Which means all models have a secondary order: the ID field.
+				return m1.ModelID() < m2.ModelID()
 			}
 			return m1.Int < m2.Int
 		},
 		"String": func(m1, m2 *indexedTestModel) bool {
 			if m1.String == m2.String {
-				return m1.ModelId() < m2.ModelId()
+				return m1.ModelID() < m2.ModelID()
 			}
 			return m1.String < m2.String
 		},
 		"Bool": func(m1, m2 *indexedTestModel) bool {
 			if m1.Bool == m2.Bool {
-				return m1.ModelId() < m2.ModelId()
+				return m1.ModelID() < m2.ModelID()
 			}
 			return m1.Bool == false && m2.Bool == true
 		},
@@ -883,9 +886,8 @@ func sortModels(models []*indexedTestModel, fieldName string, orderKind orderKin
 	sorter := newModelSorter(models, fieldName)
 	if orderKind == ascendingOrder {
 		return sorter.Sort()
-	} else {
-		return sorter.ReverseSort()
 	}
+	return sorter.ReverseSort()
 }
 
 func applyOrder(models []*indexedTestModel, order order) []*indexedTestModel {
@@ -966,8 +968,8 @@ func applyIncludes(models []*indexedTestModel, includes []string) []*indexedTest
 		origVal := reflect.ValueOf(m).Elem()
 		for fieldIndex := 0; fieldIndex < origVal.NumField(); fieldIndex++ {
 			fieldType := origVal.Type().Field(fieldIndex)
-			if fieldType.Name == "RandomId" {
-				// RandomId is a special case
+			if fieldType.Type == reflect.TypeOf(RandomID{}) {
+				// RandomID is a special case
 				resVal.Field(fieldIndex).Set(origVal.Field(fieldIndex))
 			}
 			if stringSliceContains(includes, fieldType.Name) {
@@ -1079,8 +1081,8 @@ func applyExcludes(models []*indexedTestModel, excludes []string) []*indexedTest
 		origVal := reflect.ValueOf(m).Elem()
 		for fieldIndex := 0; fieldIndex < origVal.NumField(); fieldIndex++ {
 			fieldType := origVal.Type().Field(fieldIndex)
-			if fieldType.Name == "RandomId" {
-				// RandomId is a special case
+			if fieldType.Type == reflect.TypeOf(RandomID{}) {
+				// RandomID is a special case
 				resVal.Field(fieldIndex).Set(origVal.Field(fieldIndex))
 			}
 			if !stringSliceContains(excludes, fieldType.Name) {

@@ -3,14 +3,14 @@ package zoom
 // Query represents a query which will retrieve some models from
 // the database. A Query may consist of one or more query modifiers
 // (e.g. Filter or Order) and may be executed with a query finisher
-// (e.g. Run or Ids).
+// (e.g. Run or IDs).
 type Query struct {
 	*query
 }
 
 // NewQuery is used to construct a query. The query returned can be chained
 // together with one or more query modifiers (e.g. Filter or Order), and then
-// executed using the Run, RunOne, Count, or Ids methods. If no query modifiers
+// executed using the Run, RunOne, Count, or IDs methods. If no query modifiers
 // are used, running the query will return all models of the given type in
 // unspecified order. Queries use delayed execution, so nothing touches the
 // database until you execute them.
@@ -102,7 +102,7 @@ func (q *Query) Filter(filterString string, value interface{}) *Query {
 // any), or if models is the wrong type.
 func (q *Query) Run(models interface{}) error {
 	tx := q.pool.NewTransaction()
-	newTransactionalQuery(q.query, tx).Run(models)
+	newTransactionQuery(q.query, tx).Run(models)
 	return tx.Exec()
 }
 
@@ -111,7 +111,7 @@ func (q *Query) Run(models interface{}) error {
 // RunOne *will* return a ModelNotFoundError.
 func (q *Query) RunOne(model Model) error {
 	tx := q.pool.NewTransaction()
-	newTransactionalQuery(q.query, tx).RunOne(model)
+	newTransactionQuery(q.query, tx).RunOne(model)
 	return tx.Exec()
 }
 
@@ -121,33 +121,33 @@ func (q *Query) RunOne(model Model) error {
 func (q *Query) Count() (int, error) {
 	tx := q.pool.NewTransaction()
 	var count int
-	newTransactionalQuery(q.query, tx).Count(&count)
+	newTransactionQuery(q.query, tx).Count(&count)
 	if err := tx.Exec(); err != nil {
 		return 0, err
 	}
 	return count, nil
 }
 
-// Ids returns only the ids of the models without actually retrieving the
-// models themselves. Ids will return the first error that occurred during the
+// IDs returns only the ids of the models without actually retrieving the
+// models themselves. IDs will return the first error that occurred during the
 // lifetime of the query (if any).
-func (q *Query) Ids() ([]string, error) {
+func (q *Query) IDs() ([]string, error) {
 	tx := q.pool.NewTransaction()
 	ids := []string{}
-	newTransactionalQuery(q.query, tx).Ids(&ids)
+	newTransactionQuery(q.query, tx).IDs(&ids)
 	if err := tx.Exec(); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
-// StoreIds executes the query and stores the model ids matching the query
+// StoreIDs executes the query and stores the model ids matching the query
 // criteria in a list identified by destKey. The list will be completely
 // overwritten, and the model ids stored there will be in the correct order if
-// the query includes an Order modifier. StoreIds will return the first error
+// the query includes an Order modifier. StoreIDs will return the first error
 // that occurred during the lifetime of the query (if any).
-func (q *Query) StoreIds(destKey string) error {
+func (q *Query) StoreIDs(destKey string) error {
 	tx := q.pool.NewTransaction()
-	newTransactionalQuery(q.query, tx).StoreIds(destKey)
+	newTransactionQuery(q.query, tx).StoreIDs(destKey)
 	return tx.Exec()
 }

@@ -153,14 +153,13 @@ func NewPoolWithOptions(options PoolOptions) *Pool {
 			}
 			// If a options.Password was provided, use the AUTH command to authenticate
 			if options.Password != "" {
-				_, err = c.Do("AUTH", options.Password)
-				if err != nil {
+				if _, err := c.Do("AUTH", options.Password); err != nil {
 					return nil, err
 				}
 			}
 			// Select the database number provided by options.Database
 			if _, err := c.Do("Select", options.Database); err != nil {
-				c.Close()
+				_ = c.Close()
 				return nil, err
 			}
 			return c, err

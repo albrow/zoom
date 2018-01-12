@@ -73,7 +73,7 @@ func (t *Transaction) Watch(model Model) error {
 	if err != nil {
 		return err
 	}
-	key := col.ModelKey(model.ModelId())
+	key := col.ModelKey(model.ModelID())
 	return t.WatchKey(key)
 }
 
@@ -145,7 +145,9 @@ func (t *Transaction) doAction(a *Action) (interface{}, error) {
 // calling all the action handlers with the corresponding replies.
 func (t *Transaction) Exec() error {
 	// Return the connection to the pool when we are done
-	defer t.conn.Close()
+	defer func() {
+		_ = t.conn.Close()
+	}()
 
 	// If the transaction had an error from a previous command, return it
 	// and don't continue
@@ -202,36 +204,36 @@ func (t *Transaction) Exec() error {
 
 //go:generate go run scripts/main.go
 
-// DeleteModelsBySetIds is a small function wrapper around a Lua script. The
+// DeleteModelsBySetIDs is a small function wrapper around a Lua script. The
 // script will atomically delete the models corresponding to the ids in set
 // (not sorted set) identified by setKey and return the number of models that
 // were deleted. You can pass in a handler (e.g. NewScanIntHandler) to capture
 // the return value of the script. You can use the Name method of a Collection
 // to get the name.
-func (t *Transaction) DeleteModelsBySetIds(setKey string, collectionName string, handler ReplyHandler) {
+func (t *Transaction) DeleteModelsBySetIDs(setKey string, collectionName string, handler ReplyHandler) {
 	t.Script(deleteModelsBySetIdsScript, redis.Args{setKey, collectionName}, handler)
 }
 
 // deleteStringIndex is a small function wrapper around a Lua script. The script
 // will atomically remove the existing string index, if any, on the given
-// fieldName for the model with the given modelId. You can use the Name method
+// fieldName for the model with the given modelID. You can use the Name method
 // of a Collection to get its name. fieldName should be the name as it is stored
 // in Redis.
-func (t *Transaction) deleteStringIndex(collectionName, modelId, fieldName string) {
-	t.Script(deleteStringIndexScript, redis.Args{collectionName, modelId, fieldName}, nil)
+func (t *Transaction) deleteStringIndex(collectionName, modelID, fieldName string) {
+	t.Script(deleteStringIndexScript, redis.Args{collectionName, modelID, fieldName}, nil)
 }
 
-// ExtractIdsFromFieldIndex is a small function wrapper around a Lua script. The
+// ExtractIDsFromFieldIndex is a small function wrapper around a Lua script. The
 // script will get all the ids from the sorted set identified by setKey using
 // ZRANGEBYSCORE with the given min and max, and then store them in a sorted set
 // identified by destKey. The members of the sorted set should be model ids.
 // Note that this method will not work on sorted sets that represents string
 // indexes because they are stored differently.
-func (t *Transaction) ExtractIdsFromFieldIndex(setKey string, destKey string, min interface{}, max interface{}) {
+func (t *Transaction) ExtractIDsFromFieldIndex(setKey string, destKey string, min interface{}, max interface{}) {
 	t.Script(extractIdsFromFieldIndexScript, redis.Args{setKey, destKey, min, max}, nil)
 }
 
-// ExtractIdsFromStringIndex is a small function wrapper around a Lua script.
+// ExtractIDsFromStringIndex is a small function wrapper around a Lua script.
 // The script will extract the ids from a sorted set identified by setKey using
 // ZRANGEBYLEX with the given min and max, and then store them in a sorted set
 // identified by destKey. All the scores for the sorted set should be 0, and the
@@ -241,6 +243,6 @@ func (t *Transaction) ExtractIdsFromFieldIndex(setKey string, destKey string, mi
 // the NULL ASCII character or the DEL character (codepoints 0 and 127
 // respectively). Note that the stored ids are sorted in ASCII order according
 // to their corresponding string values.
-func (t *Transaction) ExtractIdsFromStringIndex(setKey, destKey, min, max string) {
+func (t *Transaction) ExtractIDsFromStringIndex(setKey, destKey, min, max string) {
 	t.Script(extractIdsFromStringIndexScript, redis.Args{setKey, destKey, min, max}, nil)
 }

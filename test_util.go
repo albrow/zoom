@@ -9,18 +9,21 @@ package zoom
 import (
 	"flag"
 	"fmt"
+	"math/cmplx"
+	"math/rand"
 	"reflect"
 	"sort"
 	"sync"
 	"testing"
 
+	"github.com/dchest/uniuri"
 	"github.com/garyburd/redigo/redis"
 )
 
 var (
-	address  *string = flag.String("address", "localhost:6379", "the address of a redis server to connect to")
-	network  *string = flag.String("network", "tcp", "the network to use for the database connection (e.g. 'tcp' or 'unix')")
-	database *int    = flag.Int("database", 9, "the redis database number to use for testing")
+	address  = flag.String("address", "localhost:6379", "the address of a redis server to connect to")
+	network  = flag.String("network", "tcp", "the network to use for the database connection (e.g. 'tcp' or 'unix')")
+	database = flag.Int("database", 9, "the redis database number to use for testing")
 	testPool *Pool
 )
 
@@ -54,7 +57,7 @@ type testModel struct {
 	Int    int
 	String string
 	Bool   bool
-	RandomId
+	RandomID
 }
 
 // createTestModels creates and returns n testModels with
@@ -91,7 +94,7 @@ type indexedTestModel struct {
 	Int    int    `zoom:"index"`
 	String string `zoom:"index"`
 	Bool   bool   `zoom:"index"`
-	RandomId
+	RandomID
 }
 
 func (m *indexedTestModel) GoString() string {
@@ -146,7 +149,7 @@ type indexedPrimativesModel struct {
 	Rune    rune    `zoom:"index"`
 	String  string  `zoom:"index"`
 	Bool    bool    `zoom:"index"`
-	RandomId
+	RandomID
 }
 
 // createIndexedPrimativesModel instantiates and returns an indexedPrimativesModel with
@@ -189,7 +192,7 @@ type indexedPointersModel struct {
 	Rune    *rune    `zoom:"index"`
 	String  *string  `zoom:"index"`
 	Bool    *bool    `zoom:"index"`
-	RandomId
+	RandomID
 }
 
 // createIndexedPointersModel instantiates and returns an indexedPointersModel with
@@ -280,13 +283,15 @@ func registerTestingTypes() {
 // is not empty.
 func checkDatabaseEmpty() {
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	n, err := redis.Int(conn.Do("DBSIZE"))
 	if err != nil {
 		panic(err.Error())
 	}
 	if n != 0 {
-		err := fmt.Errorf("Database #%d is not empty! Testing can not continue.", *database)
+		err := fmt.Errorf("database #%d is not empty: testing can not continue", *database)
 		panic(err)
 	}
 }
@@ -296,7 +301,9 @@ func checkDatabaseEmpty() {
 func testingTearDown() {
 	// flush and close the database
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	if _, err := conn.Do("flushdb"); err != nil {
 		panic(err)
 	}
@@ -305,7 +312,9 @@ func testingTearDown() {
 // expectSetContains sets an error via t.Errorf if member is not in the set
 func expectSetContains(t *testing.T, setName string, member interface{}) {
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	contains, err := redis.Bool(conn.Do("SISMEMBER", setName, member))
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
@@ -318,7 +327,9 @@ func expectSetContains(t *testing.T, setName string, member interface{}) {
 // expectSetDoesNotContain sets an error via t.Errorf if member is in the set
 func expectSetDoesNotContain(t *testing.T, setName string, member interface{}) {
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	contains, err := redis.Bool(conn.Do("SISMEMBER", setName, member))
 	if err != nil {
 		t.Errorf("Unexpected error: %s", err.Error())
@@ -332,7 +343,9 @@ func expectSetDoesNotContain(t *testing.T, setName string, member interface{}) {
 // not equal expected according to the database.
 func expectFieldEquals(t *testing.T, key string, fieldName string, marshalerUnmarshaler MarshalerUnmarshaler, expected interface{}) {
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	reply, err := conn.Do("HGET", key, fieldName)
 	if err != nil {
 		t.Errorf("Unexpected error in HGET: %s", err.Error())
@@ -351,7 +364,7 @@ func expectFieldEquals(t *testing.T, key string, fieldName string, marshalerUnma
 	dest := reflect.New(typ).Elem()
 	switch {
 	case typeIsPrimative(typ):
-		err = scanPrimativeVal(srcBytes, dest)
+		err = scanPrimitiveVal(srcBytes, dest)
 	case typ.Kind() == reflect.Ptr:
 		err = scanPointerVal(srcBytes, dest)
 	default:
@@ -369,7 +382,9 @@ func expectFieldEquals(t *testing.T, key string, fieldName string, marshalerUnma
 // expectKeyExists sets an error via t.Errorf if key does not exist in the database.
 func expectKeyExists(t *testing.T, key string) {
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	if exists, err := redis.Bool(conn.Do("EXISTS", key)); err != nil {
 		t.Errorf("Unexpected error in EXISTS: %s", err.Error())
 	} else if !exists {
@@ -380,7 +395,9 @@ func expectKeyExists(t *testing.T, key string) {
 // expectKeyDoesNotExist sets an error via t.Errorf if key does exist in the database.
 func expectKeyDoesNotExist(t *testing.T, key string) {
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	if exists, err := redis.Bool(conn.Do("EXISTS", key)); err != nil {
 		t.Errorf("Unexpected error in EXISTS: %s", err.Error())
 	} else if exists {
@@ -392,18 +409,18 @@ func expectKeyDoesNotExist(t *testing.T, key string) {
 // the database. It checks for the main hash as well as the id in the index of all
 // ids for a given type.
 func expectModelExists(t *testing.T, mt *Collection, model Model) {
-	modelKey := mt.ModelKey(model.ModelId())
+	modelKey := mt.ModelKey(model.ModelID())
 	expectKeyExists(t, modelKey)
-	expectSetContains(t, mt.IndexKey(), model.ModelId())
+	expectSetContains(t, mt.IndexKey(), model.ModelID())
 }
 
 // expectModelDoesNotExist sets an error via t.Errorf if model exists in the database.
 // It checks for the main hash as well as the id in the index of all ids for a
 // given type.
 func expectModelDoesNotExist(t *testing.T, mt *Collection, model Model) {
-	modelKey := mt.ModelKey(model.ModelId())
+	modelKey := mt.ModelKey(model.ModelID())
 	expectKeyDoesNotExist(t, modelKey)
-	expectSetDoesNotContain(t, mt.IndexKey(), model.ModelId())
+	expectSetDoesNotContain(t, mt.IndexKey(), model.ModelID())
 }
 
 // expectModelsExist sets an error via t.Errorf for each model in models that
@@ -411,9 +428,9 @@ func expectModelDoesNotExist(t *testing.T, mt *Collection, model Model) {
 // the index of all ids for a given type.
 func expectModelsExist(t *testing.T, mt *Collection, models []Model) {
 	for _, model := range models {
-		modelKey := mt.ModelKey(model.ModelId())
+		modelKey := mt.ModelKey(model.ModelID())
 		expectKeyExists(t, modelKey)
-		expectSetContains(t, mt.IndexKey(), model.ModelId())
+		expectSetContains(t, mt.IndexKey(), model.ModelID())
 	}
 }
 
@@ -422,9 +439,9 @@ func expectModelsExist(t *testing.T, mt *Collection, models []Model) {
 // of all ids for a given type.
 func expectModelsDoNotExist(t *testing.T, mt *Collection, models []Model) {
 	for _, model := range models {
-		modelKey := mt.ModelKey(model.ModelId())
+		modelKey := mt.ModelKey(model.ModelID())
 		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, mt.IndexKey(), model.ModelId())
+		expectSetDoesNotContain(t, mt.IndexKey(), model.ModelID())
 	}
 }
 
@@ -490,12 +507,14 @@ func numericIndexExists(collection *Collection, model Model, fieldName string) (
 	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName)
 	score := numericScore(fieldValue)
 	conn := testPool.NewConn()
-	defer conn.Close()
-	gotIds, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
+	defer func() {
+		_ = conn.Close()
+	}()
+	gotIDs, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
 	if err != nil {
 		return false, fmt.Errorf("Error in ZRANGEBYSCORE: %s", err.Error())
 	}
-	return stringSliceContains(gotIds, model.ModelId()), nil
+	return stringSliceContains(gotIDs, model.ModelID()), nil
 }
 
 // stringIndexExists returns true iff a string index on the given type and field exists. It
@@ -510,9 +529,11 @@ func stringIndexExists(collection *Collection, model Model, fieldName string) (b
 	for fieldValue.Kind() == reflect.Ptr {
 		fieldValue = fieldValue.Elem()
 	}
-	memberKey := fieldValue.String() + nullString + model.ModelId()
+	memberKey := fieldValue.String() + nullString + model.ModelID()
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	reply, err := conn.Do("ZRANK", indexKey, memberKey)
 	if err != nil {
 		return false, fmt.Errorf("Error in ZRANK: %s", err.Error())
@@ -531,35 +552,37 @@ func booleanIndexExists(collection *Collection, model Model, fieldName string) (
 	fieldValue := reflect.ValueOf(model).Elem().FieldByName(fieldName)
 	score := boolScore(fieldValue)
 	conn := testPool.NewConn()
-	defer conn.Close()
-	gotIds, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
+	defer func() {
+		_ = conn.Close()
+	}()
+	gotIDs, err := redis.Strings(conn.Do("ZRANGEBYSCORE", indexKey, score, score))
 	if err != nil {
 		return false, fmt.Errorf("Error in ZRANGEBYSCORE: %s", err.Error())
 	}
-	return stringSliceContains(gotIds, model.ModelId()), nil
+	return stringSliceContains(gotIDs, model.ModelID()), nil
 }
 
-// byId is a utility type for quickly sorting by id
-type byId []*indexedTestModel
+// byID is a utility type for quickly sorting by id
+type byID []*indexedTestModel
 
-func (ms byId) Len() int           { return len(ms) }
-func (ms byId) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
-func (ms byId) Less(i, j int) bool { return ms[i].ModelId() < ms[j].ModelId() }
+func (ms byID) Len() int           { return len(ms) }
+func (ms byID) Swap(i, j int)      { ms[i], ms[j] = ms[j], ms[i] }
+func (ms byID) Less(i, j int) bool { return ms[i].ModelID() < ms[j].ModelID() }
 
 // expectModelsToBeEqual returns an error if the two slices do not contain the exact
 // same models.
 func expectModelsToBeEqual(expected []*indexedTestModel, got []*indexedTestModel, orderMatters bool) error {
 	if len(expected) != len(got) {
-		return fmt.Errorf("Lengths did not match.\nExpected: %v\nBut got:  %v", modelIds(Models(expected)), modelIds(Models(got)))
+		return fmt.Errorf("Lengths did not match.\nExpected: %v\nBut got:  %v", modelIDs(Models(expected)), modelIDs(Models(got)))
 	}
 	eCopy, gCopy := make([]*indexedTestModel, len(expected)), make([]*indexedTestModel, len(got))
 	copy(eCopy, expected)
 	copy(gCopy, got)
 	if !orderMatters {
-		// if order doesn't matter, first sort by Id, which is unique.
+		// if order doesn't matter, first sort by id, which is unique.
 		// this way we can do a straightforward comparison
-		sort.Sort(byId(eCopy))
-		sort.Sort(byId(gCopy))
+		sort.Sort(byID(eCopy))
+		sort.Sort(byID(gCopy))
 	}
 	for i, e := range eCopy {
 		g := gCopy[i]
@@ -568,4 +591,74 @@ func expectModelsToBeEqual(expected []*indexedTestModel, got []*indexedTestModel
 		}
 	}
 	return nil
+}
+
+// compareAsStringSet compares expecteds and gots as if they were sets, i.e.,
+// it checks if they contain the same values, regardless of order. It returns true
+// and an empty string if expecteds and gots contain all the same values and false
+// and a detailed message if they do not.
+func compareAsStringSet(expecteds, gots []string) (bool, string) {
+	// make sure everything in expecteds is also in gots
+	for _, e := range expecteds {
+		index := indexOfStringSlice(gots, e)
+		if index == -1 {
+			msg := fmt.Sprintf("Missing expected element: %v", e)
+			return false, msg
+		}
+	}
+
+	// make sure everything in gots is also in expecteds
+	for _, g := range gots {
+		index := indexOfStringSlice(expecteds, g)
+		if index == -1 {
+			msg := fmt.Sprintf("Found extra element: %v", g)
+			return false, msg
+		}
+	}
+
+	return true, "ok"
+}
+
+// randomInt returns a pseudo-random int between the minimum and maximum
+// possible values.
+func randomInt() int {
+	return rand.Int()
+}
+
+// randomString returns a random string of length 16
+func randomString() string {
+	return uniuri.NewLen(16)
+}
+
+// randomBool returns a random bool
+func randomBool() bool {
+	return rand.Int()%2 == 0
+}
+
+// randomFloat returns a random float64
+func randomFloat() float64 {
+	return rand.Float64()
+}
+
+// randomComplex returns a random complex128
+func randomComplex() complex128 {
+	return cmplx.Rect(randomFloat(), randomFloat())
+}
+
+// decrementString subtracts 1 to the last codepoint in s and returns the new string
+// E.g. if the input string is "abc" the return will be "abb" because the codepoint
+// for 'c' is 99, 99-1 = 98, and the codepoint 98 corresponds to 'b'.
+func decrementString(s string) string {
+	codepoints := []uint8(s)
+	codepoints[len(codepoints)-1] = codepoints[len(codepoints)-1] + 1
+	return string(codepoints)
+}
+
+// incrementString adds 1 to the last codepoint in s and returns the new string
+// E.g. if the input string is "abc" the return will be "abd" because the codepoint
+// for 'c' is 99, 99+1 = 100, and the codepoint 100 corresponds to 'd'.
+func incrementString(s string) string {
+	codepoints := []uint8(s)
+	codepoints[len(codepoints)-1] = codepoints[len(codepoints)-1] + 1
+	return string(codepoints)
 }

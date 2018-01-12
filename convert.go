@@ -19,7 +19,7 @@ import (
 // scans the value into the fields of mr.model. It expects fieldValues to be the output
 // from an HMGET command from redis, without the field names included. The order of the
 // values in fieldValues must match the order of the corresponding field names. The id
-// field is special and should have the field name "-", which will be set with the SetModelId
+// field is special and should have the field name "-", which will be set with the SetModelID
 // method. fieldNames should be the actual field names as they appear in the struct definition,
 // not the redis names which may be custom.
 func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) error {
@@ -37,9 +37,9 @@ func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) err
 			return err
 		}
 		if fieldName == "-" {
-			// The Id signified by the field name "-" since that cannot
+			// The ID is signified by the field name "-" since that cannot
 			// possibly collide with other field names.
-			mr.model.SetModelId(string(replyBytes))
+			mr.model.SetModelID(string(replyBytes))
 			continue
 		}
 		fs, found := ms.fieldsByName[fieldName]
@@ -49,7 +49,7 @@ func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) err
 		fieldVal := mr.fieldValue(fieldName)
 		switch fs.kind {
 		case primativeField:
-			if err := scanPrimativeVal(replyBytes, fieldVal); err != nil {
+			if err := scanPrimitiveVal(replyBytes, fieldVal); err != nil {
 				return err
 			}
 		case pointerField:
@@ -65,9 +65,9 @@ func scanModel(fieldNames []string, fieldValues []interface{}, mr *modelRef) err
 	return nil
 }
 
-// scanPrimativeVal converts a slice of bytes response from redis into the type of dest
+// scanPrimitiveVal converts a slice of bytes response from redis into the type of dest
 // and then sets dest to that value
-func scanPrimativeVal(src []byte, dest reflect.Value) error {
+func scanPrimitiveVal(src []byte, dest reflect.Value) error {
 	if len(src) == 0 {
 		return nil // skip blanks
 	}
@@ -75,26 +75,26 @@ func scanPrimativeVal(src []byte, dest reflect.Value) error {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		srcInt, err := strconv.ParseInt(string(src), 10, 0)
 		if err != nil {
-			return fmt.Errorf("zoom: could not convert %s to int.", string(src))
+			return fmt.Errorf("zoom: could not convert %s to int", string(src))
 		}
 		dest.SetInt(srcInt)
 	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
 		srcUint, err := strconv.ParseUint(string(src), 10, 0)
 		if err != nil {
-			return fmt.Errorf("zoom: could not convert %s to uint.", string(src))
+			return fmt.Errorf("zoom: could not convert %s to uint", string(src))
 		}
 		dest.SetUint(srcUint)
 
 	case reflect.Float32, reflect.Float64:
 		srcFloat, err := strconv.ParseFloat(string(src), 64)
 		if err != nil {
-			return fmt.Errorf("zoom: could not convert %s to float.", string(src))
+			return fmt.Errorf("zoom: could not convert %s to float", string(src))
 		}
 		dest.SetFloat(srcFloat)
 	case reflect.Bool:
 		srcBool, err := strconv.ParseBool(string(src))
 		if err != nil {
-			return fmt.Errorf("zoom: could not convert %s to bool.", string(src))
+			return fmt.Errorf("zoom: could not convert %s to bool", string(src))
 		}
 		dest.SetBool(srcBool)
 	case reflect.String:
@@ -103,20 +103,20 @@ func scanPrimativeVal(src []byte, dest reflect.Value) error {
 		// Slice or array of bytes
 		dest.SetBytes(src)
 	default:
-		return fmt.Errorf("zoom: don't know how to scan primative type: %T.\n", src)
+		return fmt.Errorf("zoom: don't know how to scan primitive type: %T", src)
 	}
 	return nil
 }
 
-// scanPointerVal works like scanVal but expects dest to be a pointer to some primative
-// type
+// scanPointerVal works like scanVal but expects dest to be a pointer to some
+// primitive type
 func scanPointerVal(src []byte, dest reflect.Value) error {
 	// Skip empty or nil fields
 	if string(src) == "NULL" {
 		return nil
 	}
 	dest.Set(reflect.New(dest.Type().Elem()))
-	return scanPrimativeVal(src, dest.Elem())
+	return scanPrimitiveVal(src, dest.Elem())
 }
 
 // scanIncovertibleVal unmarshals src into dest using the given

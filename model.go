@@ -16,38 +16,38 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
-// RandomId can be embedded in any model struct in order to satisfy
-// the Model interface. The first time the ModelId method is called
-// on an embedded RandomId, it will generate a pseudo-random id which
+// RandomID can be embedded in any model struct in order to satisfy
+// the Model interface. The first time the ModelID method is called
+// on an embedded RandomID, it will generate a pseudo-random id which
 // is highly likely to be unique.
-type RandomId struct {
-	Id string
+type RandomID struct {
+	ID string
 }
 
 // Model is an interface encapsulating anything that can be saved and
 // retrieved by Zoom. The only requirement is that a Model must have
 // a getter and a setter for a unique id property.
 type Model interface {
-	ModelId() string
-	SetModelId(string)
+	ModelID() string
+	SetModelID(string)
 }
 
-// ModelId returns the id of the model, satisfying the Model interface.
-// If r.Id is an empty string, it will generate a pseudo-random id which
+// ModelID returns the id of the model, satisfying the Model interface.
+// If r.ID is an empty string, it will generate a pseudo-random id which
 // is highly likely to be unique.
-func (r *RandomId) ModelId() string {
-	if r.Id == "" {
-		r.Id = generateRandomId()
+func (r *RandomID) ModelID() string {
+	if r.ID == "" {
+		r.ID = generateRandomID()
 	}
-	return r.Id
+	return r.ID
 }
 
-// SetModelId sets the id of the model, satisfying the Model interface
-func (r *RandomId) SetModelId(id string) {
-	r.Id = id
+// SetModelID sets the id of the model, satisfying the Model interface.
+func (r *RandomID) SetModelID(id string) {
+	r.ID = id
 }
 
-// modelSpec contains parsed information about a particular type of model
+// modelSpec contains parsed information about a particular type of model.
 type modelSpec struct {
 	typ          reflect.Type
 	name         string
@@ -56,7 +56,7 @@ type modelSpec struct {
 	fallback     MarshalerUnmarshaler
 }
 
-// fieldSpec contains parsed information about a particular field
+// fieldSpec contains parsed information about a particular field.
 type fieldSpec struct {
 	kind      fieldKind
 	name      string
@@ -109,8 +109,8 @@ func compileModelSpec(typ reflect.Type) (*modelSpec, error) {
 			continue
 		}
 
-		// Skip the RandomId field
-		if field.Type == reflect.TypeOf(RandomId{}) {
+		// Skip the RandomID field
+		if field.Type == reflect.TypeOf(RandomID{}) {
 			continue
 		}
 
@@ -185,7 +185,7 @@ func getDefaultModelSpecName(typ reflect.Type) string {
 	return strings.Join(strings.Split(nameWithPackage, ".")[1:], "")
 }
 
-// setIndexKind sets the indexKind field of fs based on fieldType
+// setIndexKind sets the indexKind field of fs based on fieldType.
 func setIndexKind(fs *fieldSpec, fieldType reflect.Type) error {
 	switch {
 	case typeIsNumeric(fieldType):
@@ -292,16 +292,16 @@ func (ms *modelSpec) sortArgs(idsKey string, redisFieldNames []string, limit int
 
 // checkModelType returns an error iff model is not of the registered type that
 // corresponds to modelSpec.
-func (spec *modelSpec) checkModelType(model Model) error {
-	if reflect.TypeOf(model) != spec.typ {
-		return fmt.Errorf("model was the wrong type. Expected %s but got %T", spec.typ.String(), model)
+func (ms *modelSpec) checkModelType(model Model) error {
+	if reflect.TypeOf(model) != ms.typ {
+		return fmt.Errorf("model was the wrong type. Expected %s but got %T", ms.typ.String(), model)
 	}
 	return nil
 }
 
 // checkModelsType returns an error iff models is not a pointer to a slice of models of the
 // registered type that corresponds to modelSpec.
-func (spec *modelSpec) checkModelsType(models interface{}) error {
+func (ms *modelSpec) checkModelsType(models interface{}) error {
 	if reflect.TypeOf(models).Kind() != reflect.Ptr {
 		return fmt.Errorf("models should be a pointer to a slice or array of models")
 	}
@@ -312,8 +312,8 @@ func (spec *modelSpec) checkModelsType(models interface{}) error {
 		return fmt.Errorf("models should be a pointer to a slice or array of models")
 	case !typeIsPointerToStruct(elemType):
 		return fmt.Errorf("the elements in models should be pointers to structs")
-	case elemType != spec.typ:
-		return fmt.Errorf("models were the wrong type. Expected slice or array of %s but got %T", spec.typ.String(), models)
+	case elemType != ms.typ:
+		return fmt.Errorf("models were the wrong type. Expected slice or array of %s but got %T", ms.typ.String(), models)
 	}
 	return nil
 }
@@ -352,7 +352,7 @@ func (mr *modelRef) fieldValue(name string) reflect.Value {
 
 // key returns a key which is used in redis to store the model
 func (mr *modelRef) key() string {
-	return mr.spec.name + ":" + mr.model.ModelId()
+	return mr.spec.name + ":" + mr.model.ModelID()
 }
 
 // mainHashArgs returns the args for the main hash for this model. Typically

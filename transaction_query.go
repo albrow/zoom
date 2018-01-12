@@ -2,10 +2,10 @@ package zoom
 
 import "github.com/garyburd/redigo/redis"
 
-// TransactionalQuery represents a query which will be run inside an existing
-// transaction. A TransactionalQuery may consist of one or more query modifiers
+// TransactionQuery represents a query which will be run inside an existing
+// transaction. A TransactionQuery may consist of one or more query modifiers
 // (e.g. Filter or Order) and should always be finished with a query finisher
-// (e.g. Run or Ids). Unlike Query, the finisher methods for TransactionalQuery
+// (e.g. Run or IDs). Unlike Query, the finisher methods for TransactionQuery
 // always expect pointers as arguments and will set the values when the
 // corresponding Transaction is executed.
 type TransactionQuery struct {
@@ -13,11 +13,11 @@ type TransactionQuery struct {
 	tx *Transaction
 }
 
-// newTransactionalQuery creates and returns a new TransactionalQuery. It is an
-// internal function that allows us to convert a Query to a TransactionalQuery.
+// newTransactionQuery creates and returns a new TransactionQuery. It is an
+// internal function that allows us to convert a Query to a TransactionQuery.
 // That way, there is only one canonical implementation of the query finisher
-// methods (e.g. Run, RunOne, Ids).
-func newTransactionalQuery(query *query, tx *Transaction) *TransactionQuery {
+// methods (e.g. Run, RunOne, IDs).
+func newTransactionQuery(query *query, tx *Transaction) *TransactionQuery {
 	return &TransactionQuery{
 		query: query,
 		tx:    tx,
@@ -27,9 +27,9 @@ func newTransactionalQuery(query *query, tx *Transaction) *TransactionQuery {
 // Query is used to construct a query in the context of an existing Transaction
 // It can be used to run a query atomically along with commands, scripts, or
 // other queries in a single round trip. Note that this method returns a
-// TransactionalQuery, whereas Collection.NewQuery returns a Query. The two
+// TransactionQuery, whereas Collection.NewQuery returns a Query. The two
 // types are very similar, but there are differences in how they are eventually
-// executed. Like a regular Query, a TransactionalQuery can be chained together
+// executed. Like a regular Query, a TransactionQuery can be chained together
 // with one or more query modifiers (e.g. Filter or Order). You also need to
 // finish the query with a method such as Run, RunOne, or Count. The major
 // difference is that TransactionQueries are not actually run until you call
@@ -99,7 +99,7 @@ func (q *TransactionQuery) Run(models interface{}) {
 		q.tx.setError(err)
 		return
 	}
-	idsKey, tmpKeys, err := generateIdsSet(q.query, q.tx)
+	idsKey, tmpKeys, err := generateIDsSet(q.query, q.tx)
 	if err != nil {
 		q.tx.setError(err)
 		return
@@ -133,7 +133,7 @@ func (q *TransactionQuery) RunOne(model Model) {
 		q.tx.setError(err)
 		return
 	}
-	idsKey, tmpKeys, err := generateIdsSet(q.query, q.tx)
+	idsKey, tmpKeys, err := generateIDsSet(q.query, q.tx)
 	if err != nil {
 		q.tx.setError(err)
 		return
@@ -177,27 +177,27 @@ func (q *TransactionQuery) Count(count *int) {
 	} else {
 		// If the query has filters, it is difficult to do any optimizations.
 		// Instead we'll just count the number of ids that match the query
-		// criteria. To do in a single transaction, we use the StoreIds method and
+		// criteria. To do in a single transaction, we use the StoreIDs method and
 		// then add a LLEN command.
 		destKey := generateRandomKey("tmp:countDestKey")
-		q.StoreIds(destKey)
+		q.StoreIDs(destKey)
 		q.tx.Command("LLEN", redis.Args{destKey}, NewScanIntHandler(count))
 		// Delete the temporary destKey when we're done.
 		q.tx.Command("DEL", redis.Args{destKey}, nil)
 	}
 }
 
-// Ids will find the ids for models matching the query criteria and set the
-// value of ids. It works very similarly to Query.Ids, so you can check the
-// documentation for Query.Ids for more information. The first error encountered
+// IDs will find the ids for models matching the query criteria and set the
+// value of ids. It works very similarly to Query.IDs, so you can check the
+// documentation for Query.IDs for more information. The first error encountered
 // will be saved to the corresponding Transaction (if there is not already an
 // error for the Transaction) and returned when you call Transaction.Exec.
-func (q *TransactionQuery) Ids(ids *[]string) {
+func (q *TransactionQuery) IDs(ids *[]string) {
 	if q.hasError() {
 		q.tx.setError(q.err)
 		return
 	}
-	idsKey, tmpKeys, err := generateIdsSet(q.query, q.tx)
+	idsKey, tmpKeys, err := generateIDsSet(q.query, q.tx)
 	if err != nil {
 		q.tx.setError(err)
 	}
@@ -214,18 +214,18 @@ func (q *TransactionQuery) Ids(ids *[]string) {
 	}
 }
 
-// StoreIds will store the ids for for models matching the criteria in a list
-// identified by destKey. It works very similarly to Query.StoreIds, so you can
-// check the documentation for Query.StoreIds for more information. The first
+// StoreIDs will store the ids for for models matching the criteria in a list
+// identified by destKey. It works very similarly to Query.StoreIDs, so you can
+// check the documentation for Query.StoreIDs for more information. The first
 // error encountered will be saved to the corresponding Transaction (if there is
 // not already an error for the Transaction) and returned when you call
 // Transaction.Exec.
-func (q *TransactionQuery) StoreIds(destKey string) {
+func (q *TransactionQuery) StoreIDs(destKey string) {
 	if q.hasError() {
 		q.tx.setError(q.err)
 		return
 	}
-	idsKey, tmpKeys, err := generateIdsSet(q.query, q.tx)
+	idsKey, tmpKeys, err := generateIDsSet(q.query, q.tx)
 	if err != nil {
 		q.tx.setError(err)
 	}

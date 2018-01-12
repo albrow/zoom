@@ -20,11 +20,11 @@ Table of Contents
 <!-- toc -->
 
 - [Development Status](#development-status)
-- [When is Zoom a Good Fit?](#when-is-zoom-a-good-fit-)
+- [When is Zoom a Good Fit?](#when-is-zoom-a-good-fit)
 - [Installation](#installation)
 - [Initialization](#initialization)
 - [Models](#models)
-  * [What is a Model?](#what-is-a-model-)
+  * [What is a Model?](#what-is-a-model)
   * [Customizing Field Names](#customizing-field-names)
   * [Creating Collections](#creating-collections)
   * [Saving Models](#saving-models)
@@ -43,7 +43,7 @@ Table of Contents
   * [Persistence](#persistence)
   * [Atomicity](#atomicity)
   * [Concurrent Updates and Optimistic Locking](#concurrent-updates-and-optimistic-locking)
-- [Testing & Benchmarking](#testing---benchmarking)
+- [Testing & Benchmarking](#testing--benchmarking)
   * [Running the Tests](#running-the-tests)
   * [Running the Benchmarks](#running-the-benchmarks)
 - [Contributing](#contributing)
@@ -188,17 +188,17 @@ Models in Zoom are just structs which implement the `zoom.Model` interface:
 
 ``` go
 type Model interface {
-  ModelId() string
-  SetModelId(string)
+  ModelID() string
+  SetModelID(string)
 }
 ```
 
 To clarify, all you have to do to implement the `Model` interface is add a getter and setter
 for a unique id property.
 
-If you want, you can embed `zoom.RandomId` to give your model all the
-required methods. A struct with `zoom.RandomId` embedded will generate a pseudo-random id for itself
-the first time the `ModelId` method is called iff it does not already have an id. The pseudo-randomly
+If you want, you can embed `zoom.RandomID` to give your model all the
+required methods. A struct with `zoom.RandomID` embedded will generate a pseudo-random id for itself
+the first time the `ModelID` method is called iff it does not already have an id. The pseudo-randomly
 generated id consists of the current UTC unix time with second precision, an incremented atomic
 counter, a unique machine identifier, and an additional random string of characters. With ids generated
 this way collisions are extremely unlikely.
@@ -213,7 +213,7 @@ A struct definition serves as a sort of schema for your model. Here's an example
 type Person struct {
 	 Name string
 	 Age  int
-	 zoom.RandomId
+	 zoom.RandomID
 }
 ```
 
@@ -236,7 +236,7 @@ following struct definition:
 type Person struct {
 	 Name string    `redis:"name"`
 	 Age  int       `redis:"age"`
-	 zoom.RandomId
+	 zoom.RandomID
 }
 ```
 
@@ -523,7 +523,7 @@ of all the available modifiers:
 You can run a query with one of the following query finishers:
 
 - [`Run`](http://godoc.org/github.com/albrow/zoom/#Query.Run)
-- [`Ids`](http://godoc.org/github.com/albrow/zoom/#Query.Ids)
+- [`IDs`](http://godoc.org/github.com/albrow/zoom/#Query.IDs)
 - [`Count`](http://godoc.org/github.com/albrow/zoom/#Query.Count)
 - [`RunOne`](http://godoc.org/github.com/albrow/zoom/#Query.RunOne)
 
@@ -613,10 +613,10 @@ To understand why optimistic locking is useful, consider the following code:
 
 ``` go
 // likePost increments the number of likes for a post with the given id.
-func likePost(postId string) error {
-  // Find the Post with the given postId
+func likePost(postID string) error {
+  // Find the Post with the given postID
   post := &Post{}
-  if err := Posts.Find(postId, post); err != nil {
+  if err := Posts.Find(postID, post); err != nil {
 	 return err
   }
   // Increment the number of likes
@@ -641,16 +641,16 @@ You can use optimistic locking to avoid this problem. Here's the revised code:
 
 ```go
 // likePost increments the number of likes for a post with the given id.
-func likePost(postId string) error {
+func likePost(postID string) error {
   // Start a new transaction and watch the post key for changes. It's important
   // to call Watch or WatchKey *before* finding the model.
   tx := pool.NewTransaction()
-  if err := tx.WatchKey(Posts.ModelKey(postId)); err != nil {
+  if err := tx.WatchKey(Posts.ModelKey(postID)); err != nil {
     return err
   }
-  // Find the Post with the given postId
+  // Find the Post with the given postID
   post := &Post{}
-  if err := Posts.Find(postId, post); err != nil {
+  if err := Posts.Find(postID, post); err != nil {
 	 return err
   }
   // Increment the number of likes
@@ -676,9 +676,9 @@ particular problem might be best solved by the `HINCRBY` command.
 ```go
 // likePost atomically increments the number of likes for a post with the given
 // id and then returns the new number of likes.
-func likePost(postId string) (int, error) {
+func likePost(postID string) (int, error) {
 	// Get the key which is used to store the post in Redis
-	postKey := Posts.ModelKey(postId, post)
+	postKey := Posts.ModelKey(postID, post)
 	// Start a new transaction
 	tx := pool.NewTransaction()
 	// Add a command to increment the number of Likes. The HINCRBY command returns

@@ -236,7 +236,7 @@ func newUnindexedCollectionError(methodName string) error {
 // Save writes a model (a struct which satisfies the Model interface) to the
 // redis database. Save returns an error if the type of model does not match the
 // registered Collection. To make a struct satisfy the Model interface, you can
-// embed zoom.RandomId, which will generate pseudo-random ids for each model.
+// embed zoom.RandomID, which will generate pseudo-random ids for each model.
 func (c *Collection) Save(model Model) error {
 	t := c.pool.NewTransaction()
 	t.Save(c, model)
@@ -250,7 +250,7 @@ func (c *Collection) Save(model Model) error {
 // redis database inside an existing transaction. save will set the err property
 // of the transaction if the type of model does not match the registered
 // Collection, which will cause exec to fail immediately and return the error.
-// To make a struct satisfy the Model interface, you can embed zoom.RandomId,
+// To make a struct satisfy the Model interface, you can embed zoom.RandomID,
 // which will generate pseudo-random ids for each model. Any errors encountered
 // will be added to the transaction and returned as an error when the
 // transaction is executed.
@@ -287,7 +287,7 @@ func (t *Transaction) Save(c *Collection, model Model) {
 	}
 	// Add the model id to the set of all models for this collection
 	if c.index {
-		t.Command("SADD", redis.Args{c.IndexKey(), model.ModelId()}, nil)
+		t.Command("SADD", redis.Args{c.IndexKey(), model.ModelID()}, nil)
 	}
 }
 
@@ -330,7 +330,7 @@ func (t *Transaction) saveNumericIndex(mr *modelRef, fs *fieldSpec) {
 	if err != nil {
 		t.setError(err)
 	}
-	t.Command("ZADD", redis.Args{indexKey, score, mr.model.ModelId()}, nil)
+	t.Command("ZADD", redis.Args{indexKey, score, mr.model.ModelID()}, nil)
 }
 
 // saveBooleanIndex adds commands to the transaction for saving a boolean
@@ -345,14 +345,14 @@ func (t *Transaction) saveBooleanIndex(mr *modelRef, fs *fieldSpec) {
 	if err != nil {
 		t.setError(err)
 	}
-	t.Command("ZADD", redis.Args{indexKey, score, mr.model.ModelId()}, nil)
+	t.Command("ZADD", redis.Args{indexKey, score, mr.model.ModelID()}, nil)
 }
 
 // saveStringIndex adds commands to the transaction for saving a string
 // index on the given field. This includes removing the old index (if any).
 func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 	// Remove the old index (if any)
-	t.deleteStringIndex(mr.spec.name, mr.model.ModelId(), fs.redisName)
+	t.deleteStringIndex(mr.spec.name, mr.model.ModelID(), fs.redisName)
 	fieldValue := mr.fieldValue(fs.name)
 	for fieldValue.Kind() == reflect.Ptr {
 		if fieldValue.IsNil() {
@@ -360,7 +360,7 @@ func (t *Transaction) saveStringIndex(mr *modelRef, fs *fieldSpec) {
 		}
 		fieldValue = fieldValue.Elem()
 	}
-	member := fieldValue.String() + nullString + mr.model.ModelId()
+	member := fieldValue.String() + nullString + mr.model.ModelID()
 	indexKey, err := mr.spec.fieldIndexKey(fs.name)
 	if err != nil {
 		t.setError(err)
@@ -432,7 +432,7 @@ func (t *Transaction) SaveFields(c *Collection, fieldNames []string, model Model
 	}
 	// Add the model id to the set of all models for this collection
 	if c.index {
-		t.Command("SADD", redis.Args{c.IndexKey(), model.ModelId()}, nil)
+		t.Command("SADD", redis.Args{c.IndexKey(), model.ModelID()}, nil)
 	}
 }
 
@@ -466,7 +466,7 @@ func (t *Transaction) Find(c *Collection, id string, model Model) {
 		t.setError(fmt.Errorf("zoom: Error in Find or Transaction.Find: %s", err.Error()))
 		return
 	}
-	model.SetModelId(id)
+	model.SetModelID(id)
 	mr := &modelRef{
 		collection: c,
 		model:      model,
@@ -505,7 +505,7 @@ func (t *Transaction) FindFields(c *Collection, id string, fieldNames []string, 
 		return
 	}
 	// Set the model id and create a modelRef
-	model.SetModelId(id)
+	model.SetModelID(id)
 	mr := &modelRef{
 		collection: c,
 		spec:       c.spec,
@@ -688,12 +688,12 @@ func (t *Transaction) deleteFieldIndexes(c *Collection, id string) {
 
 // deleteNumericOrBooleanIndex removes the model from a numeric or boolean index for the given
 // field. I.e. it removes the model id from a sorted set.
-func (t *Transaction) deleteNumericOrBooleanIndex(fs *fieldSpec, ms *modelSpec, modelId string) {
+func (t *Transaction) deleteNumericOrBooleanIndex(fs *fieldSpec, ms *modelSpec, modelID string) {
 	indexKey, err := ms.fieldIndexKey(fs.name)
 	if err != nil {
 		t.setError(err)
 	}
-	t.Command("ZREM", redis.Args{indexKey, modelId}, nil)
+	t.Command("ZREM", redis.Args{indexKey, modelID}, nil)
 }
 
 // DeleteAll deletes all the models of the given type in a single transaction. See
@@ -729,7 +729,7 @@ func (t *Transaction) DeleteAll(c *Collection, count *int) {
 	} else {
 		handler = NewScanIntHandler(count)
 	}
-	t.DeleteModelsBySetIds(c.IndexKey(), c.Name(), handler)
+	t.DeleteModelsBySetIDs(c.IndexKey(), c.Name(), handler)
 }
 
 // checkModelType returns an error iff model is not of the registered type that

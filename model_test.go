@@ -16,7 +16,7 @@ import (
 )
 
 func TestCompileModelSpec(t *testing.T) {
-	type Primative struct {
+	type Primitive struct {
 		Int    int
 		String string
 		Bool   bool
@@ -53,7 +53,7 @@ func TestCompileModelSpec(t *testing.T) {
 		Time time.Time `zoom:"index"`
 	}
 	type Embedded struct {
-		Primative
+		Primitive
 	}
 	type private struct {
 		Int int
@@ -67,30 +67,30 @@ func TestCompileModelSpec(t *testing.T) {
 		expectedError error
 	}{
 		{
-			model: &Primative{},
+			model: &Primitive{},
 			expectedSpec: &modelSpec{
-				typ:  reflect.TypeOf(&Primative{}),
-				name: "Primative",
+				typ:  reflect.TypeOf(&Primitive{}),
+				name: "Primitive",
 				fieldsByName: map[string]*fieldSpec{
 					"Int": &fieldSpec{
 						kind:      primativeField,
 						name:      "Int",
 						redisName: "Int",
-						typ:       reflect.TypeOf(Primative{}.Int),
+						typ:       reflect.TypeOf(Primitive{}.Int),
 						indexKind: noIndex,
 					},
 					"String": &fieldSpec{
 						kind:      primativeField,
 						name:      "String",
 						redisName: "String",
-						typ:       reflect.TypeOf(Primative{}.String),
+						typ:       reflect.TypeOf(Primitive{}.String),
 						indexKind: noIndex,
 					},
 					"Bool": &fieldSpec{
 						kind:      primativeField,
 						name:      "Bool",
 						redisName: "Bool",
-						typ:       reflect.TypeOf(Primative{}.Bool),
+						typ:       reflect.TypeOf(Primitive{}.Bool),
 						indexKind: noIndex,
 					},
 				},
@@ -99,21 +99,21 @@ func TestCompileModelSpec(t *testing.T) {
 						kind:      primativeField,
 						name:      "Int",
 						redisName: "Int",
-						typ:       reflect.TypeOf(Primative{}.Int),
+						typ:       reflect.TypeOf(Primitive{}.Int),
 						indexKind: noIndex,
 					},
 					{
 						kind:      primativeField,
 						name:      "String",
 						redisName: "String",
-						typ:       reflect.TypeOf(Primative{}.String),
+						typ:       reflect.TypeOf(Primitive{}.String),
 						indexKind: noIndex,
 					},
 					{
 						kind:      primativeField,
 						name:      "Bool",
 						redisName: "Bool",
-						typ:       reflect.TypeOf(Primative{}.Bool),
+						typ:       reflect.TypeOf(Primitive{}.Bool),
 						indexKind: noIndex,
 					},
 				},
@@ -330,20 +330,20 @@ func TestCompileModelSpec(t *testing.T) {
 				typ:  reflect.TypeOf(&Embedded{}),
 				name: "Embedded",
 				fieldsByName: map[string]*fieldSpec{
-					"Primative": {
+					"Primitive": {
 						kind:      inconvertibleField,
-						name:      "Primative",
-						redisName: "Primative",
-						typ:       reflect.TypeOf(Primative{}),
+						name:      "Primitive",
+						redisName: "Primitive",
+						typ:       reflect.TypeOf(Primitive{}),
 						indexKind: noIndex,
 					},
 				},
 				fields: []*fieldSpec{
 					{
 						kind:      inconvertibleField,
-						name:      "Primative",
-						redisName: "Primative",
-						typ:       reflect.TypeOf(Primative{}),
+						name:      "Primitive",
+						redisName: "Primitive",
+						typ:       reflect.TypeOf(Primitive{}),
 						indexKind: noIndex,
 					},
 				},

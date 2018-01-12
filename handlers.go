@@ -23,7 +23,7 @@ func newAlwaysErrorHandler(err error) ReplyHandler {
 // newModelExistsHandler returns a reply handler which will return a
 // ModelNotFound error if the value of reply is false. It is expected to be
 // used as the reply handler for an EXISTS command.
-func newModelExistsHandler(collection *Collection, modelId string) ReplyHandler {
+func newModelExistsHandler(collection *Collection, modelID string) ReplyHandler {
 	return func(reply interface{}) error {
 		exists, err := redis.Bool(reply, nil)
 		if err != nil {
@@ -32,7 +32,7 @@ func newModelExistsHandler(collection *Collection, modelId string) ReplyHandler 
 		if !exists {
 			return ModelNotFoundError{
 				Collection: collection,
-				Msg:        fmt.Sprintf("Could not find %s with id = %s", collection.spec.name, modelId),
+				Msg:        fmt.Sprintf("Could not find %s with id = %s", collection.spec.name, modelID),
 			}
 		}
 		return nil
@@ -137,7 +137,7 @@ func newScanModelRefHandler(fieldNames []string, mr *modelRef) ReplyHandler {
 // fieldNames should be the actual field names as they appear in the struct
 // definition, not the Redis names which may be custom. The special field name
 // "-" is used to represent the id for the model and will be set by the
-// ReplyHandler using the SetModelId method.
+// ReplyHandler using the SetModelID method.
 //
 // For example, if fieldNames is ["Age", "Name", "-"] and the reply from Redis
 // looks like this:
@@ -148,7 +148,7 @@ func newScanModelRefHandler(fieldNames []string, mr *modelRef) ReplyHandler {
 //
 // The ReplyHandler will set the Age and the Name of the model to 25 and "Bob",
 // respectively, using reflection. Then it will set the id of the model to
-// "b1C7B0yETtXFYuKinndqoa" using the model's SetModelId method.
+// "b1C7B0yETtXFYuKinndqoa" using the model's SetModelID method.
 func NewScanModelHandler(fieldNames []string, model Model) ReplyHandler {
 	// Create a modelRef that wraps the given model.
 	collection, err := getCollectionForModel(model)
@@ -225,8 +225,8 @@ func newScanModelsHandler(spec *modelSpec, fieldNames []string, models interface
 //
 // fieldNames should be the actual field names as they appear in the struct
 // definition, not the Redis names which may be custom. The special value of "-"
-// in fieldNames represents the Id of the model and will be set via the
-// SetModelId method. The ReplyHandler will use the length of fieldNames to
+// in fieldNames represents the id of the model and will be set via the
+// SetModelID method. The ReplyHandler will use the length of fieldNames to
 // determine which fields belong to which models.
 //
 // The returned ReplyHandler will grow or shrink models as needed. It expects a
@@ -248,7 +248,7 @@ func newScanModelsHandler(spec *modelSpec, fieldNames []string, models interface
 // field of the first Model to 25 using reflection. It will use the second value
 // of the reply to set Name value of the first Model to "Bob" using reflection.
 // And finally, it will use the third value in reply to set the id of the first
-// Model by calling its SetModelId method. Because the length of fieldNames is 3
+// Model by calling its SetModelID method. Because the length of fieldNames is 3
 // in this case, the ReplyHandler will assign the first three to the first
 // model, the next three to the second model, etc.
 func NewScanModelsHandler(collection *Collection, fieldNames []string, models interface{}) ReplyHandler {

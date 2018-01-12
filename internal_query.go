@@ -18,7 +18,7 @@ import (
 // query represents a query which will retrieve some models from
 // the database. A Query may consist of one or more query modifiers
 // (e.g. Filter or Order) and may be executed with a query finisher
-// (e.g. Run or Ids).
+// (e.g. Run or IDs).
 type query struct {
 	collection *Collection
 	pool       *Pool
@@ -41,7 +41,7 @@ func newQuery(collection *Collection) *query {
 	// For now, only indexed collections are queryable. This might change in
 	// future versions.
 	if !collection.index {
-		q.setError(fmt.Errorf("zoom: error in NewQuery: Only indexed collections are queryable."))
+		q.setError(fmt.Errorf("zoom: error in NewQuery: Only indexed collections are queryable"))
 		return q
 	}
 	return q
@@ -80,9 +80,8 @@ type order struct {
 func (o order) String() string {
 	if o.kind == ascendingOrder {
 		return fmt.Sprintf(`Order("%s")`, o.fieldName)
-	} else {
-		return fmt.Sprintf(`Order("-%s")`, o.fieldName)
 	}
+	return fmt.Sprintf(`Order("-%s")`, o.fieldName)
 }
 
 type orderKind int
@@ -111,9 +110,8 @@ type filter struct {
 func (f filter) String() string {
 	if f.value.Kind() == reflect.String {
 		return fmt.Sprintf(`Filter("%s %s", "%s")`, f.fieldSpec.name, f.op, f.value.String())
-	} else {
-		return fmt.Sprintf(`Filter("%s %s", %v)`, f.fieldSpec.name, f.op, f.value.Interface())
 	}
+	return fmt.Sprintf(`Filter("%s %s", %v)`, f.fieldSpec.name, f.op, f.value.Interface())
 }
 
 type filterOp int
@@ -178,17 +176,17 @@ func (q *query) setError(e error) {
 func (q *query) Order(fieldName string) {
 	if q.hasOrder() {
 		// TODO: allow secondary sort orders?
-		q.setError(errors.New("zoom: error in Query.Order: previous order already specified. Only one order per query is allowed."))
+		q.setError(errors.New("zoom: error in Query.Order: previous order already specified (only one order per query is allowed)"))
 		return
 	}
 	// Check for the presence of the "-" prefix
-	var orderKind orderKind
+	var ok orderKind
 	if strings.HasPrefix(fieldName, "-") {
-		orderKind = descendingOrder
+		ok = descendingOrder
 		// remove the "-" prefix
 		fieldName = fieldName[1:]
 	} else {
-		orderKind = ascendingOrder
+		ok = ascendingOrder
 	}
 	// Get the redisName for the given fieldName
 	fs, found := q.collection.spec.fieldsByName[fieldName]
@@ -200,7 +198,7 @@ func (q *query) Order(fieldName string) {
 	q.order = order{
 		fieldName: fs.name,
 		redisName: fs.redisName,
-		kind:      orderKind,
+		kind:      ok,
 	}
 }
 
@@ -271,9 +269,9 @@ func (q *query) Filter(filterString string, value interface{}) {
 		return
 	}
 	// Parse the filter operator
-	filterOp, found := filterOps[operator]
+	fOp, found := filterOps[operator]
 	if !found {
-		q.setError(errors.New("zoom: invalid Filter operator in fieldStr. should be one of =, !=, >, <, >=, or <=."))
+		q.setError(errors.New("zoom: invalid Filter operator in fieldStr (should be one of =, !=, >, <, >=, or <=)"))
 		return
 	}
 	// Get the fieldSpec for the given fieldName
@@ -285,35 +283,35 @@ func (q *query) Filter(filterString string, value interface{}) {
 	}
 	// Make sure the field is an indexed field
 	if fieldSpec.indexKind == noIndex {
-		err := fmt.Errorf("zoom: filters are only allowed on indexed fields. %s.%s is not indexed. You can index it by adding the `zoom:\"index\"` struct tag.", q.collection.spec.typ.String(), fieldName)
+		err := fmt.Errorf("zoom: filters are only allowed on indexed fields and %s.%s is not indexed (try adding the `zoom:\"index\"` struct tag)", q.collection.spec.typ.String(), fieldName)
 		q.setError(err)
 		return
 	}
-	filter := filter{
+	fltr := filter{
 		fieldSpec: fieldSpec,
-		op:        filterOp,
+		op:        fOp,
 	}
 	// Make sure the given value is the correct type
-	if err := filter.checkValType(value); err != nil {
+	if err := fltr.checkValType(value); err != nil {
 		q.setError(err)
 		return
 	}
-	filter.value = reflect.ValueOf(value)
-	q.filters = append(q.filters, filter)
+	fltr.value = reflect.ValueOf(value)
+	q.filters = append(q.filters, fltr)
 	return
 }
 
 func splitFilterString(filterString string) (fieldName string, operator string, err error) {
 	tokens := strings.Split(filterString, " ")
 	if len(tokens) != 2 {
-		return "", "", errors.New("zoom: too many spaces in fieldStr argument. should be a field name, a space, and an operator.")
+		return "", "", errors.New("zoom: too many spaces in fieldStr argument (should be a field name, a space, and an operator)")
 	}
 	return tokens[0], tokens[1], nil
 }
 
 // checkValType returns an error if the type of value does not correspond to
 // filter.fieldSpec.
-func (filter filter) checkValType(value interface{}) error {
+func (f filter) checkValType(value interface{}) error {
 	// Here we iterate through pointer indirections. This is so you can
 	// just pass in a primitive instead of a pointer to a primitive for
 	// filtering on fields which have pointer values.
@@ -327,21 +325,21 @@ func (filter filter) checkValType(value interface{}) error {
 		}
 	}
 	// Also dereference the field type to reach the underlying type.
-	fieldType := filter.fieldSpec.typ
+	fieldType := f.fieldSpec.typ
 	for fieldType.Kind() == reflect.Ptr {
 		fieldType = fieldType.Elem()
 	}
 	if valueType != fieldType {
-		return fmt.Errorf("zoom: invalid value for Filter on %s. Type of value (%T) does not match type of field (%s).", filter.fieldSpec.name, value, fieldType.String())
+		return fmt.Errorf("zoom: invalid value for Filter on %s: type of value (%T) does not match type of field (%s)", f.fieldSpec.name, value, fieldType.String())
 	}
 	return nil
 }
 
-// generateIdsSet will return the key of a set or sorted set that contains all the ids
+// generateIDsSet will return the key of a set or sorted set that contains all the ids
 // which match the query criteria. It may also return some temporary keys which were created
 // during the process of creating the set of ids. Note that tmpKeys may contain idsKey itself,
 // so the temporary keys should not be deleted until after the ids have been read from idsKey.
-func generateIdsSet(q *query, tx *Transaction) (idsKey string, tmpKeys []interface{}, err error) {
+func generateIDsSet(q *query, tx *Transaction) (idsKey string, tmpKeys []interface{}, err error) {
 	idsKey = q.collection.spec.indexKey()
 	tmpKeys = []interface{}{}
 	if q.hasOrder() {
@@ -353,33 +351,33 @@ func generateIdsSet(q *query, tx *Transaction) (idsKey string, tmpKeys []interfa
 		if fieldSpec.indexKind == stringIndex {
 			// If the order is a string field, we need to extract the ids before
 			// we use ZRANGE. Create a temporary set to store the ordered ids
-			orderedIdsKey := generateRandomKey("tmp:order:" + q.order.fieldName)
-			tmpKeys = append(tmpKeys, orderedIdsKey)
-			idsKey = orderedIdsKey
+			orderedIDsKey := generateRandomKey("tmp:order:" + q.order.fieldName)
+			tmpKeys = append(tmpKeys, orderedIDsKey)
+			idsKey = orderedIDsKey
 			// TODO: as an optimization, if there is a filter on the same field,
 			// pass the start and stop parameters to the script.
-			tx.ExtractIdsFromStringIndex(fieldIndexKey, orderedIdsKey, "-", "+")
+			tx.ExtractIDsFromStringIndex(fieldIndexKey, orderedIDsKey, "-", "+")
 		} else {
 			idsKey = fieldIndexKey
 		}
 	}
 	if q.hasFilters() {
-		filteredIdsKey := generateRandomKey("tmp:filter:all")
-		tmpKeys = append(tmpKeys, filteredIdsKey)
+		filteredIDsKey := generateRandomKey("tmp:filter:all")
+		tmpKeys = append(tmpKeys, filteredIDsKey)
 		for i, filter := range q.filters {
 			if i == 0 {
 				// The first time, we should intersect with the ids key from above
-				if err := intersectFilter(q, tx, filter, idsKey, filteredIdsKey); err != nil {
+				if err := intersectFilter(q, tx, filter, idsKey, filteredIDsKey); err != nil {
 					return "", tmpKeys, err
 				}
 			} else {
-				// All other times, we should intersect with the filteredIdsKey itself
-				if err := intersectFilter(q, tx, filter, filteredIdsKey, filteredIdsKey); err != nil {
+				// All other times, we should intersect with the filteredIDsKey itself
+				if err := intersectFilter(q, tx, filter, filteredIDsKey, filteredIDsKey); err != nil {
 					return "", tmpKeys, err
 				}
 			}
 		}
-		idsKey = filteredIdsKey
+		idsKey = filteredIDsKey
 	}
 	return idsKey, tmpKeys, nil
 }
@@ -415,9 +413,9 @@ func intersectNumericFilter(q *query, tx *Transaction, filter filter, origKey st
 		valueExclusive := fmt.Sprintf("(%v", filter.value.Interface())
 		filterKey := generateRandomKey("tmp:filter:" + fieldIndexKey)
 		// ZADD all ids greater than filter.value
-		tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, valueExclusive, "+inf")
+		tx.ExtractIDsFromFieldIndex(fieldIndexKey, filterKey, valueExclusive, "+inf")
 		// ZADD all ids less than filter.value
-		tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, "-inf", valueExclusive)
+		tx.ExtractIDsFromFieldIndex(fieldIndexKey, filterKey, "-inf", valueExclusive)
 		// Intersect filterKey with origKey and store result in destKey
 		tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
 		// Delete the temporary key
@@ -443,7 +441,7 @@ func intersectNumericFilter(q *query, tx *Transaction, filter filter, origKey st
 		}
 		// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
 		filterKey := generateRandomKey("tmp:filter:" + fieldIndexKey)
-		tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, min, max)
+		tx.ExtractIDsFromFieldIndex(fieldIndexKey, filterKey, min, max)
 		// Intersect filterKey with origKey and store result in destKey
 		tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
 		// Delete the temporary key
@@ -512,7 +510,7 @@ func intersectBoolFilter(q *query, tx *Transaction, filter filter, origKey strin
 	}
 	// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
 	filterKey := generateRandomKey("tmp:filter:" + fieldIndexKey)
-	tx.ExtractIdsFromFieldIndex(fieldIndexKey, filterKey, min, max)
+	tx.ExtractIDsFromFieldIndex(fieldIndexKey, filterKey, min, max)
 	// Intersect filterKey with origKey and store result in destKey
 	tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
 	// Delete the temporary key
@@ -535,10 +533,10 @@ func intersectStringFilter(q *query, tx *Transaction, filter filter, origKey str
 		filterKey := generateRandomKey("tmp:filter:" + fieldIndexKey)
 		// ZADD all ids greater than filter.value
 		min := "(" + valString + nullString + delString
-		tx.ExtractIdsFromStringIndex(fieldIndexKey, filterKey, min, "+")
+		tx.ExtractIDsFromStringIndex(fieldIndexKey, filterKey, min, "+")
 		// ZADD all ids less than filter.value
 		max := "(" + valString
-		tx.ExtractIdsFromStringIndex(fieldIndexKey, filterKey, "-", max)
+		tx.ExtractIDsFromStringIndex(fieldIndexKey, filterKey, "-", max)
 		// Intersect filterKey with origKey and store result in destKey
 		tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
 		// Delete the temporary key
@@ -564,7 +562,7 @@ func intersectStringFilter(q *query, tx *Transaction, filter filter, origKey str
 		}
 		// Get all the ids that fit the filter criteria and store them in a temporary key caled filterKey
 		filterKey := generateRandomKey("tmp:filter:" + fieldIndexKey)
-		tx.ExtractIdsFromStringIndex(fieldIndexKey, filterKey, min, max)
+		tx.ExtractIDsFromStringIndex(fieldIndexKey, filterKey, min, max)
 		// Intersect filterKey with origKey and store result in destKey
 		tx.Command("ZINTERSTORE", redis.Args{destKey, 2, origKey, filterKey, "WEIGHTS", 1, 0}, nil)
 		// Delete the temporary key
@@ -609,7 +607,7 @@ func (q *query) getStartStop() (start int, stop int) {
 	start = int(q.offset)
 	stop = -1
 	if q.hasLimit() {
-		stop = int(start) + int(q.limit) - 1
+		stop = start + int(q.limit) - 1
 	}
 	return start, stop
 }
@@ -646,5 +644,5 @@ func (q *query) hasError() bool {
 // guaranteed to be unique and then prepends the given prefix. It is
 // used to generate keys for temporary sorted sets in queries.
 func generateRandomKey(prefix string) string {
-	return prefix + ":" + generateRandomId()
+	return prefix + ":" + generateRandomID()
 }

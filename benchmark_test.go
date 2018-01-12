@@ -18,7 +18,7 @@ func BenchmarkConnection(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		conn := testPool.NewConn()
-		conn.Close()
+		_ = conn.Close()
 	}
 }
 
@@ -35,7 +35,9 @@ func BenchmarkSet(b *testing.B) {
 // BenchmarkGet sends the GET command after first sending SET
 func BenchmarkGet(b *testing.B) {
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	_, err := conn.Do("SET", "foo", "bar")
 	if err != nil {
 		b.Fatal(err)
@@ -51,10 +53,10 @@ func benchmarkCommand(b *testing.B, cmd string, args ...interface{}) {
 	for i := 0; i < b.N; i++ {
 		conn := testPool.NewConn()
 		if _, err := conn.Do(cmd, args...); err != nil {
-			conn.Close()
+			_ = conn.Close()
 			b.Fatal(err)
 		}
-		conn.Close()
+		_ = conn.Close()
 	}
 }
 
@@ -68,7 +70,9 @@ func BenchmarkSave(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		testModels.Save(model)
+		if err := testModels.Save(model); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -103,14 +107,16 @@ func BenchmarkFind(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	ids := modelIds(Models(models))
+	ids := modelIDs(Models(models))
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		id := selectUnique(1, ids)[0]
 		b.StartTimer()
-		testModels.Find(id, &testModel{})
+		if err := testModels.Find(id, &testModel{}); err != nil {
+			b.Fatal(err)
+		}
 	}
 }
 
@@ -124,15 +130,15 @@ func BenchmarkFind100(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
-	ids := modelIds(Models(models))
+	ids := modelIDs(Models(models))
 	b.ResetTimer()
 
 	// run the actual test
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		selectedIds := selectUnique(100, ids)
+		selectedIDs := selectUnique(100, ids)
 		t := testPool.NewTransaction()
-		for _, id := range selectedIds {
+		for _, id := range selectedIDs {
 			t.Find(testModels, id, &testModel{})
 		}
 		b.StartTimer()
@@ -193,7 +199,7 @@ func BenchmarkDelete(b *testing.B) {
 			b.Fatal(err)
 		}
 		b.StartTimer()
-		if _, err := testModels.Delete(models[0].ModelId()); err != nil {
+		if _, err := testModels.Delete(models[0].ModelID()); err != nil {
 			b.Fatal(err)
 		}
 	}
@@ -217,7 +223,7 @@ func BenchmarkDelete100(b *testing.B) {
 		t := testPool.NewTransaction()
 		for _, model := range models {
 			deleted := false
-			t.Delete(testModels, model.ModelId(), &deleted)
+			t.Delete(testModels, model.ModelID(), &deleted)
 		}
 		if err := t.Exec(); err != nil {
 			b.Fatal(err)
@@ -540,7 +546,7 @@ func selectUnique(num int, ids []string) []string {
 		}
 	}
 	results := make([]string, 0)
-	for key, _ := range selected {
+	for key := range selected {
 		results = append(results, key)
 	}
 	return results

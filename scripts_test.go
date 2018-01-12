@@ -14,7 +14,7 @@ import (
 	"github.com/garyburd/redigo/redis"
 )
 
-func TestDeleteModelsBySetIdsScript(t *testing.T) {
+func TestDeleteModelsBySetIDsScript(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -27,12 +27,14 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 	// The set of ids will contain three valid ids and two invalid ones
 	ids := []string{}
 	for _, model := range models[:3] {
-		ids = append(ids, model.ModelId())
+		ids = append(ids, model.ModelID())
 	}
 	ids = append(ids, "foo", "bar")
-	tempSetKey := "testModelIds"
+	tempSetKey := "testModelIDs"
 	conn := testPool.NewConn()
-	defer conn.Close()
+	defer func() {
+		_ = conn.Close()
+	}()
 	saddArgs := redis.Args{tempSetKey}
 	saddArgs = saddArgs.Add(Interfaces(ids)...)
 	if _, err = conn.Do("SADD", saddArgs...); err != nil {
@@ -42,7 +44,7 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 	// Run the script
 	tx := testPool.NewTransaction()
 	count := 0
-	tx.DeleteModelsBySetIds(tempSetKey, testModels.Name(), NewScanIntHandler(&count))
+	tx.DeleteModelsBySetIDs(tempSetKey, testModels.Name(), NewScanIntHandler(&count))
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
@@ -54,15 +56,15 @@ func TestDeleteModelsBySetIdsScript(t *testing.T) {
 
 	// Make sure the first three models were deleted
 	for _, model := range models[:3] {
-		modelKey := testModels.ModelKey(model.ModelId())
+		modelKey := testModels.ModelKey(model.ModelID())
 		expectKeyDoesNotExist(t, modelKey)
-		expectSetDoesNotContain(t, testModels.IndexKey(), model.ModelId())
+		expectSetDoesNotContain(t, testModels.IndexKey(), model.ModelID())
 	}
 	// Make sure the last two models were not deleted
 	for _, model := range models[3:] {
-		modelKey := testModels.ModelKey(model.ModelId())
+		modelKey := testModels.ModelKey(model.ModelID())
 		expectKeyExists(t, modelKey)
-		expectSetContains(t, testModels.IndexKey(), model.ModelId())
+		expectSetContains(t, testModels.IndexKey(), model.ModelID())
 	}
 }
 
@@ -73,7 +75,7 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	// Create a new collection with an indexed string field
 	type stringIndexModel struct {
 		String string `zoom:"index"`
-		RandomId
+		RandomID
 	}
 	options := DefaultCollectionOptions.WithIndex(true)
 	stringIndexModels, err := testPool.NewCollectionWithOptions(&stringIndexModel{}, options)
@@ -85,19 +87,21 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	model := &stringIndexModel{
 		String: "foo",
 	}
-	model.SetModelId("testId")
+	model.SetModelID("testID")
 
 	// Run the script before saving the hash, to make sure it does not cause an error
 	tx := testPool.NewTransaction()
-	tx.deleteStringIndex(stringIndexModels.Name(), model.ModelId(), "String")
+	tx.deleteStringIndex(stringIndexModels.Name(), model.ModelID(), "String")
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
 
 	// Set the field value in the main hash
 	conn := testPool.NewConn()
-	defer conn.Close()
-	modelKey := stringIndexModels.ModelKey(model.ModelId())
+	defer func() {
+		_ = conn.Close()
+	}()
+	modelKey := stringIndexModels.ModelKey(model.ModelID())
 	if _, err := conn.Do("HSET", modelKey, "String", model.String); err != nil {
 		t.Errorf("Unexpected error in HSET")
 	}
@@ -107,14 +111,14 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error in FieldIndexKey: %s", err.Error())
 	}
-	member := model.String + " " + model.ModelId()
+	member := model.String + " " + model.ModelID()
 	if _, err := conn.Do("ZADD", fieldIndexKey, 0, member); err != nil {
 		t.Fatalf("Unexpected error in ZADD: %s", err.Error())
 	}
 
 	// Run the script again. This time we expect the index to be removed
 	tx = testPool.NewTransaction()
-	tx.deleteStringIndex(stringIndexModels.Name(), model.ModelId(), "String")
+	tx.deleteStringIndex(stringIndexModels.Name(), model.ModelID(), "String")
 	if err := tx.Exec(); err != nil {
 		t.Fatalf("Unexected error in tx.Exec: %s", err.Error())
 	}
@@ -123,7 +127,7 @@ func TestDeleteStringIndexScript(t *testing.T) {
 	expectIndexDoesNotExist(t, stringIndexModels, model, "String")
 }
 
-func TestExtractIdsFromFieldIndexScript(t *testing.T) {
+func TestExtractIDsFromFieldIndexScript(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -142,43 +146,43 @@ func TestExtractIdsFromFieldIndexScript(t *testing.T) {
 	testCases := []struct {
 		min         interface{}
 		max         interface{}
-		expectedIds []string
+		expectedIDs []string
 	}{
 		{
 			min:         "-inf",
 			max:         "+inf",
-			expectedIds: modelIds(Models(models)),
+			expectedIDs: modelIDs(Models(models)),
 		},
 		{
 			min:         "2",
 			max:         "+inf",
-			expectedIds: modelIds(Models(models[2:])),
+			expectedIDs: modelIDs(Models(models[2:])),
 		},
 		{
 			min:         "(2",
 			max:         "+inf",
-			expectedIds: modelIds(Models(models[3:])),
+			expectedIDs: modelIDs(Models(models[3:])),
 		},
 	}
 
 	// Run the script for each test case and check the result
 	fieldIndexKey, _ := indexedTestModels.FieldIndexKey("Int")
 	for i, tc := range testCases {
-		gotIds := []string{}
-		destKey := "TestExtractIdsFromFieldIndexScript:" + strconv.Itoa(i)
+		gotIDs := []string{}
+		destKey := "TestExtractIDsFromFieldIndexScript:" + strconv.Itoa(i)
 		tx = testPool.NewTransaction()
-		tx.ExtractIdsFromFieldIndex(fieldIndexKey, destKey, tc.min, tc.max)
-		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, NewScanStringsHandler(&gotIds))
+		tx.ExtractIDsFromFieldIndex(fieldIndexKey, destKey, tc.min, tc.max)
+		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, NewScanStringsHandler(&gotIDs))
 		if err := tx.Exec(); err != nil {
 			t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
 		}
-		if !reflect.DeepEqual(gotIds, tc.expectedIds) {
-			t.Errorf("Script results were incorrect.\nExpected: %v\nGot:      %v", tc.expectedIds, gotIds)
+		if !reflect.DeepEqual(gotIDs, tc.expectedIDs) {
+			t.Errorf("Script results were incorrect.\nExpected: %v\nGot:      %v", tc.expectedIDs, gotIDs)
 		}
 	}
 }
 
-func TestExtractIdsFromStringIndexScript(t *testing.T) {
+func TestExtractIDsFromStringIndexScript(t *testing.T) {
 	testingSetUp()
 	defer testingTearDown()
 
@@ -194,42 +198,41 @@ func TestExtractIdsFromStringIndexScript(t *testing.T) {
 	}
 
 	// Create a few test cases
-	delString := string([]byte{byte(127)})
 	testCases := []struct {
 		min         string
 		max         string
-		expectedIds []string
+		expectedIDs []string
 	}{
 		{
 			min:         "-",
 			max:         "+",
-			expectedIds: modelIds(Models(models)),
+			expectedIDs: modelIDs(Models(models)),
 		},
 		{
 			min:         "[2",
 			max:         "+",
-			expectedIds: modelIds(Models(models[2:])),
+			expectedIDs: modelIDs(Models(models[2:])),
 		},
 		{
 			min:         "(2" + delString,
 			max:         "+",
-			expectedIds: modelIds(Models(models[3:])),
+			expectedIDs: modelIDs(Models(models[3:])),
 		},
 	}
 
 	// Run the script for each test case and check the result
 	fieldIndexKey, _ := indexedTestModels.FieldIndexKey("String")
 	for i, tc := range testCases {
-		gotIds := []string{}
-		destKey := "ExtractIdsFromStringIndexScript:" + strconv.Itoa(i)
+		gotIDs := []string{}
+		destKey := "ExtractIDsFromStringIndexScript:" + strconv.Itoa(i)
 		tx = testPool.NewTransaction()
-		tx.ExtractIdsFromStringIndex(fieldIndexKey, destKey, tc.min, tc.max)
-		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, NewScanStringsHandler(&gotIds))
+		tx.ExtractIDsFromStringIndex(fieldIndexKey, destKey, tc.min, tc.max)
+		tx.Command("ZRANGE", redis.Args{destKey, 0, -1}, NewScanStringsHandler(&gotIDs))
 		if err := tx.Exec(); err != nil {
 			t.Errorf("Unexpected error in tx.Exec: %s", err.Error())
 		}
-		if !reflect.DeepEqual(gotIds, tc.expectedIds) {
-			t.Errorf("Script results for test case %d were incorrect.\nExpected: %v\nGot:      %v", i, tc.expectedIds, gotIds)
+		if !reflect.DeepEqual(gotIDs, tc.expectedIDs) {
+			t.Errorf("Script results for test case %d were incorrect.\nExpected: %v\nGot:      %v", i, tc.expectedIDs, gotIDs)
 		}
 	}
 }

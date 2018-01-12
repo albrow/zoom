@@ -31,7 +31,7 @@ func TestTimeDuration(t *testing.T) {
 
 	type durationModel struct {
 		Duration time.Duration
-		RandomId
+		RandomID
 	}
 	durationModels, err := testPool.NewCollection(&durationModel{})
 	if err != nil {
@@ -55,7 +55,7 @@ func TestGobFallback(t *testing.T) {
 		StringArray [3]string
 		StringMap   map[string]string
 		IntMap      map[int]int
-		RandomId
+		RandomID
 	}
 	options := DefaultCollectionOptions.WithFallbackMarshalerUnmarshaler(GobMarshalerUnmarshaler)
 	gobModels, err := testPool.NewCollectionWithOptions(&gobModel{}, options)
@@ -85,7 +85,7 @@ func TestJSONFallback(t *testing.T) {
 		StringArray    [3]string
 		StringMap      map[string]string
 		EmptyInterface interface{}
-		RandomId
+		RandomID
 	}
 	options := DefaultCollectionOptions.WithFallbackMarshalerUnmarshaler(JSONMarshalerUnmarshaler)
 	jsonModels, err := testPool.NewCollectionWithOptions(&jsonModel{}, options)
@@ -115,7 +115,7 @@ func TestConvertEmbeddedStruct(t *testing.T) {
 
 	type embeddedStructModel struct {
 		Embeddable
-		RandomId
+		RandomID
 	}
 	embededStructModels, err := testPool.NewCollection(&embeddedStructModel{})
 	if err != nil {
@@ -137,7 +137,7 @@ func TestEmbeddedPointerToStruct(t *testing.T) {
 
 	type embeddedPointerToStructModel struct {
 		*Embeddable
-		RandomId
+		RandomID
 	}
 	embededPointerToStructModels, err := testPool.NewCollection(&embeddedPointerToStructModel{})
 	if err != nil {
@@ -165,7 +165,7 @@ func testConvertType(t *testing.T, collection *Collection, model Model) {
 	if !ok {
 		t.Fatalf("Unexpected error: Could not convert type %s to Model", collection.spec.typ.String())
 	}
-	if err := collection.Find(model.ModelId(), modelCopy); err != nil {
+	if err := collection.Find(model.ModelID(), modelCopy); err != nil {
 		t.Errorf("Unexpected error in Find: %s", err.Error())
 	}
 	// Make sure the copy equals the original
@@ -181,8 +181,8 @@ func testConvertType(t *testing.T, collection *Collection, model Model) {
 	if err := collection.Save(emptyModel); err != nil {
 		t.Errorf("Unexpected error saving an empty model: %s", err.Error())
 	}
-	emptyModelCopy, ok := reflect.New(collection.spec.typ.Elem()).Interface().(Model)
-	if err := collection.Find(emptyModel.ModelId(), emptyModelCopy); err != nil {
+	emptyModelCopy, _ := reflect.New(collection.spec.typ.Elem()).Interface().(Model)
+	if err := collection.Find(emptyModel.ModelID(), emptyModelCopy); err != nil {
 		t.Errorf("Unexpected error in Find: %s", err.Error())
 	}
 	// Make sure the copy equals the original

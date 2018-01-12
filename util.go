@@ -11,8 +11,6 @@ import (
 	"fmt"
 	"hash/crc32"
 	"math/big"
-	"math/cmplx"
-	"math/rand"
 	"net"
 	"reflect"
 	"sync/atomic"
@@ -31,8 +29,8 @@ var (
 	// NULL character and is the lowest possible value (in terms of codepoint, which is also
 	// how redis sorts strings) for an ASCII character.
 	nullString = string([]byte{byte(0)})
-	// hardwareId is a unique id for the current machine. Right now it uses the crc32 checksum of the MAC address.
-	hardwareId = ""
+	// hardwareID is a unique id for the current machine. Right now it uses the crc32 checksum of the MAC address.
+	hardwareID = ""
 )
 
 func init() {
@@ -108,32 +106,6 @@ func removeElementFromStringSlice(list []string, elem string) []string {
 	return list
 }
 
-// compareAsStringSet compares expecteds and gots as if they were sets, i.e.,
-// it checks if they contain the same values, regardless of order. It returns true
-// and an empty string if expecteds and gots contain all the same values and false
-// and a detailed message if they do not.
-func compareAsStringSet(expecteds, gots []string) (bool, string) {
-	// make sure everything in expecteds is also in gots
-	for _, e := range expecteds {
-		index := indexOfStringSlice(gots, e)
-		if index == -1 {
-			msg := fmt.Sprintf("Missing expected element: %v", e)
-			return false, msg
-		}
-	}
-
-	// make sure everything in gots is also in expecteds
-	for _, g := range gots {
-		index := indexOfStringSlice(expecteds, g)
-		if index == -1 {
-			msg := fmt.Sprintf("Found extra element: %v", g)
-			return false, msg
-		}
-	}
-
-	return true, "ok"
-}
-
 // typeIsSliceOrArray returns true iff typ is a slice or array
 func typeIsSliceOrArray(typ reflect.Type) bool {
 	k := typ.Kind()
@@ -152,7 +124,7 @@ func typeIsString(typ reflect.Type) bool {
 	return k == reflect.String || ((k == reflect.Slice || k == reflect.Array) && typ.Elem().Kind() == reflect.Uint8)
 }
 
-// typeIsNumeric returns true iff typ is one of the numeric primative types
+// typeIsNumeric returns true iff typ is one of the numeric primitive types
 func typeIsNumeric(typ reflect.Type) bool {
 	k := typ.Kind()
 	switch k {
@@ -169,7 +141,7 @@ func typeIsBool(typ reflect.Type) bool {
 	return k == reflect.Bool
 }
 
-// typeIsPrimative returns true iff typ is a primative type, i.e. either a
+// typeIsPrimative returns true iff typ is a primitive type, i.e. either a
 // string, bool, or numeric type.
 func typeIsPrimative(typ reflect.Type) bool {
 	return typeIsString(typ) || typeIsNumeric(typ) || typeIsBool(typ)
@@ -217,21 +189,20 @@ func boolScore(val reflect.Value) int {
 func convertBoolToInt(b bool) int {
 	if b {
 		return 1
-	} else {
-		return 0
 	}
+	return 0
 }
 
-// modelIds returns the ids for models
-func modelIds(models []Model) []string {
+// modelIDs returns the ids for models
+func modelIDs(models []Model) []string {
 	results := make([]string, len(models))
 	for i, m := range models {
-		results[i] = m.ModelId()
+		results[i] = m.ModelID()
 	}
 	return results
 }
 
-// generateRandomId generates a pseudo-random string that is highly likely to be unique.
+// generateRandomID generates a pseudo-random string that is highly likely to be unique.
 // The string is base58 encoded and consists of 4 components:
 //   1. The current UTC unix time with second precision
 //   2. An atomic counter which is always 4 characters long and cycles
@@ -239,8 +210,8 @@ func modelIds(models []Model) []string {
 //   3. A unique hardware identifier based on the MAC address of the
 //      current machine
 //   4. A pseudo-randomly generated sequence of 6 characters
-func generateRandomId() string {
-	return getTimeString() + getAtomicCounter() + getHardwareId() + uniuri.NewLen(6)
+func generateRandomID() string {
+	return getTimeString() + getAtomicCounter() + getHardwareID() + uniuri.NewLen(6)
 }
 
 // getTimeString returns the current UTC unix time with second precision encoded
@@ -251,16 +222,16 @@ func getTimeString() string {
 	return string(timeBytes)
 }
 
-// getHardwareId returns a unique identifier for the current machine. It does this
+// getHardwareID returns a unique identifier for the current machine. It does this
 // by iterating through the network interfaces of the machine and picking the first
 // one that has a non-empty hardware (MAC) address. Then it takes the crc32 checksum
-// of the MAC address and encodes it in base58 encoding. getHardwareId caches results,
+// of the MAC address and encodes it in base58 encoding. getHardwareID caches results,
 // so subsequent calls will return the previously calculated result. If no MAC address
 // could be found, the function will use "0" as the MAC address. This is not ideal, but
-// generateRandomId uses other means to try and avoid collisions.
-func getHardwareId() string {
-	if hardwareId != "" {
-		return hardwareId
+// generateRandomID uses other means to try and avoid collisions.
+func getHardwareID() string {
+	if hardwareID != "" {
+		return hardwareID
 	}
 	address := ""
 	inters, err := net.Interfaces()
@@ -277,11 +248,11 @@ func getHardwareId() string {
 	}
 	check32 := crc32.ChecksumIEEE([]byte(address))
 	id58 := base58.EncodeBig(nil, big.NewInt(int64(check32)))
-	hardwareId = string(id58)
-	return hardwareId
+	hardwareID = string(id58)
+	return hardwareID
 }
 
-var counter int32 = 0
+var counter int32
 
 // getAtomicCounter returns the base58 encoding of a counter which cycles through
 // the values in the range 0 to 11,316,495. This is the range that can be represented
@@ -308,48 +279,4 @@ func getAtomicCounter() string {
 	default:
 		return counterStr[0:4]
 	}
-}
-
-// randomInt returns a pseudo-random int between the minimum and maximum
-// possible values.
-func randomInt() int {
-	return rand.Int()
-}
-
-// randomString returns a random string of length 16
-func randomString() string {
-	return uniuri.NewLen(16)
-}
-
-// randomBool returns a random bool
-func randomBool() bool {
-	return rand.Int()%2 == 0
-}
-
-// randomFloat returns a random float64
-func randomFloat() float64 {
-	return rand.Float64()
-}
-
-// randomComplex returns a random complex128
-func randomComplex() complex128 {
-	return cmplx.Rect(randomFloat(), randomFloat())
-}
-
-// decrementString subtracts 1 to the last codepoint in s and returns the new string
-// E.g. if the input string is "abc" the return will be "abb" because the codepoint
-// for 'c' is 99, 99-1 = 98, and the codepoint 98 corresponds to 'b'.
-func decrementString(s string) string {
-	codepoints := []uint8(s)
-	codepoints[len(codepoints)-1] = codepoints[len(codepoints)-1] + 1
-	return string(codepoints)
-}
-
-// incrementString adds 1 to the last codepoint in s and returns the new string
-// E.g. if the input string is "abc" the return will be "abd" because the codepoint
-// for 'c' is 99, 99+1 = 100, and the codepoint 100 corresponds to 'd'.
-func incrementString(s string) string {
-	codepoints := []uint8(s)
-	codepoints[len(codepoints)-1] = codepoints[len(codepoints)-1] + 1
-	return string(codepoints)
 }
