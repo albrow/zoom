@@ -282,7 +282,7 @@ you to use Queries and methods like `FindAll` which rely on collection indexing:
 
 ``` go
 options := zoom.DefaultCollectionOptions.WithIndex(true)
-People, err = pool.NewCollection(&Person{}, options)
+People, err = pool.NewCollectionWithOptions(&Person{}, options)
 if err != nil {
 	// handle error
 }
