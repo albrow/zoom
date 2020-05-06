@@ -56,13 +56,12 @@ Development Status
 ------------------
 
 Zoom was first started in 2013. It is well-tested and going forward the API
-will be relatively stable. We are closing in on Version 1.0.
+will be relatively stable. However, it is not actively maintained and there
+are some known performance issues with queries that use more than one filter.
 
 At this time, Zoom can be considered safe for use in low-traffic production
-applications. However, as with any relatively new package, it is possible that
-there are some undiscovered bugs. Therefore we would recommend writing good
-tests, reporting any bugs you may find, and avoiding using Zoom for
-mission-critical or high-traffic applications.
+applications. However, I would recommend that you look at more actively
+maintained alternatives.
 
 Zoom follows semantic versioning, but offers no guarantees of backwards
 compatibility until version 1.0. We recommend using a dependency manager such as
