@@ -64,10 +64,7 @@ applications. However, I would recommend that you look at more actively
 maintained alternatives.
 
 Zoom follows semantic versioning, but offers no guarantees of backwards
-compatibility until version 1.0. We recommend using a dependency manager such as
-[godep](https://github.com/tools/godep)
-or [glide](https://github.com/Masterminds/glide) to lock in a specific version
-of Zoom. You can also keep an eye on the
+compatibility until version 1.0. You can also keep an eye on the
 [Releases page](https://github.com/albrow/zoom/releases) to see a full changelog
 for each release. In addition, starting with version 0.9.0,
 [migration guides](https://github.com/albrow/zoom/wiki/Migration-Guide) will be
